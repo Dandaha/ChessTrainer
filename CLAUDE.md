@@ -8,6 +8,8 @@ At the end of each phase: run tests, show me how to try it, and stop.
 ## Stack
 - Monorepo with pnpm workspaces:
   - apps/web: React + TypeScript + Vite, Tailwind, chessground, chess.js
+    (chessground is published as @lichess-org/chessground; the unscoped
+    `chessground` package on npm is deprecated)
   - apps/server: Node + TypeScript + Fastify, Drizzle ORM on SQLite
     (better-sqlite3), listens on 127.0.0.1 only
   - packages/chess-core: position key, PGN parsing, repertoire graph logic
