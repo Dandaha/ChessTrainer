@@ -1,4 +1,6 @@
 import type { GameDetail, GameFilters, GameSummary, ImportReport, MoveStat } from '@chess/server/db/games.ts';
+import type { Color, Priority, RepEdge, RepertoireCheck } from '@chess/chess-core';
+import type { RepertoireSummary } from '@chess/server/db/repertoire.ts';
 import type {
   CollectionSummary,
   PositionSetSummary,
@@ -11,6 +13,7 @@ import type {
 } from '@chess/server/db/library.ts';
 
 export type {
+  RepertoireSummary,
   CollectionSummary,
   GameDetail,
   GameSummary,
@@ -105,5 +108,28 @@ export const api = {
   settings: () => call<Settings>('GET', '/api/settings'),
   updateSettings: (values: Settings) => call<Settings>('PUT', '/api/settings', values),
   trash: () => call<TrashItem[]>('GET', '/api/trash'),
+
+  repertoires: () => call<RepertoireSummary[]>('GET', '/api/repertoires'),
+  createRepertoire: (name: string, color: Color) => call<{ id: string }>('POST', '/api/repertoires', { name, color }),
+  renameRepertoire: (id: string, name: string) => call('PUT', `/api/repertoires/${id}`, { name }),
+  deleteRepertoire: (id: string) => call('DELETE', `/api/repertoires/${id}`),
+  repertoire: (id: string) => call<{ repertoire: RepertoireSummary; edges: RepEdge[]; startFen: string }>('GET', `/api/repertoires/${id}`),
+  addLine: (id: string, fen: string, sans: string[]) =>
+    call<{ added: number; existing: number }>('POST', `/api/repertoires/${id}/line`, { fen, sans }),
+  importRepertoire: (id: string, pgn: string) =>
+    call<{ added: number; existing: number; games: number; errors: unknown[] }>('POST', `/api/repertoires/${id}/import`, { pgn }),
+  exportRepertoire: (id: string) => call<{ pgn: string }>('GET', `/api/repertoires/${id}/export`),
+  updateRepertoireMove: (id: string, changes: { isMain?: boolean; priority?: Priority; comment?: string | null; isMyMove?: boolean }) =>
+    call('PUT', `/api/repertoire-moves/${id}`, changes),
+  deleteRepertoireMove: (id: string) => call<{ deleted: number }>('DELETE', `/api/repertoire-moves/${id}`),
+  repertoiresAt: (fen: string) =>
+    call<{ repertoire: RepertoireSummary; moves: RepEdge[]; reached: boolean }[]>('GET', `/api/repertoires/at${query({ fen })}`),
+  checkGame: (pgn: string, color?: Color) =>
+    call<{ repertoire: RepertoireSummary; result: RepertoireCheck; message: string }[]>('POST', '/api/repertoires/check', { pgn, color }),
+  gaps: (id: string, maxPositions = 25, minShare = 0.05) =>
+    call<{ checked: number; gaps: { fen: string; ply: number; total: number; share: number; move: { uci: string; san: string } }[] }>(
+      'GET',
+      `/api/repertoires/${id}/gaps${query({ maxPositions, minShare })}`,
+    ),
   restore: (kind: TrashKind, id: string) => call('POST', '/api/trash/restore', { kind, id }),
 };

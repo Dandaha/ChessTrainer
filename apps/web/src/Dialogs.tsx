@@ -159,6 +159,9 @@ const SHORTCUTS: [string, string][] = [
   ['/', 'Type a move'],
   ['Delete', 'Delete from the current move'],
   ['Ctrl+Z', 'Undo a delete or promotion'],
+  ['S', 'Save the position'],
+  ['R', 'Add the line to here to a repertoire'],
+  ['Ctrl+S', 'Save the game to the library'],
   ['O', 'Open a PGN or FEN'],
   ['X', 'Export PGN'],
   ['Ctrl+V', 'Paste a PGN or FEN anywhere'],
@@ -181,7 +184,7 @@ export function ShortcutsDialog({ onClose }: { onClose(): void }) {
         </tbody>
       </table>
       <p className="mt-3 text-xs text-muted">
-        S (save position), R (repertoire), E (engine) and C (coach) arrive with their phases.
+        Ctrl+K jumps to any screen, game or saved position.
       </p>
     </Modal>
   );

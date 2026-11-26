@@ -23,12 +23,15 @@ import { type GameApi, useGame } from './useGame.ts';
 export interface LinkedGame {
   id: string;
   label: string;
+  myColor?: Color | null;
 }
 
 export interface Workspace {
   g: GameApi;
   /** The library game the board is showing, if any. */
   linked: LinkedGame | null;
+  /** My colour in the linked game, when known. */
+  linkedColor: Color | null;
   orientation: Color;
   setOrientation(color: Color): void;
   flip(): void;
@@ -112,7 +115,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const game = parseGame(detail.pgn);
     const at = ply === undefined ? undefined : mainlineFrom(game.root).find((n) => n.ply === ply)?.id;
     g.load(game, { at, clean: true });
-    setLinked({ id: detail.id, label: gameLabel(game) });
+    setLinked({ id: detail.id, label: gameLabel(game), myColor: detail.myColor });
     setOrientation(detail.myColor === 'black' ? 'black' : 'white');
     navigate('board');
   };
@@ -120,6 +123,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const ws: Workspace = {
     g,
     linked,
+    linkedColor: linked?.myColor ?? null,
     orientation,
     setOrientation,
     flip: () => setOrientation((o) => (o === 'white' ? 'black' : 'white')),

@@ -24,6 +24,10 @@ import { useEffect, useRef, useState } from 'react';
 interface BoardProps {
   node: MoveNode;
   orientation: Color;
+  /** Arrows drawn by the app (repertoire moves, engine lines), not saved in the game. */
+  autoShapes?: DrawShape[];
+  /** A board you can look at but not move on. */
+  viewOnly?: boolean;
   onMove(from: string, to: string, promotion?: string): void;
   onShapes(arrows: Arrow[], highlights: Highlight[]): void;
 }
@@ -51,7 +55,9 @@ function fromShapes(shapes: DrawShape[]): { arrows: Arrow[]; highlights: Highlig
   return { arrows, highlights };
 }
 
-export function Board({ node, orientation, onMove, onShapes }: BoardProps) {
+export type { DrawShape };
+
+export function Board({ node, orientation, autoShapes = [], viewOnly = false, onMove, onShapes }: BoardProps) {
   const element = useRef<HTMLDivElement>(null);
   const api = useRef<Api | null>(null);
   const [promotion, setPromotion] = useState<{ from: string; to: string } | null>(null);
@@ -101,8 +107,9 @@ export function Board({ node, orientation, onMove, onShapes }: BoardProps) {
       turnColor: state.turn,
       check: state.check ? state.turn : false,
       lastMove: node.uci ? [node.uci.slice(0, 2) as Key, node.uci.slice(2, 4) as Key] : undefined,
-      movable: { color: state.turn, dests: state.dests as Map<Key, Key[]> },
-      drawable: { shapes: toShapes(node) },
+      viewOnly,
+      movable: { color: viewOnly ? undefined : state.turn, dests: state.dests as Map<Key, Key[]> },
+      drawable: { shapes: toShapes(node), autoShapes },
     });
   });
 

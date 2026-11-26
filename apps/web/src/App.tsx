@@ -8,6 +8,7 @@ import { HomeScreen } from './screens/HomeScreen.tsx';
 import { PositionsScreen } from './screens/PositionsScreen.tsx';
 import { PresentScreen } from './screens/PresentScreen.tsx';
 import { PrintScreen } from './screens/PrintScreen.tsx';
+import { RepertoireScreen } from './screens/RepertoireScreen.tsx';
 import { SettingsScreen } from './screens/SettingsScreen.tsx';
 import { type Theme, applyTheme, currentTheme } from './storage.ts';
 import { WorkspaceProvider, useWorkspace } from './workspace.tsx';
@@ -24,6 +25,7 @@ const SCREENS: Screen[] = [
   { id: 'board', label: 'Board', icon: '♞', render: () => <BoardScreen /> },
   { id: 'games', label: 'Games', icon: '☰', render: () => <GamesScreen /> },
   { id: 'positions', label: 'Positions', icon: '▦', render: () => <PositionsScreen /> },
+  { id: 'repertoire', label: 'Repertoire', icon: '⑂', render: () => <RepertoireScreen /> },
   { id: 'settings', label: 'Settings', icon: '⚙', render: () => <SettingsScreen /> },
 ];
 

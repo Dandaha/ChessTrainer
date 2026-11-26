@@ -1,14 +1,15 @@
-import { getHeader, isOnMainline, writePgn } from '@chess/chess-core';
+import { getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
 import { GamesHere, SavedHere } from '../components/PositionPanels.tsx';
+import { AddToRepertoireDialog, RepertoireTab } from '../components/RepertoirePanel.tsx';
 import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
 import { ExportDialog, ImportDialog, ShortcutsDialog } from '../Dialogs.tsx';
 import { MoveList } from '../MoveList.tsx';
 import { useWorkspace } from '../workspace.tsx';
 
-type Dialog = 'import' | 'export' | 'shortcuts' | 'save' | null;
+type Dialog = 'import' | 'export' | 'shortcuts' | 'save' | 'repertoire' | null;
 export type BoardTab = 'notes' | 'games' | 'saved';
 
 export function isTyping(target: EventTarget | null): boolean {
@@ -48,6 +49,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const [typed, setTyped] = useState('');
   const [tab, setTab] = useState<string>('notes');
   const [savedRefresh, setSavedRefresh] = useState(0);
+  const [repertoireRefresh, setRepertoireRefresh] = useState(0);
   const moveInput = useRef<HTMLInputElement>(null);
 
   const { game, current } = g;
@@ -88,6 +90,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       o: () => setDialog('import'),
       x: () => setDialog('export'),
       s: () => setDialog('save'),
+      r: () => setDialog('repertoire'),
       '?': () => setDialog('shortcuts'),
     };
     for (const extra of extraTabs) if (extra.key) actions[extra.key] = () => setTab((t) => (t === extra.id ? 'notes' : extra.id));
@@ -120,6 +123,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
     { id: 'notes', label: 'Notes' },
     { id: 'games', label: 'Games' },
     { id: 'saved', label: 'Saved' },
+    { id: 'repertoire', label: 'Repertoire' },
     ...extraTabs.map(({ id, label, key }) => ({ id, label, key })),
   ];
   const toolButton = 'rounded-md px-2.5 py-1.5 text-sm hover:bg-surface-2';
@@ -156,6 +160,9 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
           </button>
           <button type="button" className={toolButton} onClick={() => setDialog('save')} title="Save position (S)">
             Save position
+          </button>
+          <button type="button" className={toolButton} onClick={() => setDialog('repertoire')} title="Add to repertoire (R)">
+            Add to repertoire
           </button>
           <button type="button" className={toolButton} onClick={() => setDialog('export')} title="Export (X)">
             Export
@@ -252,6 +259,19 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               <GamesHere fen={current.fen} onPlay={(san) => g.play(san)} onOpen={(id, ply) => void ws.openGameById(id, ply)} />
             )}
             {tab === 'saved' && <SavedHere fen={current.fen} refresh={savedRefresh} onSave={() => setDialog('save')} />}
+            {tab === 'repertoire' && (
+              <RepertoireTab
+                fen={current.fen}
+                game={game}
+                version={g.version + repertoireRefresh}
+                myColor={ws.linkedColor ?? undefined}
+                onPlay={(san) => g.play(san)}
+                onGoToPly={(ply) => {
+                  const node = mainlineFrom(game.root).find((n) => n.ply === ply);
+                  if (node) g.goTo(node.id);
+                }}
+              />
+            )}
             {extraTabs.find((t) => t.id === tab)?.render()}
           </div>
         </aside>
@@ -297,6 +317,19 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
         />
       )}
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'repertoire' && (
+        <AddToRepertoireDialog
+          rootFen={game.root.fen}
+          sans={g.path.slice(1).map((n) => n.san)}
+          startPly={game.root.ply}
+          onClose={() => setDialog(null)}
+          onDone={(message) => {
+            setDialog(null);
+            setRepertoireRefresh((n) => n + 1);
+            ws.toast(message);
+          }}
+        />
+      )}
       {dialog === 'save' && (
         <SavePositionDialog
           fen={current.fen}
