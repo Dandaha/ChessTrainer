@@ -1,4 +1,5 @@
 import { databasePath, openDatabase, runMigrations } from '../db/client.ts';
+import { purgeTrash } from '../db/library.ts';
 import { buildApp } from './app.ts';
 import { loadEnv } from './env.ts';
 
@@ -11,6 +12,7 @@ const PORT = Number(process.env.PORT) || 3001;
 
 const { db, close } = openDatabase();
 runMigrations(db);
+purgeTrash(db);
 
 const app = buildApp(db);
 app.addHook('onClose', async () => close());

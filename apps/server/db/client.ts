@@ -8,7 +8,7 @@ import * as schema from './schema.ts';
 
 /** All SQL in the app goes through this folder. */
 
-export type Db = BetterSQLite3Database<typeof schema>;
+export type Db = BetterSQLite3Database<typeof schema> & { $client: Database.Database };
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS = resolve(here, 'migrations');
