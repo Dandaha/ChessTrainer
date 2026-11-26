@@ -322,3 +322,29 @@ export const conceptLinks = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.conceptId, t.targetType, t.targetId] }), index('concept_links_target_idx').on(t.targetType, t.targetId)],
 );
+
+// ---------------------------------------------------------------------------
+// Phase 6: the coach's history, with the tokens of every call.
+
+export const coachMessages = sqliteTable(
+  'coach_messages',
+  {
+    id: id(),
+    positionId: text('position_id')
+      .notNull()
+      .references(() => positions.id),
+    role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+    /** explain_move, why_not, plan, review_game, explain_opening, tag_position or ask. */
+    mode: text('mode').notNull(),
+    model: text('model'),
+    content: text('content').notNull(),
+    /** JSON: the tool calls made, board annotations and suggestions. */
+    toolTraceJson: text('tool_trace_json'),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+    cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
+    createdAt: text('created_at').notNull().$defaultFn(now),
+  },
+  (t) => [index('coach_messages_position_idx').on(t.positionId), index('coach_messages_created_idx').on(t.createdAt)],
+);
