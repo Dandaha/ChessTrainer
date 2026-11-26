@@ -160,6 +160,7 @@ const SHORTCUTS: [string, string][] = [
   ['Delete', 'Delete from the current move'],
   ['Ctrl+Z', 'Undo a delete or promotion'],
   ['E', 'Engine on / off (Stockfish runs only while it is on)'],
+  ['C', 'Ask the coach'],
   ['S', 'Save the position'],
   ['R', 'Add the line to here to a repertoire'],
   ['Ctrl+S', 'Save the game to the library'],

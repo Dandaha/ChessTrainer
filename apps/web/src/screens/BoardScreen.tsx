@@ -5,6 +5,8 @@ import { Board } from '../Board.tsx';
 import { GamesHere, SavedHere } from '../components/PositionPanels.tsx';
 import { AddToRepertoireDialog, RepertoireTab } from '../components/RepertoirePanel.tsx';
 import { EnginePanel, EvalBar } from '../components/EnginePanel.tsx';
+import { CoachPanel, type CoachPanelHandle } from '../components/CoachPanel.tsx';
+import type { Annotations } from '../api.ts';
 import { useEngine } from '../useEngine.ts';
 import type { DrawShape } from '../Board.tsx';
 import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
@@ -54,6 +56,8 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const [savedRefresh, setSavedRefresh] = useState(0);
   const [repertoireRefresh, setRepertoireRefresh] = useState(0);
   const [engineOn, setEngineOn] = useState(false);
+  const [coachMarks, setCoachMarks] = useState<Annotations | null>(null);
+  const coach = useRef<CoachPanelHandle>(null);
   const moveInput = useRef<HTMLInputElement>(null);
 
   const { game, current } = g;
@@ -61,6 +65,12 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const best = engine.analysis?.fen === current.fen ? engine.analysis.lines[0] : undefined;
   const engineShapes: DrawShape[] = best?.pv[0]
     ? [{ orig: best.pv[0].slice(0, 2) as DrawShape['orig'], dest: best.pv[0].slice(2, 4) as DrawShape['orig'], brush: 'paleBlue' }]
+    : [];
+  const coachShapes: DrawShape[] = coachMarks
+    ? [
+        ...coachMarks.arrows.map((a) => ({ orig: a.from as DrawShape['orig'], dest: a.to as DrawShape['orig'], brush: a.color })),
+        ...coachMarks.highlights.map((h) => ({ orig: h.square as DrawShape['orig'], brush: h.color })),
+      ]
     : [];
   const toggleEngine = () => {
     setEngineOn((on) => {
@@ -107,6 +117,10 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       s: () => setDialog('save'),
       r: () => setDialog('repertoire'),
       e: toggleEngine,
+      c: () => {
+        setTab('coach');
+        setTimeout(() => coach.current?.focusQuestion(), 0);
+      },
       '?': () => setDialog('shortcuts'),
     };
     for (const extra of extraTabs) if (extra.key) actions[extra.key] = () => setTab((t) => (t === extra.id ? 'notes' : extra.id));
@@ -141,6 +155,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
     { id: 'saved', label: 'Saved' },
     { id: 'repertoire', label: 'Repertoire' },
     { id: 'engine', label: engineOn ? 'Engine ●' : 'Engine', key: 'e' },
+    { id: 'coach', label: 'Coach', key: 'c' },
     ...extraTabs.map(({ id, label, key }) => ({ id, label, key })),
   ];
   const toolButton = 'rounded-md px-2.5 py-1.5 text-sm hover:bg-surface-2';
@@ -200,7 +215,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
             <Board
               node={current}
               orientation={ws.orientation}
-              autoShapes={engineShapes}
+              autoShapes={[...engineShapes, ...coachShapes]}
               onMove={(from, to, promotion) => {
                 if (!g.play(promotion ? { from, to, promotion } : { from, to })) g.goTo(current.id);
               }}
@@ -310,6 +325,21 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
                   </button>
                 </div>
               ))}
+            {tab === 'coach' && (
+              <CoachPanel
+                ref={coach}
+                game={game}
+                path={g.path}
+                myColor={ws.linkedColor ?? undefined}
+                onAnnotations={setCoachMarks}
+                onPlayLine={(nodeId, sans) => g.playLineFrom(nodeId, sans)}
+                onGoTo={g.goTo}
+                onGoToPly={(ply) => {
+                  const node = mainlineFrom(game.root).find((n) => n.ply === ply);
+                  if (node) g.goTo(node.id);
+                }}
+              />
+            )}
             {extraTabs.find((t) => t.id === tab)?.render()}
           </div>
         </aside>

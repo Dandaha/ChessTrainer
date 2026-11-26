@@ -42,6 +42,8 @@ export interface GameApi {
   forward(): void;
   toStart(): void;
   toEnd(): void;
+  /** Plays a line of moves from a node (not necessarily the current one) and shows its end. */
+  playLineFrom(id: string, sans: string[]): void;
   /** Plays a move from the current position. Returns false if it is illegal. */
   play(move: MoveInput): boolean;
   deleteFrom(id: string): void;
@@ -92,6 +94,19 @@ export function useGame(initial: () => Game = () => createGame()): GameApi {
     },
     toStart: () => setCurrentId(game.root.id),
     toEnd: () => setCurrentId(mainlineFrom(current).at(-1)!.id),
+    playLineFrom: (id, sans) => {
+      let node = findNode(game.root, id);
+      if (!node) return;
+      for (const san of sans) {
+        try {
+          node = addMove(node, san);
+        } catch {
+          break;
+        }
+      }
+      setCurrentId(node.id);
+      bump();
+    },
     play: (move) => {
       try {
         const node = addMove(current, move);

@@ -78,6 +78,8 @@ export function SettingsScreen() {
 
         <EngineSettings settings={settings} onSave={save} />
 
+        <CoachSettings onSave={save} />
+
         {settingsSections.map((Section, i) => (
           <Section key={i} />
         ))}
@@ -154,6 +156,107 @@ function EngineSettings({ settings, onSave }: { settings: Settings | null; onSav
       {status && (
         <p className={`text-sm ${status.error || !status.configured ? 'text-danger' : 'text-accent'}`}>
           {!status.configured ? 'No path set.' : status.error ? status.error : `Working: ${status.name}.`}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function CoachSettings({ onSave }: { onSave(values: Settings): Promise<void> }) {
+  const ws = useWorkspace();
+  const [status, setStatus] = useState<Awaited<ReturnType<typeof api.coachStatus>> | null>(null);
+  const [key, setKey] = useState('');
+  const load = () => api.coachStatus().then(setStatus).catch(() => {});
+  useEffect(() => {
+    void load();
+  }, []);
+  if (!status) return null;
+  const names: Record<string, string> = { 'claude-haiku-5-5': 'Claude Haiku 5.5 (fast, cheapest)', 'claude-sonnet-5-5': 'Claude Sonnet 5.5', 'claude-opus-5-5': 'Claude Opus 5.5 (most capable)' };
+  const total = status.month.reduce((sum, m) => sum + m.costUsd, 0);
+  return (
+    <section className="space-y-3">
+      <h2 className="font-semibold">Coach</h2>
+      <p className="text-sm text-muted">
+        The in-app coach uses the Claude API with your own key, billed per use and separately from a Claude subscription. Set a
+        monthly spending limit in the Claude Console so there are no surprises. The key is stored only in{' '}
+        <code>apps/server/.env</code> and never reaches this browser.
+      </p>
+      {status.connected ? (
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-accent">Connected.</span>
+          <button
+            type="button"
+            className={buttonClass}
+            onClick={async () => {
+              await api.removeCoachKey();
+              await load();
+              ws.toast('Removed the API key.');
+            }}
+          >
+            Remove the key
+          </button>
+        </div>
+      ) : (
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await api.setCoachKey(key);
+              setKey('');
+              await load();
+              ws.toast('The coach is connected.');
+            } catch (error) {
+              ws.toast((error as Error).message, true);
+            }
+          }}
+        >
+          <input
+            aria-label="Claude API key"
+            type="password"
+            autoComplete="off"
+            className={`${inputClass} min-w-0 flex-1`}
+            placeholder="sk-ant-…"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+          <button type="submit" className={buttonClass} disabled={!key.trim()}>
+            Save key
+          </button>
+        </form>
+      )}
+      <div className="grid grid-cols-[12rem_1fr] items-center gap-3 text-sm">
+        <span className="text-muted">Quick questions</span>
+        <select
+          aria-label="Model for quick questions"
+          className={`${inputClass} w-72`}
+          defaultValue={status.quickModel}
+          onChange={(e) => void onSave({ coachQuickModel: e.target.value })}
+        >
+          {status.models.map((m) => (
+            <option key={m} value={m}>
+              {names[m] ?? m}
+            </option>
+          ))}
+        </select>
+        <span className="text-muted">Plans, openings, game reviews</span>
+        <select
+          aria-label="Model for deeper answers"
+          className={`${inputClass} w-72`}
+          defaultValue={status.deepModel}
+          onChange={(e) => void onSave({ coachDeepModel: e.target.value })}
+        >
+          {status.models.map((m) => (
+            <option key={m} value={m}>
+              {names[m] ?? m}
+            </option>
+          ))}
+        </select>
+      </div>
+      {status.month.length > 0 && (
+        <p className="text-sm text-muted">
+          This month: {status.month.map((m) => `${m.answers} answer${m.answers === 1 ? '' : 's'} with ${(names[m.model ?? ''] ?? m.model ?? '').split(' (')[0]}`).join(', ')} · about $
+          {total.toFixed(2)} (an estimate from the token counts).
         </p>
       )}
     </section>

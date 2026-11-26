@@ -125,6 +125,26 @@ database path.
   Developer → Edit Config) with this computer's paths filled in. Restart the Claude app,
   then ask, for example, *"What should White play in r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4?"*
 
+## The in-app coach (phase 6)
+
+- The board's **Coach** tab (**C**) answers questions about the position on the board with
+  Claude, using the same chess tools: it checks Stockfish before it states an evaluation
+  (the rule lives in `apps/server/coach/systemPrompt.md`), draws its arrows on your board,
+  and gives its key lines as buttons that play them.
+- Quick buttons: *Explain this move*, *Why not…?*, *What's the plan?*, *Review this game*
+  (Stockfish finds the 3–5 biggest drops first, the coach explains them), *Explain this
+  opening*, *Tag this position* (suggests concepts and tags; you confirm each one).
+- Models: Claude Haiku 5.5 for quick questions; Claude Sonnet 5.5 for plans, openings and
+  game reviews (or tick *Think deeper*). Both can be changed in Settings → Coach, Claude Opus
+  5.5 included. Sonnet and Opus requests fall back to another model server-side if one
+  declines (`fallbacks: "default"`); Haiku has no server-side fallback.
+- The coach is off until you add a Claude API key in Settings → Coach. The server writes it
+  to `apps/server/.env`; it never reaches the browser. Every answer's tokens are stored in
+  `coach_messages`; the panel shows them per answer and Settings shows the month's total with
+  an estimated cost. Set a monthly spending limit in the Claude Console.
+- The system prompt and tool definitions are sent first and marked for prompt caching, so
+  repeated questions mostly read from the cache.
+
 ## Known gaps
 
 What the app deliberately does not do yet, so nobody "fixes" it by accident:
@@ -137,3 +157,7 @@ What the app deliberately does not do yet, so nobody "fixes" it by accident:
 - The layout is built for a desktop browser; phones are out of scope for v1.
 - Full-text search uses SQL `LIKE`, which is fine for thousands of items; SQLite FTS5 can replace it if it gets slow.
 - "Games that reached this position" looks at each game's main line only, not its variations.
+- The coach was tested with a stand-in for the Claude API (no key in the build environment);
+  its first real answers will be the first live test.
+- The gap finder and the coach's opening statistics need `LICHESS_TOKEN`; without it they
+  say so and everything else works.

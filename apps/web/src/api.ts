@@ -3,6 +3,8 @@ import type { Color, Priority, RepEdge, RepertoireCheck } from '@chess/chess-cor
 import type { RepertoireSummary } from '@chess/server/db/repertoire.ts';
 import type { CardDetail, QueueSummary, TrainingStats } from '@chess/server/db/training.ts';
 import type { ConceptCategory, ConceptInput, ConceptLinkTarget, ConceptPage, ConceptSummary } from '@chess/server/db/concepts.ts';
+import type { CoachHistoryItem } from '@chess/server/db/coach.ts';
+import type { Annotations, CoachEvent, CoachMode, CoachRequest, ReviewMoment, Suggestions, Usage } from '@chess/server/coach/coach.ts';
 import type { EngineStatus } from '@chess/server/src/engineService.ts';
 import type { Analysis, EngineLine } from '@chess/chess-tools/score';
 import type {
@@ -17,6 +19,14 @@ import type {
 } from '@chess/server/db/library.ts';
 
 export type {
+  Annotations,
+  CoachEvent,
+  CoachHistoryItem,
+  CoachMode,
+  CoachRequest,
+  ReviewMoment,
+  Suggestions,
+  Usage,
   ConceptCategory,
   ConceptLinkTarget,
   ConceptPage,
@@ -65,6 +75,35 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   const data = (await response.json().catch(() => ({}))) as { error?: string };
   if (!response.ok) throw new ApiError(data.error ?? `The server answered ${response.status}.`, response.status);
   return data as T;
+}
+
+/** POSTs and reads the server-sent events the coach streams back. */
+async function streamPost(path: string, body: unknown, onEvent: (event: CoachEvent) => void): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch {
+    throw new ApiError('The local server is not running. Start it with pnpm dev.', 0);
+  }
+  if (!response.ok || !response.body) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new ApiError(data.error ?? `The server answered ${response.status}.`, response.status);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let end = buffer.indexOf('\n\n');
+    while (end >= 0) {
+      const chunk = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      if (chunk.startsWith('data: ')) onEvent(JSON.parse(chunk.slice(6)) as CoachEvent);
+      end = buffer.indexOf('\n\n');
+    }
+  }
 }
 
 function query(params: object): string {
@@ -172,6 +211,22 @@ export const api = {
   conceptsAt: (fen: string) => call<ConceptSummary[]>('GET', `/api/concepts/at${query({ fen })}`),
   conceptDrill: (id: string) =>
     call<{ fen: string; title: string; answer: string | null; savedId: string | null }>('GET', `/api/concepts/${id}/drill`),
+
+  coachStatus: () =>
+    call<{
+      connected: boolean;
+      message: string | null;
+      models: string[];
+      quickModel: string;
+      deepModel: string;
+      month: { model: string | null; answers: number; input: number; output: number; costUsd: number }[];
+    }>('GET', '/api/coach/status'),
+  setCoachKey: (apiKey: string) => call('PUT', '/api/coach/key', { apiKey }),
+  removeCoachKey: () => call('DELETE', '/api/coach/key'),
+  coachHistory: (fen: string) => call<CoachHistoryItem[]>('GET', `/api/coach/history${query({ fen })}`),
+  askCoach: (request: CoachRequest, onEvent: (event: CoachEvent) => void) => streamPost('/api/coach/ask', request, onEvent),
+  reviewGame: (request: { startFen: string; moves: string[]; myColor?: 'white' | 'black' }, onEvent: (event: CoachEvent) => void) =>
+    streamPost('/api/coach/review', request, onEvent),
 
   gaps: (id: string, maxPositions = 25, minShare = 0.05) =>
     call<{ checked: number; gaps: { fen: string; ply: number; total: number; share: number; move: { uci: string; san: string } }[] }>(

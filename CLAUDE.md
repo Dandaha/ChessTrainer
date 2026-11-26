@@ -21,6 +21,9 @@ At the end of each phase: run tests, show me how to try it, and stop.
   Run it at below-normal priority, threads = cores - 2, hash 256 MB,
   stop it when the analysis panel is closed.
 - Developed on Windows. Use cross-platform paths and scripts.
+- Also approved (Nov 2026): drizzle-kit, tsx, @testing-library/react, jsdom,
+  ts-fsrs, zod, @anthropic-ai/sdk, @modelcontextprotocol/sdk, @types/*, and the
+  Vite/Tailwind plugins.
 
 ## Data rules
 - The position key is FEN fields 1-4, with en passant kept only if a
