@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { type GameSummary, type SavedPosition, api } from '../api.ts';
+import { type GameSummary, type QueueSummary, type SavedPosition, api } from '../api.ts';
+import { QueueLine } from './TrainingScreen.tsx';
 import { MiniBoard } from '../components/MiniBoard.tsx';
 import { Empty, buttonClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { navigate } from '../router.ts';
@@ -14,6 +15,7 @@ export function HomeScreen() {
   const [games, setGames] = useState<GameSummary[] | null>(null);
   const [positions, setPositions] = useState<SavedPosition[] | null>(null);
   const [offline, setOffline] = useState(false);
+  const [queue, setQueue] = useState<QueueSummary | null>(null);
 
   useEffect(() => {
     api
@@ -24,6 +26,7 @@ export function HomeScreen() {
       .savedPositions({ limit: 6 })
       .then((d) => setPositions(d.positions))
       .catch(() => setOffline(true));
+    api.trainingSummary().then(setQueue).catch(() => {});
   }, []);
 
   const open = () => {
@@ -36,6 +39,18 @@ export function HomeScreen() {
       {homePanels.map((Panel, i) => (
         <Panel key={i} />
       ))}
+
+      {queue && queue.total > 0 && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
+          <div>
+            <h2 className="text-sm font-semibold">Training today</h2>
+            <QueueLine summary={queue} />
+          </div>
+          <button type="button" className={primaryClass} onClick={() => navigate('training')}>
+            Start training
+          </button>
+        </section>
+      )}
 
       <section className="space-y-2 rounded-xl border border-line bg-surface p-4">
         <h2 className="text-sm font-semibold">Open a PGN or FEN</h2>

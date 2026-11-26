@@ -1,6 +1,9 @@
 import type { GameDetail, GameFilters, GameSummary, ImportReport, MoveStat } from '@chess/server/db/games.ts';
 import type { Color, Priority, RepEdge, RepertoireCheck } from '@chess/chess-core';
 import type { RepertoireSummary } from '@chess/server/db/repertoire.ts';
+import type { CardDetail, QueueSummary, TrainingStats } from '@chess/server/db/training.ts';
+import type { EngineStatus } from '@chess/server/src/engineService.ts';
+import type { Analysis, EngineLine } from '@chess/chess-tools/score';
 import type {
   CollectionSummary,
   PositionSetSummary,
@@ -13,6 +16,12 @@ import type {
 } from '@chess/server/db/library.ts';
 
 export type {
+  Analysis,
+  CardDetail,
+  EngineLine,
+  EngineStatus,
+  QueueSummary,
+  TrainingStats,
   RepertoireSummary,
   CollectionSummary,
   GameDetail,
@@ -126,6 +135,23 @@ export const api = {
     call<{ repertoire: RepertoireSummary; moves: RepEdge[]; reached: boolean }[]>('GET', `/api/repertoires/at${query({ fen })}`),
   checkGame: (pgn: string, color?: Color) =>
     call<{ repertoire: RepertoireSummary; result: RepertoireCheck; message: string }[]>('POST', '/api/repertoires/check', { pgn, color }),
+  engineStatus: () => call<EngineStatus>('GET', '/api/engine/status'),
+  evaluate: (fen: string, depth = 18, multipv = 3) => call<Analysis>('POST', '/api/engine/evaluate', { fen, depth, multipv }),
+  engineStreamUrl: (fen: string, multipv = 3) => `/api/engine/stream${query({ fen, multipv })}`,
+
+  trainingSummary: () => call<QueueSummary>('GET', '/api/training/summary'),
+  trainingQueue: (filter: { repertoireId?: string; type?: 'repertoire_move' | 'saved_position' } = {}) =>
+    call<CardDetail[]>('GET', `/api/training/queue${query(filter)}`),
+  review: (cardId: string, rating: 1 | 2 | 3 | 4, correct: boolean) => call('POST', '/api/training/review', { cardId, rating, correct }),
+  trainingStats: () => call<TrainingStats>('GET', '/api/training/stats'),
+  checkMove: (fen: string, uci: string, answer?: string | null) =>
+    call<{
+      san: string;
+      answerMatch: boolean | null;
+      engine: { best: string; bestScore: number; playedScore: number; loss: number; good: boolean } | null;
+      engineError: string | null;
+    }>('POST', '/api/training/check', { fen, uci, answer }),
+
   gaps: (id: string, maxPositions = 25, minShare = 0.05) =>
     call<{ checked: number; gaps: { fen: string; ply: number; total: number; share: number; move: { uci: string; san: string } }[] }>(
       'GET',

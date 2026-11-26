@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { type Settings, type TrashItem, api } from '../api.ts';
+import { type EngineStatus, type Settings, type TrashItem, api } from '../api.ts';
 import { Empty, PageHeader, buttonClass, inputClass } from '../components/ui.tsx';
 import { type Theme, applyTheme, currentTheme } from '../storage.ts';
 import { useWorkspace } from '../workspace.tsx';
@@ -76,6 +76,8 @@ export function SettingsScreen() {
           )}
         </section>
 
+        <EngineSettings settings={settings} onSave={save} />
+
         {settingsSections.map((Section, i) => (
           <Section key={i} />
         ))}
@@ -107,5 +109,53 @@ export function SettingsScreen() {
         </section>
       </div>
     </div>
+  );
+}
+
+function EngineSettings({ settings, onSave }: { settings: Settings | null; onSave(values: Settings): Promise<void> }) {
+  const [status, setStatus] = useState<EngineStatus | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [path, setPath] = useState('');
+
+  useEffect(() => {
+    setPath(typeof settings?.enginePath === 'string' ? settings.enginePath : '');
+  }, [settings]);
+
+  const test = async () => {
+    setTesting(true);
+    await onSave({ enginePath: path.trim() });
+    try {
+      setStatus(await api.engineStatus());
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <section className="space-y-3">
+      <h2 className="font-semibold">Engine</h2>
+      <p className="text-sm text-muted">
+        Download Stockfish from stockfishchess.org, unzip it anywhere, and paste the full path of the program here (on
+        Windows it ends in <code>.exe</code>). It runs at below-normal priority with all cores but two and 256 MB of hash,
+        and only while the engine panel or training needs it.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <input
+          aria-label="Stockfish path"
+          className={`${inputClass} min-w-0 flex-1`}
+          placeholder={'C:\\Chess\\stockfish\\stockfish-windows-x86-64-avx2.exe'}
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+        />
+        <button type="button" className={buttonClass} disabled={testing} onClick={() => void test()}>
+          {testing ? 'Starting…' : 'Save and test'}
+        </button>
+      </div>
+      {status && (
+        <p className={`text-sm ${status.error || !status.configured ? 'text-danger' : 'text-accent'}`}>
+          {!status.configured ? 'No path set.' : status.error ? status.error : `Working: ${status.name}.`}
+        </p>
+      )}
+    </section>
   );
 }

@@ -14,7 +14,8 @@
     "@chess/chess-core": "workspace:*",
     "@lichess-org/chessground": "10.5.0",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "@chess/chess-tools": "workspace:*"
   },
   "devDependencies": {
     "@chess/server": "workspace:*",

@@ -29,7 +29,8 @@ database path.
 
 | Path | What it is |
 | --- | --- |
-| `packages/chess-core` | Position key, move tree, PGN reading and writing, board helpers. Pure TypeScript, no UI. |
+| `packages/chess-core` | Position key, move tree, PGN reading and writing, repertoire graph logic, board helpers. Pure TypeScript, no UI. |
+| `packages/chess-tools` | Stockfish over UCI (`engine.ts`, Node only) and engine scores and lines (`score.ts`, browser-safe). |
 | `apps/server` | Fastify API on 127.0.0.1. All SQL lives in `apps/server/db/`. |
 | `apps/web` | React app: the board (chessground), library screens, sets, present and print modes. |
 
@@ -80,6 +81,23 @@ database path.
   prepared. Lichess requires a personal token for it: create one at
   lichess.org/account/oauth/token (no scopes needed) and add `LICHESS_TOKEN=...` to
   `apps/server/.env`.
+
+## Engine and training (phase 4)
+
+- **Stockfish**: download it from stockfishchess.org and paste the path to the program in
+  Settings → Engine (then *Save and test*). On the board, **E** turns the engine panel on:
+  an eval bar, the three best lines (click a move to play the line) and the best move as an
+  arrow. Stockfish runs at below-normal priority with all cores but two and 256 MB of hash,
+  stops searching as soon as the panel is off, and the process quits after two idle
+  minutes. Results are kept in `engine_cache`, so a position is never analysed twice.
+- **Training** uses FSRS spaced repetition. Every main-line move of yours in a repertoire is
+  a card: the app plays the line up to it and you find your move (a sideline of yours counts
+  as *Hard*). Saved positions join when you tick *In training*: you play the move and it is
+  checked against your written answer and against Stockfish (within half a pawn of the best
+  move counts). Grade with **1–4** or **Enter**. New cards are introduced 20 a day.
+- **Home** shows today's queue ("3 repertoire cards and 2 positions due today, plus 8 new");
+  the Training screen also shows reviews per day, accuracy per repertoire and the weakest
+  lines.
 
 ## Known gaps
 

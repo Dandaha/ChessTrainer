@@ -4,6 +4,9 @@ import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
 import { GamesHere, SavedHere } from '../components/PositionPanels.tsx';
 import { AddToRepertoireDialog, RepertoireTab } from '../components/RepertoirePanel.tsx';
+import { EnginePanel, EvalBar } from '../components/EnginePanel.tsx';
+import { useEngine } from '../useEngine.ts';
+import type { DrawShape } from '../Board.tsx';
 import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
 import { ExportDialog, ImportDialog, ShortcutsDialog } from '../Dialogs.tsx';
 import { MoveList } from '../MoveList.tsx';
@@ -50,9 +53,21 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const [tab, setTab] = useState<string>('notes');
   const [savedRefresh, setSavedRefresh] = useState(0);
   const [repertoireRefresh, setRepertoireRefresh] = useState(0);
+  const [engineOn, setEngineOn] = useState(false);
   const moveInput = useRef<HTMLInputElement>(null);
 
   const { game, current } = g;
+  const engine = useEngine(current.fen, engineOn);
+  const best = engine.analysis?.fen === current.fen ? engine.analysis.lines[0] : undefined;
+  const engineShapes: DrawShape[] = best?.pv[0]
+    ? [{ orig: best.pv[0].slice(0, 2) as DrawShape['orig'], dest: best.pv[0].slice(2, 4) as DrawShape['orig'], brush: 'paleBlue' }]
+    : [];
+  const toggleEngine = () => {
+    setEngineOn((on) => {
+      setTab(on ? 'notes' : 'engine');
+      return !on;
+    });
+  };
   const isRoot = current === game.root;
   const onMainline = isOnMainline(game.root, current.id);
 
@@ -91,6 +106,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       x: () => setDialog('export'),
       s: () => setDialog('save'),
       r: () => setDialog('repertoire'),
+      e: toggleEngine,
       '?': () => setDialog('shortcuts'),
     };
     for (const extra of extraTabs) if (extra.key) actions[extra.key] = () => setTab((t) => (t === extra.id ? 'notes' : extra.id));
@@ -124,6 +140,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
     { id: 'games', label: 'Games' },
     { id: 'saved', label: 'Saved' },
     { id: 'repertoire', label: 'Repertoire' },
+    { id: 'engine', label: engineOn ? 'Engine ●' : 'Engine', key: 'e' },
     ...extraTabs.map(({ id, label, key }) => ({ id, label, key })),
   ];
   const toolButton = 'rounded-md px-2.5 py-1.5 text-sm hover:bg-surface-2';
@@ -178,14 +195,18 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 lg:flex-row lg:items-start lg:justify-center">
         <section className="flex min-w-0 flex-col items-center gap-3 lg:flex-1 lg:items-end">
-          <Board
-            node={current}
-            orientation={ws.orientation}
-            onMove={(from, to, promotion) => {
-              if (!g.play(promotion ? { from, to, promotion } : { from, to })) g.goTo(current.id);
-            }}
-            onShapes={g.setShapes}
-          />
+          <div className="flex w-full justify-center gap-2 lg:justify-end">
+            {engineOn && <EvalBar line={best} flipped={ws.orientation === 'black'} />}
+            <Board
+              node={current}
+              orientation={ws.orientation}
+              autoShapes={engineShapes}
+              onMove={(from, to, promotion) => {
+                if (!g.play(promotion ? { from, to, promotion } : { from, to })) g.goTo(current.id);
+              }}
+              onShapes={g.setShapes}
+            />
+          </div>
           <div className="flex w-full max-w-[calc(100dvh-10.5rem)] items-center gap-2">
             <div className="flex gap-1">
               {(
@@ -272,6 +293,23 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
                 }}
               />
             )}
+            {tab === 'engine' &&
+              (engineOn ? (
+                <EnginePanel
+                  state={engine}
+                  onTurnOff={toggleEngine}
+                  onPlayLine={(sans) => {
+                    for (const san of sans) if (!g.play(san)) break;
+                  }}
+                />
+              ) : (
+                <div className="space-y-2 p-3 text-sm">
+                  <p className="text-muted">Stockfish is off. It runs only while this panel is on.</p>
+                  <button type="button" className="rounded-md border border-line px-2 py-1 hover:bg-surface-2" onClick={toggleEngine}>
+                    Turn on <kbd>E</kbd>
+                  </button>
+                </div>
+              ))}
             {extraTabs.find((t) => t.id === tab)?.render()}
           </div>
         </aside>
