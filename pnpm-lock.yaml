@@ -13,6 +13,9 @@ importers:
       '@chess/chess-core':
         specifier: workspace:*
         version: link:../../packages/chess-core
+      '@chess/chess-tools':
+        specifier: workspace:*
+        version: link:../../packages/chess-tools
       better-sqlite3:
         specifier: 13.2.0
         version: 13.2.0
@@ -22,6 +25,9 @@ importers:
       fastify:
         specifier: 5.12.8
         version: 5.12.8
+      ts-fsrs:
+        specifier: 6.0.0
+        version: 6.0.0
     devDependencies:
       '@types/better-sqlite3':
         specifier: 9.6.0
@@ -47,6 +53,9 @@ importers:
       '@chess/chess-core':
         specifier: workspace:*
         version: link:../../packages/chess-core
+      '@chess/chess-tools':
+        specifier: workspace:*
+        version: link:../../packages/chess-tools
       '@lichess-org/chessground':
         specifier: 10.5.0
         version: 10.5.0
@@ -100,6 +109,22 @@ importers:
         specifier: 1.4.0
         version: 1.4.0
     devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 5.1.1
+        version: 5.1.1(@types/node@22.20.5)(jsdom@31.0.1)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
+  packages/chess-tools:
+    dependencies:
+      '@chess/chess-core':
+        specifier: workspace:*
+        version: link:../chess-core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -641,6 +666,10 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || 2.0.0-beta.2
       '@emnapi/runtime': ^1.7.1 || 2.0.0-beta.2
+
+  '@open-spaced-repetition/srs-kit@1.0.0':
+    resolution: {integrity: sha512-f++JAMpRw7Yh1U4JcHzTtVknJ1bYKz/4yejsus6TRl+ueGJpvexNBrOoqaeUWCgH/e1j046oiqjzy4Nf4RW/vw==}
+    engines: {node: '>=20.0.0'}
 
   '@oxc-project/types@0.156.0':
     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
@@ -1605,6 +1634,10 @@ packages:
     resolution: {integrity: sha512-BcDSDW+SIGWVOns1Zm6Yg91q9AEj7eaID0QDY9oIqJD1A8dscNwMcl9Sms2DeuWCNov1X0/oXanHGYQBSLwZsg==}
     engines: {node: ^22.14.0 || >=24.0.0}
 
+  ts-fsrs@6.0.0:
+    resolution: {integrity: sha512-kX03GIEhXgBtUrgZuv7k7Aax8oYF3GCO0lASqJFw/8cvvI7qjE83J8IzFhHugux7//W0yquG7zidk3e9NRgEwg==}
+    engines: {node: '>=24.0.0'}
+
   tslib@2.9.1:
     resolution: {integrity: sha512-a4Ux9VKuIMHsOS7ENbEq6hK2ZGYIT27Rtl0E4eD9KqwxhKiQeMZE/9xb3IdYwWaSOyIBQLExhQgXDTYoiCxnWA==}
 
@@ -2053,6 +2086,8 @@ snapshots:
       '@emnapi/runtime': 2.0.0-beta.2
       '@tybys/wasm-util': 0.10.5
     optional: true
+
+  '@open-spaced-repetition/srs-kit@1.0.0': {}
 
   '@oxc-project/types@0.156.0': {}
 
@@ -2832,6 +2867,10 @@ snapshots:
   tr46@7.0.0:
     dependencies:
       punycode: 2.3.1
+
+  ts-fsrs@6.0.0:
+    dependencies:
+      '@open-spaced-repetition/srs-kit': 1.0.0
 
   tslib@2.9.1:
     optional: true
