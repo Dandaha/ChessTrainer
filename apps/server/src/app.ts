@@ -5,9 +5,11 @@ import { countPositions } from '../db/positions.ts';
 import { ImportSourceError } from './importers.ts';
 import { libraryRoutes } from './routes/library.ts';
 import { repertoireRoutes } from './routes/repertoire.ts';
+import { engineRoutes } from './routes/engine.ts';
+import { EngineService } from './engineService.ts';
 
 /** The API. Routes read and write only through apps/server/db. */
-export function buildApp(db: Db): FastifyInstance {
+export function buildApp(db: Db, engines: EngineService = new EngineService(db)): FastifyInstance {
   // Large PGN files arrive in one request.
   const app = Fastify({ logger: { level: 'warn' }, bodyLimit: 64 * 1024 * 1024 });
 
@@ -28,5 +30,7 @@ export function buildApp(db: Db): FastifyInstance {
 
   libraryRoutes(app, db);
   repertoireRoutes(app, db);
+  engineRoutes(app, db, engines);
+  app.addHook('onClose', async () => engines.shutdown());
   return app;
 }

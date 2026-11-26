@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
  * The database schema. Every id is a UUID and every timestamp an ISO 8601
@@ -219,4 +219,64 @@ export const repertoireMoves = sqliteTable(
     uniqueIndex('repertoire_moves_edge_idx').on(t.repertoireId, t.fromPositionId, t.uci),
     index('repertoire_moves_from_idx').on(t.fromPositionId),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Phase 4: engine cache and spaced-repetition training.
+
+/** Stockfish results, so nothing is computed twice. One row per position and engine version. */
+export const engineCache = sqliteTable(
+  'engine_cache',
+  {
+    positionId: text('position_id')
+      .notNull()
+      .references(() => positions.id),
+    engineVersion: text('engine_version').notNull(),
+    depth: integer('depth').notNull(),
+    multipv: integer('multipv').notNull(),
+    /** The lines as JSON (EngineLine[]). */
+    multipvJson: text('multipv_json').notNull(),
+    createdAt: text('created_at').notNull().$defaultFn(now),
+  },
+  (t) => [primaryKey({ columns: [t.positionId, t.engineVersion] })],
+);
+
+export const TRAINING_TARGETS = ['repertoire_move', 'saved_position', 'concept'] as const;
+
+/** Spaced-repetition state (FSRS) for one thing to remember. */
+export const trainingCards = sqliteTable(
+  'training_cards',
+  {
+    id: id(),
+    targetType: text('target_type', { enum: TRAINING_TARGETS }).notNull(),
+    targetId: text('target_id').notNull(),
+    due: text('due').notNull(),
+    stability: real('stability').notNull().default(0),
+    difficulty: real('difficulty').notNull().default(0),
+    scheduledDays: integer('scheduled_days').notNull().default(0),
+    learningSteps: integer('learning_steps').notNull().default(0),
+    reps: integer('reps').notNull().default(0),
+    lapses: integer('lapses').notNull().default(0),
+    /** FSRS state: 0 new, 1 learning, 2 review, 3 relearning. */
+    state: integer('state').notNull().default(0),
+    lastReview: text('last_review'),
+    createdAt: text('created_at').notNull().$defaultFn(now),
+  },
+  (t) => [uniqueIndex('training_cards_target_idx').on(t.targetType, t.targetId), index('training_cards_due_idx').on(t.due)],
+);
+
+export const trainingReviews = sqliteTable(
+  'training_reviews',
+  {
+    id: id(),
+    cardId: text('card_id')
+      .notNull()
+      .references(() => trainingCards.id, { onDelete: 'cascade' }),
+    /** 1 again, 2 hard, 3 good, 4 easy. */
+    rating: integer('rating').notNull(),
+    /** Whether the move played was right, before any self-grading. */
+    correct: integer('correct', { mode: 'boolean' }).notNull(),
+    reviewedAt: text('reviewed_at').notNull().$defaultFn(now),
+  },
+  (t) => [index('training_reviews_card_idx').on(t.cardId)],
 );

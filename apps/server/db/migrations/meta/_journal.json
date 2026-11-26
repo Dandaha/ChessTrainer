@@ -22,6 +22,13 @@
       "when": 1795717221136,
       "tag": "0002_repertoire",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1795717668533,
+      "tag": "0003_training",
+      "breakpoints": true
     }
   ]
 }

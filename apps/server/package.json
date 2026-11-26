@@ -12,10 +12,12 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@chess/chess-core": "workspace:*",
     "better-sqlite3": "13.2.0",
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.8",
-    "@chess/chess-core": "workspace:*"
+    "ts-fsrs": "6.0.0",
+    "@chess/chess-tools": "workspace:*"
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
