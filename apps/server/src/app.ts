@@ -4,6 +4,7 @@ import type { Db } from '../db/client.ts';
 import { countPositions } from '../db/positions.ts';
 import { ImportSourceError } from './importers.ts';
 import { libraryRoutes } from './routes/library.ts';
+import { repertoireRoutes } from './routes/repertoire.ts';
 
 /** The API. Routes read and write only through apps/server/db. */
 export function buildApp(db: Db): FastifyInstance {
@@ -26,5 +27,6 @@ export function buildApp(db: Db): FastifyInstance {
   }));
 
   libraryRoutes(app, db);
+  repertoireRoutes(app, db);
   return app;
 }

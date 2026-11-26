@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
  * The database schema. Every id is a UUID and every timestamp an ISO 8601
@@ -175,3 +175,48 @@ export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3: repertoires as a graph of moves between positions.
+
+export const repertoires = sqliteTable('repertoires', {
+  id: id(),
+  name: text('name').notNull(),
+  color: text('color', { enum: ['white', 'black'] }).notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(now),
+  updatedAt: text('updated_at').notNull().$defaultFn(now),
+  deletedAt: text('deleted_at'),
+});
+
+/** One move of a repertoire: an edge from one position to the next. */
+export const repertoireMoves = sqliteTable(
+  'repertoire_moves',
+  {
+    id: id(),
+    repertoireId: text('repertoire_id')
+      .notNull()
+      .references(() => repertoires.id, { onDelete: 'cascade' }),
+    fromPositionId: text('from_position_id')
+      .notNull()
+      .references(() => positions.id),
+    toPositionId: text('to_position_id')
+      .notNull()
+      .references(() => positions.id),
+    san: text('san').notNull(),
+    uci: text('uci').notNull(),
+    /** My move (to remember) or a move the opponent is expected to play. */
+    isMyMove: integer('is_my_move', { mode: 'boolean' }).notNull(),
+    /** The main line from its position; other moves from there are sidelines. */
+    isMain: integer('is_main', { mode: 'boolean' }).notNull().default(false),
+    priority: text('priority', { enum: ['must', 'nice'] }).notNull().default('must'),
+    commentMd: text('comment_md'),
+    /** JSON array of NAG numbers. */
+    nags: text('nags').notNull().default('[]'),
+    createdAt: text('created_at').notNull().$defaultFn(now),
+    updatedAt: text('updated_at').notNull().$defaultFn(now),
+  },
+  (t) => [
+    uniqueIndex('repertoire_moves_edge_idx').on(t.repertoireId, t.fromPositionId, t.uci),
+    index('repertoire_moves_from_idx').on(t.fromPositionId),
+  ],
+);

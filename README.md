@@ -64,6 +64,23 @@ database path.
 - **Ctrl+K** jumps to any screen, game or saved position. Deleted items stay in
   Settings → Trash for 30 days.
 
+## Repertoire (phase 3)
+
+- Separate repertoires for White and Black (several per colour if you like). The repertoire
+  is a graph of moves between positions, so transpositions are found automatically: the
+  explorer marks them **⇄ transposes** and jumps to where the line continues.
+- Build it by playing moves on the repertoire's board, by pressing **R** on the analysis
+  board (adds the line from the start to the current move), or by importing a PGN with
+  variations. Each move has my-move / expected-reply, main line / sideline, must-know /
+  nice-to-know and a comment. Export writes one PGN with variations.
+- The analysis board's **Repertoire** tab shows your prepared moves for the position and,
+  for the game on the board, where it left your preparation ("You left your preparation on
+  move 9 with ...Nd7; your line is ...Bd6").
+- **Find gaps** asks the Lichess opening explorer which common replies you have not
+  prepared. Lichess requires a personal token for it: create one at
+  lichess.org/account/oauth/token (no scopes needed) and add `LICHESS_TOKEN=...` to
+  `apps/server/.env`.
+
 ## Known gaps
 
 What the app deliberately does not do yet, so nobody "fixes" it by accident:

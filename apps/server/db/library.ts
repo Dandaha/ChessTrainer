@@ -9,6 +9,7 @@ import {
   games,
   positionSetItems,
   positionSets,
+  repertoires,
   savedPositions,
   settings,
   taggings,
@@ -394,13 +395,14 @@ export function updateSettings(db: Db, values: Settings): Settings {
 
 // --- Trash -------------------------------------------------------------------
 
-export type TrashKind = 'game' | 'saved_position' | 'position_set' | 'collection';
+export type TrashKind = 'game' | 'saved_position' | 'position_set' | 'collection' | 'repertoire';
 
 const TRASH_TABLES = {
   game: games,
   saved_position: savedPositions,
   position_set: positionSets,
   collection: collections,
+  repertoire: repertoires,
 } as const;
 
 export interface TrashItem {
@@ -452,6 +454,12 @@ export function listTrash(db: Db): TrashItem[] {
       .where(isNotNull(collections.deletedAt))
       .all()
       .map((r) => ({ kind: 'collection' as const, id: r.id, label: r.label, deletedAt: r.deletedAt! })),
+    ...db
+      .select({ id: repertoires.id, label: repertoires.name, deletedAt: repertoires.deletedAt })
+      .from(repertoires)
+      .where(isNotNull(repertoires.deletedAt))
+      .all()
+      .map((r) => ({ kind: 'repertoire' as const, id: r.id, label: r.label, deletedAt: r.deletedAt! })),
   ];
   return items.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
 }
