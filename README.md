@@ -19,6 +19,7 @@ pnpm test         # every package's tests
 pnpm typecheck
 pnpm db:migrate   # bring the database up to date (the server also does this on start)
 pnpm db:generate  # write a new migration after changing apps/server/db/schema.ts
+pnpm mcp:config   # print the Claude desktop app entry for the MCP server
 ```
 
 The database is one file, `apps/server/data/chess.db` by default. Copy
@@ -30,9 +31,10 @@ database path.
 | Path | What it is |
 | --- | --- |
 | `packages/chess-core` | Position key, move tree, PGN reading and writing, repertoire graph logic, board helpers. Pure TypeScript, no UI. |
-| `packages/chess-tools` | Stockfish over UCI (`engine.ts`, Node only) and engine scores and lines (`score.ts`, browser-safe). |
+| `packages/chess-tools` | Stockfish over UCI (`engine.ts`, Node only), engine scores (`score.ts`, browser-safe), position facts and the coach's tools. |
 | `apps/server` | Fastify API on 127.0.0.1. All SQL lives in `apps/server/db/`. |
 | `apps/web` | React app: the board (chessground), library screens, sets, present and print modes. |
+| `apps/mcp` | MCP server exposing chess-tools to the Claude desktop app. |
 
 ## The analysis board
 
@@ -98,6 +100,30 @@ database path.
 - **Home** shows today's queue ("3 repertoire cards and 2 positions due today, plus 8 new");
   the Training screen also shows reviews per day, accuracy per repertoire and the weakest
   lines.
+
+## Concepts and the coach's tools (phase 5)
+
+- **Concepts** is your chess wiki: one page per concept with aliases (search finds it under
+  any name), a category, tags, *key signs* and a markdown text where a FEN on its own line
+  becomes a board and moves become links (moves after a board are read from that board).
+  Pages link both ways to saved positions, positions, games, repertoire moves and related
+  concepts. Create one on the spot from the save box by typing its name. **Drill** shows a
+  random linked position and reveals the page once you have played your move.
+- **packages/chess-tools** holds the coach's tools, written once for both coaches:
+  `evaluate`, `compare_moves`, `play_line`, `position_facts`, `find_threats`,
+  `search_concepts`, `get_repertoire`, `search_games` and `opening_stats`.
+- **apps/mcp** exposes them as an MCP server for the Claude desktop app, so you can ask
+  about a position with your Claude subscription. It reads the chess database and runs
+  Stockfish, nothing else (no file or shell access; the online opening statistics are left
+  out). To connect it:
+
+  ```bash
+  pnpm mcp:config
+  ```
+
+  prints the entry for `claude_desktop_config.json` (Claude desktop app → Settings →
+  Developer → Edit Config) with this computer's paths filled in. Restart the Claude app,
+  then ask, for example, *"What should White play in r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4?"*
 
 ## Known gaps
 

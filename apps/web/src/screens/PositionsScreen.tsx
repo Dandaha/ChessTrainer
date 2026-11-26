@@ -5,6 +5,7 @@ import { CATEGORIES } from '../components/SavePositionDialog.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { savedToPgn } from '../exporters.ts';
 import { Markdown } from '../components/Markdown.tsx';
+import { LinkedConcepts } from '../components/ConceptPicker.tsx';
 import { boardPng, download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
 import { useWorkspace } from '../workspace.tsx';
@@ -372,6 +373,10 @@ function PositionDetail({
           ) : (
             <p className="text-xs text-muted">No notes.</p>
           )}
+        </div>
+        <div className="col-span-2 space-y-1">
+          <span className="text-xs text-muted">Concepts</span>
+          <LinkedConcepts targetType="saved_position" targetId={saved.id} />
         </div>
         <label className="col-span-2 flex items-center gap-2">
           <input type="checkbox" checked={saved.inTraining} onChange={(e) => void update({ inTraining: e.target.checked })} />

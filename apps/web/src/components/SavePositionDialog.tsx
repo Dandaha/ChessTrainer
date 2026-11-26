@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { type PositionSetSummary, type SavedPositionInput, api } from '../api.ts';
+import { type ConceptSummary, type PositionSetSummary, type SavedPositionInput, api } from '../api.ts';
+import { ConceptPicker } from './ConceptPicker.tsx';
 import { navigate } from '../router.ts';
 import { Modal } from '../Dialogs.tsx';
 
@@ -31,6 +32,7 @@ export function SavePositionDialog({
   const [inTraining, setInTraining] = useState(false);
   const [setId, setSetId] = useState('');
   const [sets, setSets] = useState<PositionSetSummary[]>([]);
+  const [concepts, setConcepts] = useState<ConceptSummary[]>([]);
   const [before, setBefore] = useState<{ id: string; title: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
@@ -48,7 +50,7 @@ export function SavePositionDialog({
       return;
     }
     try {
-      await api.savePosition({
+      const saved = await api.savePosition({
         fen,
         title: title.trim(),
         category: (category || null) as SavedPositionInput['category'],
@@ -63,6 +65,7 @@ export function SavePositionDialog({
         sourcePly: defaults.sourcePly ?? null,
         sourceLabel: defaults.sourceLabel ?? null,
       });
+      await Promise.all(concepts.map((c) => api.linkConcept(c.id, 'saved_position', { targetId: saved.id })));
       onSaved(title.trim());
     } catch (e) {
       setError((e as Error).message);
@@ -168,6 +171,14 @@ export function SavePositionDialog({
               <span className="text-muted">Notes (markdown)</span>
               <textarea aria-label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className={field} />
             </label>
+            <div className="col-span-2 space-y-1">
+              <span className="text-muted">Concepts (type a new name to create it)</span>
+              <ConceptPicker
+                linked={concepts}
+                onAdd={(c) => setConcepts((l) => [...l, c])}
+                onRemove={(c) => setConcepts((l) => l.filter((x) => x.id !== c.id))}
+              />
+            </div>
             <label className="col-span-2 flex items-center gap-2">
               <input type="checkbox" checked={inTraining} onChange={(e) => setInTraining(e.target.checked)} />
               Add to training

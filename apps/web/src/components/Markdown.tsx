@@ -11,11 +11,21 @@ import { MiniBoard } from './MiniBoard.tsx';
  * - a line that is a FEN, or a ```fen block, becomes a board;
  * - a ```line (or ```pgn) block becomes a board after those moves;
  * - a run of moves in the text ("1. e4 e5 2. Nf3") becomes a link that opens
- *   the line on the analysis board, starting from `fen` when given.
+ *   the line on the analysis board, from the last board shown above it, else
+ *   from `fen`, else from the starting position.
  */
 export function Markdown({ text, fen = START_FEN }: { text: string; fen?: string }) {
   const blocks = useMemo(() => parseBlocks(text), [text]);
-  return <div className="space-y-2 text-sm leading-relaxed">{blocks.map((b, i) => renderBlock(b, i, fen))}</div>;
+  // Moves written after a board are read from that board's position.
+  let base = fen;
+  return (
+    <div className="space-y-2 text-sm leading-relaxed">
+      {blocks.map((b, i) => {
+        if (b.kind === 'board') base = b.fen;
+        return renderBlock(b, i, base);
+      })}
+    </div>
+  );
 }
 
 type Block =

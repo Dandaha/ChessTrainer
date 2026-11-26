@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { type GameSummary, type MoveStat, type SavedPosition, api } from '../api.ts';
+import { type ConceptSummary, type GameSummary, type MoveStat, type SavedPosition, api } from '../api.ts';
+import { ConceptPicker, LinkedConcepts } from './ConceptPicker.tsx';
 import { navigate } from '../router.ts';
 
 /** Fetches whenever the position changes, a moment after the last change. */
@@ -82,10 +83,28 @@ export function GamesHere({
 }
 
 /** Saves of the position on the board. */
-export function SavedHere({ fen, refresh, onSave }: { fen: string; refresh: number; onSave(): void }) {
+export function SavedHere({ fen, refresh, onSave, gameId }: { fen: string; refresh: number; onSave(): void; gameId?: string }) {
   const { data, error } = useAt(fen, (f) => api.savedPositions({ fen: f, limit: 20 }), refresh);
+  const [conceptRefresh, setConceptRefresh] = useState(0);
+  const concepts = useAt(fen, (f) => api.conceptsAt(f), refresh + conceptRefresh);
   return (
     <div className="space-y-2 p-3 text-sm">
+      <div className="space-y-1">
+        <span className="text-xs text-muted">Concepts for this position</span>
+        <ConceptPicker
+          linked={concepts.data ?? []}
+          onAdd={async (c: ConceptSummary) => {
+            await api.linkConcept(c.id, 'position', { fen });
+            setConceptRefresh((n) => n + 1);
+          }}
+        />
+      </div>
+      {gameId && (
+        <div className="space-y-1">
+          <span className="text-xs text-muted">Concepts for this game</span>
+          <LinkedConcepts targetType="game" targetId={gameId} />
+        </div>
+      )}
       {error && <p className="text-muted">{error}</p>}
       {data && data.total === 0 && <p className="text-muted">Not saved yet.</p>}
       <ul className="divide-y divide-line">

@@ -2,6 +2,7 @@ import type { GameDetail, GameFilters, GameSummary, ImportReport, MoveStat } fro
 import type { Color, Priority, RepEdge, RepertoireCheck } from '@chess/chess-core';
 import type { RepertoireSummary } from '@chess/server/db/repertoire.ts';
 import type { CardDetail, QueueSummary, TrainingStats } from '@chess/server/db/training.ts';
+import type { ConceptCategory, ConceptInput, ConceptLinkTarget, ConceptPage, ConceptSummary } from '@chess/server/db/concepts.ts';
 import type { EngineStatus } from '@chess/server/src/engineService.ts';
 import type { Analysis, EngineLine } from '@chess/chess-tools/score';
 import type {
@@ -16,6 +17,10 @@ import type {
 } from '@chess/server/db/library.ts';
 
 export type {
+  ConceptCategory,
+  ConceptLinkTarget,
+  ConceptPage,
+  ConceptSummary,
   Analysis,
   CardDetail,
   EngineLine,
@@ -151,6 +156,22 @@ export const api = {
       engine: { best: string; bestScore: number; playedScore: number; loss: number; good: boolean } | null;
       engineError: string | null;
     }>('POST', '/api/training/check', { fen, uci, answer }),
+
+  concepts: (filter: { q?: string; category?: ConceptCategory; tag?: string } = {}) =>
+    call<ConceptSummary[]>('GET', `/api/concepts${query(filter)}`),
+  concept: (id: string) => call<ConceptPage>('GET', `/api/concepts/${id}`),
+  createConcept: (input: ConceptInput) => call<ConceptSummary>('POST', '/api/concepts', input),
+  updateConcept: (id: string, changes: Partial<ConceptInput>) => call<ConceptPage>('PUT', `/api/concepts/${id}`, changes),
+  deleteConcept: (id: string) => call('DELETE', `/api/concepts/${id}`),
+  linkConcept: (id: string, targetType: ConceptLinkTarget, target: { targetId?: string; fen?: string }) =>
+    call('POST', `/api/concepts/${id}/links`, { targetType, ...target }),
+  unlinkConcept: (id: string, targetType: ConceptLinkTarget, targetId: string) =>
+    call('POST', `/api/concepts/${id}/links/remove`, { targetType, targetId }),
+  conceptsFor: (targetType: ConceptLinkTarget, targetId: string) =>
+    call<ConceptSummary[]>('GET', `/api/concepts/for${query({ targetType, targetId })}`),
+  conceptsAt: (fen: string) => call<ConceptSummary[]>('GET', `/api/concepts/at${query({ fen })}`),
+  conceptDrill: (id: string) =>
+    call<{ fen: string; title: string; answer: string | null; savedId: string | null }>('GET', `/api/concepts/${id}/drill`),
 
   gaps: (id: string, maxPositions = 25, minShare = 0.05) =>
     call<{ checked: number; gaps: { fen: string; ply: number; total: number; share: number; move: { uci: string; san: string } }[] }>(

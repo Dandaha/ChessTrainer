@@ -30,4 +30,9 @@ describe('notes in markdown', () => {
     expect(document.querySelector('img')).toBeNull();
     expect(document.body.textContent).toContain('<img src=x onerror=alert(1)>');
   });
+
+  it('reads moves written after a board from that board', () => {
+    show('1K1k4/1P6/8/8/8/8/r7/2R5 w - - 0 1\n\nAfter 1. Rd1+ Ke7 2. Rd4 the rook blocks the checks.');
+    expect(screen.getByRole('button', { name: '1. Rd1+ Ke7 2. Rd4' })).toBeTruthy();
+  });
 });

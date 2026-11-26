@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type RepertoireSummary, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
 import { Modal } from '../Dialogs.tsx';
+import { LinkedConcepts } from '../components/ConceptPicker.tsx';
 import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
@@ -433,6 +434,7 @@ function MoveEditor({
         placeholder="Why this move, what to remember…"
         className={`${inputClass} w-full`}
       />
+      <LinkedConcepts targetType="repertoire_move" targetId={e.id} />
       <div className="flex gap-2">
         <button type="button" className={buttonClass} onClick={onOpenBoard}>
           Open on analysis board

@@ -279,7 +279,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
             {tab === 'games' && (
               <GamesHere fen={current.fen} onPlay={(san) => g.play(san)} onOpen={(id, ply) => void ws.openGameById(id, ply)} />
             )}
-            {tab === 'saved' && <SavedHere fen={current.fen} refresh={savedRefresh} onSave={() => setDialog('save')} />}
+            {tab === 'saved' && <SavedHere fen={current.fen} refresh={savedRefresh} gameId={ws.linked?.id} onSave={() => setDialog('save')} />}
             {tab === 'repertoire' && (
               <RepertoireTab
                 fen={current.fen}
