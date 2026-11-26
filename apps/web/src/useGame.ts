@@ -34,6 +34,9 @@ export interface GameApi {
   path: MoveNode[];
   version: number;
   canUndo: boolean;
+  /** Edited since it was loaded or last marked clean. */
+  dirty: boolean;
+  markClean(): void;
   goTo(id: string): void;
   back(): void;
   forward(): void;
@@ -47,7 +50,8 @@ export interface GameApi {
   setCommentText(text: string): void;
   toggleNag(nag: number): void;
   setShapes(arrows: Arrow[], highlights: Highlight[]): void;
-  load(game: Game): void;
+  /** Loads a game; `at` picks the node to show, `clean` marks it as saved. */
+  load(game: Game, options?: { at?: string; clean?: boolean }): void;
   undo(): void;
 }
 
@@ -55,6 +59,7 @@ export function useGame(initial: () => Game = () => createGame()): GameApi {
   const [game, setGame] = useState<Game>(initial);
   const [currentId, setCurrentId] = useState(() => game.root.id);
   const [version, bump] = useReducer((n: number) => n + 1, 0);
+  const [cleanVersion, setCleanVersion] = useState(-1);
   const undoStack = useRef<Snapshot[]>([]);
 
   const current = findNode(game.root, currentId) ?? game.root;
@@ -74,6 +79,8 @@ export function useGame(initial: () => Game = () => createGame()): GameApi {
     path,
     version,
     canUndo: undoStack.current.length > 0,
+    dirty: version !== cleanVersion,
+    markClean: () => setCleanVersion(version),
     goTo,
     back: () => {
       const parent = parentOf(game.root, current.id);
@@ -130,11 +137,13 @@ export function useGame(initial: () => Game = () => createGame()): GameApi {
       current.highlights = highlights;
       bump();
     },
-    load: (next) => {
+    load: (next, options = {}) => {
       if (game.root.children.length || game.root.comments.length) snapshot();
       setGame(next);
-      setCurrentId(next.root.id);
+      setCurrentId(options.at ?? next.root.id);
       bump();
+      // load() itself is one edit; a clean load is clean after it.
+      setCleanVersion(options.clean ? version + 1 : -1);
     },
     undo: () => {
       const last = undoStack.current.pop();

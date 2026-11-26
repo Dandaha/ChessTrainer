@@ -31,7 +31,7 @@ database path.
 | --- | --- |
 | `packages/chess-core` | Position key, move tree, PGN reading and writing, board helpers. Pure TypeScript, no UI. |
 | `apps/server` | Fastify API on 127.0.0.1. All SQL lives in `apps/server/db/`. |
-| `apps/web` | React app: the analysis board (chessground), move list, annotations. |
+| `apps/web` | React app: the board (chessground), library screens, sets, present and print modes. |
 
 ## The analysis board
 
@@ -46,6 +46,24 @@ database path.
 - The game on the board is kept in the browser across reloads. Saving games to
   the library comes in phase 2.
 
+## The library (phase 2)
+
+- **Games**: import PGN files or pasted PGN, or your games from Lichess and Chess.com by
+  username (re-importing only adds new games). Filter by player, opening or ECO, result,
+  date, tag and your colour; group games into collections. Click a game to open it on the
+  board; **Ctrl+S** saves edits back into it.
+- **Position search**: the board's **Games** tab lists every library game that reached the
+  position on the board (by any move order) and what was played from it.
+- **Saved positions**: press **S** on the board. Only a title is required; the source game,
+  move and side to move fill in. The same position can be saved several times, each with
+  its own idea. Notes are markdown: a FEN line becomes a board and moves like `1. e4 e5`
+  become links that open the line.
+- **Sets**: ordered groups of saved positions, with **Present** (full screen, reveal the
+  idea when you choose), a printable **worksheet** (save it as PDF from the print dialog),
+  and PGN export. Single positions export as PNG or PGN.
+- **Ctrl+K** jumps to any screen, game or saved position. Deleted items stay in
+  Settings → Trash for 30 days.
+
 ## Known gaps
 
 What the app deliberately does not do yet, so nobody "fixes" it by accident:
@@ -56,3 +74,5 @@ What the app deliberately does not do yet, so nobody "fixes" it by accident:
 - A variation that repeats an existing move is merged into it on import.
 - When a file holds several games, the board opens the first; the library (phase 2) takes the rest.
 - The layout is built for a desktop browser; phones are out of scope for v1.
+- Full-text search uses SQL `LIKE`, which is fine for thousands of items; SQLite FTS5 can replace it if it gets slow.
+- "Games that reached this position" looks at each game's main line only, not its variations.

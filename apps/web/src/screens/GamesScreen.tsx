@@ -1,0 +1,446 @@
+import { useCallback, useEffect, useState } from 'react';
+import { type CollectionSummary, type GameSummary, type ImportReport, api } from '../api.ts';
+import { Modal } from '../Dialogs.tsx';
+import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
+import { useWorkspace } from '../workspace.tsx';
+
+const LIMIT = 50;
+
+interface Filters {
+  q: string;
+  player: string;
+  opening: string;
+  result: string;
+  dateFrom: string;
+  dateTo: string;
+  tag: string;
+  myColor: string;
+}
+
+const EMPTY: Filters = { q: '', player: '', opening: '', result: '', dateFrom: '', dateTo: '', tag: '', myColor: '' };
+
+export function GamesScreen() {
+  const ws = useWorkspace();
+  const [collections, setCollections] = useState<CollectionSummary[]>([]);
+  const [collectionId, setCollectionId] = useState('');
+  const [filters, setFilters] = useState<Filters>(EMPTY);
+  const [offset, setOffset] = useState(0);
+  const [data, setData] = useState<{ total: number; games: GameSummary[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+
+  const reload = useCallback(() => setRefresh((n) => n + 1), []);
+
+  useEffect(() => {
+    api.collections().then(setCollections).catch(() => {});
+  }, [refresh]);
+
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(() => {
+      api
+        .games({
+          ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
+          collectionId: collectionId || undefined,
+          limit: LIMIT,
+          offset,
+        })
+        .then((d) => {
+          if (!live) return;
+          setData(d);
+          setError(null);
+        })
+        .catch((e: Error) => live && setError(e.message));
+    }, 150);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [filters, collectionId, offset, refresh]);
+
+  const setFilter = (key: keyof Filters, value: string) => {
+    setFilters((f) => ({ ...f, [key]: value }));
+    setOffset(0);
+  };
+
+  const toggle = (id: string) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const newCollection = async () => {
+    const name = window.prompt('Name of the new collection');
+    if (!name?.trim()) return;
+    const { id } = await api.createCollection(name.trim());
+    if (selected.size) await api.addToCollection(id, [...selected]);
+    setCollectionId(id);
+    reload();
+  };
+
+  const current = collections.find((c) => c.id === collectionId);
+
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader title="Games">
+        <button type="button" className={primaryClass} onClick={() => setImporting(true)}>
+          Import games
+        </button>
+      </PageHeader>
+      <div className="flex min-h-0 flex-1">
+        <aside className="w-56 shrink-0 space-y-3 overflow-y-auto border-r border-line p-3">
+          <SideList
+            items={[
+              { id: '', label: 'All games', count: collectionId ? undefined : data?.total },
+              ...collections.map((c) => ({ id: c.id, label: c.name, count: c.games })),
+            ]}
+            activeId={collectionId}
+            onSelect={(id) => {
+              setCollectionId(id);
+              setOffset(0);
+              setSelected(new Set());
+            }}
+          />
+          <button type="button" className="px-2.5 text-sm text-accent" onClick={() => void newCollection()}>
+            + New collection{selected.size ? ` with ${selected.size} selected` : ''}
+          </button>
+          {current && (
+            <div className="flex gap-2 px-2.5 text-xs">
+              <button
+                type="button"
+                className="text-muted hover:text-text"
+                onClick={async () => {
+                  const name = window.prompt('Rename collection', current.name);
+                  if (name?.trim()) {
+                    await api.renameCollection(current.id, name.trim());
+                    reload();
+                  }
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                className="text-danger"
+                onClick={async () => {
+                  await api.deleteCollection(current.id);
+                  setCollectionId('');
+                  reload();
+                  ws.toast(`Moved “${current.name}” to the trash. Its games stay in the library.`);
+                }}
+              >
+                Delete collection
+              </button>
+            </div>
+          )}
+        </aside>
+
+        <section className="min-w-0 flex-1 space-y-3 overflow-y-auto p-4">
+          <div className="flex flex-wrap gap-2">
+            <input aria-label="Search games" className={`${inputClass} w-56`} placeholder="Search players, event, opening…" value={filters.q} onChange={(e) => setFilter('q', e.target.value)} />
+            <input aria-label="Player" className={`${inputClass} w-36`} placeholder="Player" value={filters.player} onChange={(e) => setFilter('player', e.target.value)} />
+            <input aria-label="Opening or ECO" className={`${inputClass} w-36`} placeholder="Opening or ECO" value={filters.opening} onChange={(e) => setFilter('opening', e.target.value)} />
+            <select aria-label="Result" className={inputClass} value={filters.result} onChange={(e) => setFilter('result', e.target.value)}>
+              <option value="">Any result</option>
+              <option value="1-0">1-0</option>
+              <option value="0-1">0-1</option>
+              <option value="1/2-1/2">½-½</option>
+              <option value="*">Unfinished</option>
+            </select>
+            <select aria-label="My colour" className={inputClass} value={filters.myColor} onChange={(e) => setFilter('myColor', e.target.value)}>
+              <option value="">Any colour</option>
+              <option value="white">I had White</option>
+              <option value="black">I had Black</option>
+            </select>
+            <input aria-label="From date" type="date" className={inputClass} value={filters.dateFrom} onChange={(e) => setFilter('dateFrom', e.target.value)} />
+            <input aria-label="To date" type="date" className={inputClass} value={filters.dateTo} onChange={(e) => setFilter('dateTo', e.target.value)} />
+            <input aria-label="Tag" className={`${inputClass} w-28`} placeholder="Tag" value={filters.tag} onChange={(e) => setFilter('tag', e.target.value)} />
+            {Object.values(filters).some(Boolean) && (
+              <button type="button" className="text-sm text-muted hover:text-text" onClick={() => setFilters(EMPTY)}>
+                Clear
+              </button>
+            )}
+          </div>
+
+          {selected.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm">
+              <span>{selected.size} selected</span>
+              <select
+                aria-label="Add to collection"
+                className={inputClass}
+                value=""
+                onChange={async (e) => {
+                  if (!e.target.value) return;
+                  await api.addToCollection(e.target.value, [...selected]);
+                  ws.toast(`Added ${selected.size} game(s) to the collection.`);
+                  reload();
+                }}
+              >
+                <option value="">Add to collection…</option>
+                {collections.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {current && (
+                <button
+                  type="button"
+                  className={buttonClass}
+                  onClick={async () => {
+                    await api.removeFromCollection(current.id, [...selected]);
+                    setSelected(new Set());
+                    reload();
+                  }}
+                >
+                  Remove from “{current.name}”
+                </button>
+              )}
+              <button
+                type="button"
+                className={dangerClass}
+                onClick={async () => {
+                  await api.deleteGames([...selected]);
+                  ws.toast(`Moved ${selected.size} game(s) to the trash (Settings → Trash to restore).`);
+                  setSelected(new Set());
+                  reload();
+                }}
+              >
+                Delete
+              </button>
+              <button type="button" className="ml-auto text-muted" onClick={() => setSelected(new Set())}>
+                Clear selection
+              </button>
+            </div>
+          )}
+
+          {error && <Empty>{error}</Empty>}
+          {data && data.total === 0 && !error && (
+            <Empty>
+              {Object.values(filters).some(Boolean) || collectionId
+                ? 'No game matches.'
+                : 'No games yet. Import a PGN file, or your games from Lichess or Chess.com.'}
+            </Empty>
+          )}
+          {data && data.total > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+              <table className="w-full text-sm">
+                <thead className="border-b border-line text-left text-xs text-muted">
+                  <tr>
+                    <th className="w-8 px-3 py-2">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all"
+                        checked={data.games.length > 0 && data.games.every((g) => selected.has(g.id))}
+                        onChange={(e) =>
+                          setSelected(e.target.checked ? new Set(data.games.map((g) => g.id)) : new Set())
+                        }
+                      />
+                    </th>
+                    <th className="px-2 py-2">Date</th>
+                    <th className="px-2 py-2">White</th>
+                    <th className="px-2 py-2">Black</th>
+                    <th className="px-2 py-2">Result</th>
+                    <th className="px-2 py-2">Opening</th>
+                    <th className="px-2 py-2">Event</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {data.games.map((g) => (
+                    <tr key={g.id} className="cursor-pointer hover:bg-surface-2" onClick={() => void ws.openGameById(g.id)}>
+                      <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" aria-label="Select game" checked={selected.has(g.id)} onChange={() => toggle(g.id)} />
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-muted">{g.date?.replace(/\.\?\?/g, '') ?? ''}</td>
+                      <td className={`px-2 py-1.5 ${g.myColor === 'white' ? 'font-semibold' : ''}`}>
+                        {g.white ?? '?'} {g.whiteElo && <span className="text-xs text-muted">{g.whiteElo}</span>}
+                      </td>
+                      <td className={`px-2 py-1.5 ${g.myColor === 'black' ? 'font-semibold' : ''}`}>
+                        {g.black ?? '?'} {g.blackElo && <span className="text-xs text-muted">{g.blackElo}</span>}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">{g.result === '1/2-1/2' ? '½-½' : g.result}</td>
+                      <td className="max-w-64 truncate px-2 py-1.5">
+                        {g.eco && <span className="mr-1 text-xs text-muted">{g.eco}</span>}
+                        {g.openingName}
+                      </td>
+                      <td className="max-w-48 truncate px-2 py-1.5 text-muted">
+                        {g.event}
+                        {g.tags.map((t) => (
+                          <span key={t} className="ml-1 rounded bg-surface-2 px-1 text-xs">
+                            #{t}
+                          </span>
+                        ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {data && <Pager offset={offset} limit={LIMIT} total={data.total} onChange={setOffset} />}
+        </section>
+      </div>
+
+      {importing && (
+        <ImportGamesDialog
+          collections={collections}
+          defaultCollection={collectionId}
+          onClose={() => setImporting(false)}
+          onDone={(report) => {
+            reload();
+            ws.toast(importSummary(report), report.errors.length > 0 && report.imported === 0);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+export function importSummary(report: ImportReport): string {
+  const parts = [`Imported ${report.imported} game${report.imported === 1 ? '' : 's'}`];
+  if (report.duplicates) parts.push(`${report.duplicates} already in the library`);
+  if (report.errors.length) parts.push(`${report.errors.length} could not be read (first: line ${report.errors[0]!.line}, ${report.errors[0]!.message})`);
+  return `${parts.join(', ')}.`;
+}
+
+type Source = 'pgn' | 'lichess' | 'chesscom';
+
+function ImportGamesDialog({
+  collections,
+  defaultCollection,
+  onClose,
+  onDone,
+}: {
+  collections: CollectionSummary[];
+  defaultCollection: string;
+  onClose(): void;
+  onDone(report: ImportReport): void;
+}) {
+  const [source, setSource] = useState<Source>('pgn');
+  const [text, setText] = useState('');
+  const [username, setUsername] = useState('');
+  const [max, setMax] = useState(500);
+  const [collectionId, setCollectionId] = useState(defaultCollection);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .settings()
+      .then((s) => setUsername((source === 'lichess' ? s.lichessUsername : source === 'chesscom' ? s.chesscomUsername : '') ?? ''))
+      .catch(() => {});
+  }, [source]);
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const target = collectionId || undefined;
+      const report =
+        source === 'pgn'
+          ? await api.importPgn(text, target)
+          : source === 'lichess'
+            ? await api.importLichess(username, max, target)
+            : await api.importChesscom(username, max, target);
+      onDone(report);
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Import games" onClose={onClose}>
+      <div className="mb-3 flex gap-1 text-sm" role="tablist">
+        {(
+          [
+            ['pgn', 'PGN file or text'],
+            ['lichess', 'Lichess'],
+            ['chesscom', 'Chess.com'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={source === id}
+            onClick={() => setSource(id)}
+            className={`rounded-md px-3 py-1.5 ${source === id ? 'bg-accent-soft font-semibold' : 'hover:bg-surface-2'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {source === 'pgn' ? (
+        <div className="space-y-2">
+          <textarea
+            aria-label="PGN"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={10}
+            spellCheck={false}
+            placeholder="Paste one or many games here, or open a file."
+            className={`${inputClass} w-full font-mono`}
+          />
+          <label className={`${buttonClass} inline-block cursor-pointer`}>
+            Open .pgn file…
+            <input
+              type="file"
+              accept=".pgn,.txt"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) setText(await file.text());
+              }}
+            />
+          </label>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="space-y-1 text-sm">
+            <span className="block text-muted">{source === 'lichess' ? 'Lichess' : 'Chess.com'} username</span>
+            <input aria-label="Username" value={username} onChange={(e) => setUsername(e.target.value)} className={inputClass} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="block text-muted">Most recent games</span>
+            <input aria-label="How many games" type="number" min={1} max={5000} value={max} onChange={(e) => setMax(Number(e.target.value))} className={`${inputClass} w-28`} />
+          </label>
+          <p className="w-full text-xs text-muted">
+            Games already in the library are skipped, so importing again only adds new ones.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <select aria-label="Into collection" className={inputClass} value={collectionId} onChange={(e) => setCollectionId(e.target.value)}>
+          <option value="">No collection</option>
+          {collections.map((c) => (
+            <option key={c.id} value={c.id}>
+              Into “{c.name}”
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className={primaryClass}
+          disabled={busy || (source === 'pgn' ? !text.trim() : !username.trim())}
+          onClick={() => void run()}
+        >
+          {busy ? 'Importing…' : 'Import'}
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          {error}
+        </p>
+      )}
+    </Modal>
+  );
+}

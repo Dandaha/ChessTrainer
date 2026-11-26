@@ -1,6 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { App } from '../src/App.tsx';
+
+beforeEach(() => {
+  window.location.hash = '#/board';
+});
 
 /**
  * The phase 1 flow, end to end in the UI: paste a PGN, step through it, add a
