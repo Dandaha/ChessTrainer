@@ -6,6 +6,7 @@ import { ImportSourceError } from './importers.ts';
 import { libraryRoutes } from './routes/library.ts';
 import { repertoireRoutes } from './routes/repertoire.ts';
 import { engineRoutes } from './routes/engine.ts';
+import { conceptRoutes } from './routes/concepts.ts';
 import { EngineService } from './engineService.ts';
 
 /** The API. Routes read and write only through apps/server/db. */
@@ -31,6 +32,7 @@ export function buildApp(db: Db, engines: EngineService = new EngineService(db))
   libraryRoutes(app, db);
   repertoireRoutes(app, db);
   engineRoutes(app, db, engines);
+  conceptRoutes(app, db);
   app.addHook('onClose', async () => engines.shutdown());
   return app;
 }

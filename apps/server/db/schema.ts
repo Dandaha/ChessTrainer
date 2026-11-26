@@ -280,3 +280,45 @@ export const trainingReviews = sqliteTable(
   },
   (t) => [index('training_reviews_card_idx').on(t.cardId)],
 );
+
+// ---------------------------------------------------------------------------
+// Phase 5: the concepts library, a personal chess wiki.
+
+export const CONCEPT_CATEGORIES = [
+  'pawn_structure',
+  'strategic_plan',
+  'tactical_motif',
+  'endgame_technique',
+  'opening_idea',
+  'practical_play',
+] as const;
+
+export const concepts = sqliteTable('concepts', {
+  id: id(),
+  title: text('title').notNull(),
+  /** JSON array of other names it is known by. */
+  aliases: text('aliases').notNull().default('[]'),
+  category: text('category', { enum: CONCEPT_CATEGORIES }),
+  bodyMd: text('body_md'),
+  /** JSON array of "what to look for" items. */
+  keySigns: text('key_signs').notNull().default('[]'),
+  createdAt: text('created_at').notNull().$defaultFn(now),
+  updatedAt: text('updated_at').notNull().$defaultFn(now),
+  deletedAt: text('deleted_at'),
+});
+
+export const CONCEPT_LINK_TARGETS = ['position', 'saved_position', 'game', 'repertoire_move', 'concept'] as const;
+
+/** A concept linked to a position, a save, a game, a repertoire move or another concept. */
+export const conceptLinks = sqliteTable(
+  'concept_links',
+  {
+    conceptId: text('concept_id')
+      .notNull()
+      .references(() => concepts.id, { onDelete: 'cascade' }),
+    targetType: text('target_type', { enum: CONCEPT_LINK_TARGETS }).notNull(),
+    targetId: text('target_id').notNull(),
+    createdAt: text('created_at').notNull().$defaultFn(now),
+  },
+  (t) => [primaryKey({ columns: [t.conceptId, t.targetType, t.targetId] }), index('concept_links_target_idx').on(t.targetType, t.targetId)],
+);

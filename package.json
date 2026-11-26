@@ -11,6 +11,7 @@
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
     "db:migrate": "pnpm --filter @chess/server db:migrate",
-    "db:generate": "pnpm --filter @chess/server db:generate"
+    "db:generate": "pnpm --filter @chess/server db:generate",
+    "mcp:config": "pnpm --silent --filter @chess/mcp config"
   }
 }
