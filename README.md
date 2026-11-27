@@ -12,7 +12,13 @@ Download the latest installer from this repository's **Releases** page
 publisher is unknown, since the installer is not code-signed: choose
 **More info → Run anyway**. Stockfish comes with the app; your data stays in
 `%APPDATA%\Chess Workspace` (Settings → Your data), also across updates.
-A new installer is built automatically on every push to `main`.
+
+A new release is built automatically on every push to `main`, and the
+installed app updates itself: it checks when it opens and every six hours,
+downloads a new version in the background and offers to restart into it
+(otherwise it installs when the app is closed). Update problems are written to
+`updates.log` in the data folder and never interrupt. This needs the
+repository to be public, since the app reads the releases without a token.
 
 ## Run from source (development)
 

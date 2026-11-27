@@ -19,14 +19,17 @@ At the end of each phase: run tests, show me how to try it, and stop.
   - apps/mcp: MCP server exposing chess-tools (phase 5)
   - apps/desktop: Electron wrapper; the installed app runs the server and
     the built pages on 127.0.0.1 and bundles Stockfish. The Windows
-    installer is built by .github/workflows/desktop.yml on every push.
+    installer is built by .github/workflows/desktop.yml on every push,
+    published as a GitHub release, and installed apps update themselves
+    from those releases (electron-updater).
 - Stockfish: native binary from stockfishchess.org, path set in Settings.
   Run it at below-normal priority, threads = cores - 2, hash 256 MB,
   stop it when the analysis panel is closed.
 - Developed on Windows. Use cross-platform paths and scripts.
 - Also approved (Nov 2026): drizzle-kit, tsx, @testing-library/react, jsdom,
   ts-fsrs, zod, @anthropic-ai/sdk, @modelcontextprotocol/sdk, @types/*, the
-  Vite/Tailwind plugins, electron, electron-builder and esbuild.
+  Vite/Tailwind plugins, electron, electron-builder, electron-updater
+  and esbuild.
 
 ## Data rules
 - The position key is FEN fields 1-4, with en passant kept only if a

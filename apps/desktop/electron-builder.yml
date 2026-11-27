@@ -31,4 +31,10 @@ nsis:
   shortcutName: Chess Workspace
   artifactName: Chess-Workspace-Setup-${version}.${ext}
   deleteAppDataOnUninstall: false
-publish: null
+# Where the installed app looks for updates (written into resources/app-update.yml). The workflow
+# uploads the installer, latest.yml and the blockmap itself, so the packager runs with --publish never.
+publish:
+  provider: github
+  owner: Dandaha
+  repo: ChessTrainer
+  releaseType: release

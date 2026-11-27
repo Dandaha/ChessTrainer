@@ -75,7 +75,7 @@ jobs:
 
       - name: Build the installer
         working-directory: apps/desktop
-        run: pnpm exec electron-builder --win nsis --x64 --config electron-builder.yml
+        run: pnpm exec electron-builder --win nsis --x64 --config electron-builder.yml --publish never
 
       - name: Check that the packaged app starts
         shell: pwsh
@@ -88,6 +88,9 @@ jobs:
           Get-Content check.out, check.err
           if ($check.ExitCode -ne 0) { throw "The packaged app cannot load its database driver" }
           Remove-Item Env:ELECTRON_RUN_AS_NODE
+          # Where the installed app looks for updates.
+          Get-Content apps/desktop/release/win-unpacked/resources/app-update.yml
+          if (-not (Select-String -Path apps/desktop/release/win-unpacked/resources/app-update.yml -Pattern 'ChessTrainer' -Quiet)) { throw "app-update.yml does not point at the releases" }
           # 2. The app itself starts its local server and finds the bundled Stockfish.
           $app = Start-Process -FilePath $exe -PassThru
           try {
@@ -112,6 +115,10 @@ jobs:
             $page = Invoke-WebRequest http://127.0.0.1:47123/
             if ($page.Content -notmatch '<div id="root">') { throw "The app did not serve its pages" }
             Write-Host "The packaged app works: server, database, pages and $($engine.name)"
+            # The update check runs in the background; its log shows that it reached the releases.
+            Start-Sleep -Seconds 5
+            $updates = Join-Path $env:APPDATA 'Chess Workspace/updates.log'
+            if (Test-Path $updates) { Get-Content $updates } else { Write-Host "No update log yet" }
           } finally {
             Get-Process -Name 'Chess Workspace', 'stockfish*' -ErrorAction SilentlyContinue | Stop-Process -Force
           }
@@ -121,5 +128,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $exe = Get-ChildItem apps/desktop/release -Filter "*.exe" | Select-Object -First 1
-          gh release create "v$env:APP_VERSION" $exe.FullName --title "Chess Workspace $env:APP_VERSION" --latest --notes "Windows installer, built from $env:GITHUB_SHA. Download $($exe.Name) below and run it."
+          $ErrorActionPreference = 'Stop'
+          # The installer, plus what the installed apps read to update themselves:
+          # latest.yml (version and checksum) and the blockmap (to download only what changed).
+          $release = 'apps/desktop/release'
+          $exe = "$release/Chess-Workspace-Setup-$env:APP_VERSION.exe"
+          $files = @($exe, "$exe.blockmap", "$release/latest.yml")
+          foreach ($file in $files) { if (-not (Test-Path $file)) { throw "Missing $file" } }
+          Get-Content "$release/latest.yml"
+          gh release create "v$env:APP_VERSION" @files --title "Chess Workspace $env:APP_VERSION" --latest --notes "Windows installer, built from $env:GITHUB_SHA. The app updates itself; for a first install, download Chess-Workspace-Setup-$env:APP_VERSION.exe below and run it."
+          if ($LASTEXITCODE -ne 0) { throw "Could not publish the release" }

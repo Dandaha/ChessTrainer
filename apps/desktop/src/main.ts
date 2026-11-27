@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BrowserWindow, Menu, app, shell } from 'electron';
 import { startLocalServer } from './localServer.ts';
+import { startUpdates } from './updates.ts';
 
 /**
  * The Electron main process: starts the app's local server and shows it in a
@@ -82,6 +83,7 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     await window.loadURL(local);
+    startUpdates(() => window);
   });
 
   app.on('window-all-closed', () => app.quit());
