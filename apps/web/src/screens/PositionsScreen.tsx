@@ -9,6 +9,7 @@ import { LinkedConcepts } from '../components/ConceptPicker.tsx';
 import { boardPng, download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
 import { useWorkspace } from '../workspace.tsx';
+import { useAskText } from '../components/AskText.tsx';
 
 const LIMIT = 60;
 
@@ -35,6 +36,7 @@ export function PositionsScreen() {
   const [openId, setOpenId] = useState<string | null>(route.params.get('open'));
   const [refresh, setRefresh] = useState(0);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
+  const askText = useAskText();
 
   const setId = list.startsWith('set:') ? list.slice(4) : '';
   const currentSet = sets.find((s) => s.id === setId);
@@ -78,7 +80,7 @@ export function PositionsScreen() {
   }, [q, category, tag, list, setId, offset, refresh]);
 
   const newSet = async () => {
-    const name = window.prompt('Name of the new set, e.g. "Lesson: Greek gift"');
+    const name = await askText('New set', '', 'e.g. Lesson: Greek gift');
     if (!name?.trim()) return;
     const { id } = await api.createSet(name.trim());
     reload();
@@ -138,7 +140,7 @@ export function PositionsScreen() {
                   type="button"
                   className="text-muted hover:text-text"
                   onClick={async () => {
-                    const name = window.prompt('Rename set', currentSet.name);
+                    const name = await askText('Rename set', currentSet.name);
                     if (name?.trim()) {
                       await api.updateSet(currentSet.id, { name: name.trim() });
                       reload();

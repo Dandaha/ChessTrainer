@@ -3,6 +3,7 @@ import { type CollectionSummary, type GameSummary, type ImportReport, api } from
 import { Modal } from '../Dialogs.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { useWorkspace } from '../workspace.tsx';
+import { useAskText } from '../components/AskText.tsx';
 
 const LIMIT = 50;
 
@@ -32,6 +33,7 @@ export function GamesScreen() {
   const [refresh, setRefresh] = useState(0);
 
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
+  const askText = useAskText();
 
   useEffect(() => {
     api.collections().then(setCollections).catch(() => {});
@@ -74,7 +76,7 @@ export function GamesScreen() {
     });
 
   const newCollection = async () => {
-    const name = window.prompt('Name of the new collection');
+    const name = await askText('New collection', '', 'e.g. My best games');
     if (!name?.trim()) return;
     const { id } = await api.createCollection(name.trim());
     if (selected.size) await api.addToCollection(id, [...selected]);
@@ -114,7 +116,7 @@ export function GamesScreen() {
                 type="button"
                 className="text-muted hover:text-text"
                 onClick={async () => {
-                  const name = window.prompt('Rename collection', current.name);
+                  const name = await askText('Rename collection', current.name);
                   if (name?.trim()) {
                     await api.renameCollection(current.id, name.trim());
                     reload();

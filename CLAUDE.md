@@ -17,13 +17,16 @@ At the end of each phase: run tests, show me how to try it, and stop.
   - packages/chess-tools: Stockfish wrapper (UCI over child process) +
     position_facts; used by the server's coach AND by the MCP server
   - apps/mcp: MCP server exposing chess-tools (phase 5)
+  - apps/desktop: Electron wrapper; the installed app runs the server and
+    the built pages on 127.0.0.1 and bundles Stockfish. The Windows
+    installer is built by .github/workflows/desktop.yml on every push.
 - Stockfish: native binary from stockfishchess.org, path set in Settings.
   Run it at below-normal priority, threads = cores - 2, hash 256 MB,
   stop it when the analysis panel is closed.
 - Developed on Windows. Use cross-platform paths and scripts.
 - Also approved (Nov 2026): drizzle-kit, tsx, @testing-library/react, jsdom,
-  ts-fsrs, zod, @anthropic-ai/sdk, @modelcontextprotocol/sdk, @types/*, and the
-  Vite/Tailwind plugins.
+  ts-fsrs, zod, @anthropic-ai/sdk, @modelcontextprotocol/sdk, @types/*, the
+  Vite/Tailwind plugins, electron, electron-builder and esbuild.
 
 ## Data rules
 - The position key is FEN fields 1-4, with en passant kept only if a
@@ -43,7 +46,8 @@ At the end of each phase: run tests, show me how to try it, and stop.
 
 ## Security and AI
 - .env is in .gitignore from the first commit. The Claude API key lives
-  only in apps/server/.env and never reaches the browser.
+  only in apps/server/.env (run from source) or in the app's data folder
+  (installed app), and never reaches the browser.
 - The coach is OFF unless an API key is set. Without a key the coach panel
   shows "Coach not connected - add an API key in Settings" and nothing
   else breaks.

@@ -12,10 +12,12 @@ export function SettingsScreen() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [trash, setTrash] = useState<TrashItem[] | null>(null);
   const [theme, setTheme] = useState<Theme>(currentTheme);
+  const [system, setSystem] = useState<Awaited<ReturnType<typeof api.systemInfo>> | null>(null);
 
   useEffect(() => {
     api.settings().then(setSettings).catch((e: Error) => ws.toast(e.message, true));
     api.trash().then(setTrash).catch(() => {});
+    api.systemInfo().then(setSystem).catch(() => setSystem(null));
   }, []);
 
   const save = async (values: Settings) => {
@@ -78,7 +80,20 @@ export function SettingsScreen() {
 
         <EngineSettings settings={settings} onSave={save} />
 
-        <CoachSettings onSave={save} />
+        <CoachSettings onSave={save} keyLocation={system ? system.envFile : 'apps/server/.env'} />
+
+        {system?.mcpConfig ? <ClaudeAppSettings config={system.mcpConfig} /> : null}
+
+        {system && (
+          <section className="space-y-2">
+            <h2 className="font-semibold">Your data</h2>
+            <p className="text-sm text-muted">
+              Your games, positions, repertoires, concepts, training and the API key are kept in this folder. Copy it
+              somewhere safe to back everything up; uninstalling the app leaves it in place.
+            </p>
+            <code className="block rounded-md bg-surface-2 px-3 py-2 text-xs break-all">{system.dataDir}</code>
+          </section>
+        )}
 
         {settingsSections.map((Section, i) => (
           <Section key={i} />
@@ -118,10 +133,21 @@ function EngineSettings({ settings, onSave }: { settings: Settings | null; onSav
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [testing, setTesting] = useState(false);
   const [path, setPath] = useState('');
+  const [bundled, setBundled] = useState<string | null>(null);
 
   useEffect(() => {
     setPath(typeof settings?.enginePath === 'string' ? settings.enginePath : '');
   }, [settings]);
+
+  useEffect(() => {
+    api
+      .engineStatus()
+      .then((s) => {
+        setBundled(s.bundled ? (s.name ?? 'Stockfish') : null);
+        if (s.bundled) setStatus(s);
+      })
+      .catch(() => {});
+  }, []);
 
   const test = async () => {
     setTesting(true);
@@ -136,10 +162,20 @@ function EngineSettings({ settings, onSave }: { settings: Settings | null; onSav
   return (
     <section className="space-y-3">
       <h2 className="font-semibold">Engine</h2>
+      {bundled ? (
+        <p className="text-sm text-muted">
+          The app comes with Stockfish ({bundled}), so there is nothing to set up. To use another build, paste the full path
+          of its program here; leave the field empty to go back to the built-in one.
+        </p>
+      ) : (
+        <p className="text-sm text-muted">
+          Download Stockfish from stockfishchess.org, unzip it anywhere, and paste the full path of the program here (on
+          Windows it ends in <code>.exe</code>).
+        </p>
+      )}
       <p className="text-sm text-muted">
-        Download Stockfish from stockfishchess.org, unzip it anywhere, and paste the full path of the program here (on
-        Windows it ends in <code>.exe</code>). It runs at below-normal priority with all cores but two and 256 MB of hash,
-        and only while the engine panel or training needs it.
+        It runs at below-normal priority with all cores but two and 256 MB of hash, and only while the engine panel or
+        training needs it.
       </p>
       <div className="flex flex-wrap gap-2">
         <input
@@ -155,14 +191,14 @@ function EngineSettings({ settings, onSave }: { settings: Settings | null; onSav
       </div>
       {status && (
         <p className={`text-sm ${status.error || !status.configured ? 'text-danger' : 'text-accent'}`}>
-          {!status.configured ? 'No path set.' : status.error ? status.error : `Working: ${status.name}.`}
+          {!status.configured ? 'No path set.' : status.error ? status.error : `Working: ${status.name}${status.bundled ? ' (built in)' : ''}.`}
         </p>
       )}
     </section>
   );
 }
 
-function CoachSettings({ onSave }: { onSave(values: Settings): Promise<void> }) {
+function CoachSettings({ onSave, keyLocation }: { onSave(values: Settings): Promise<void>; keyLocation: string }) {
   const ws = useWorkspace();
   const [status, setStatus] = useState<Awaited<ReturnType<typeof api.coachStatus>> | null>(null);
   const [key, setKey] = useState('');
@@ -179,7 +215,7 @@ function CoachSettings({ onSave }: { onSave(values: Settings): Promise<void> }) 
       <p className="text-sm text-muted">
         The in-app coach uses the Claude API with your own key, billed per use and separately from a Claude subscription. Set a
         monthly spending limit in the Claude Console so there are no surprises. The key is stored only in{' '}
-        <code>apps/server/.env</code> and never reaches this browser.
+        <code className="break-all">{keyLocation}</code> and never reaches the pages you see.
       </p>
       {status.connected ? (
         <div className="flex items-center gap-3 text-sm">
@@ -259,6 +295,33 @@ function CoachSettings({ onSave }: { onSave(values: Settings): Promise<void> }) 
           {total.toFixed(2)} (an estimate from the token counts).
         </p>
       )}
+    </section>
+  );
+}
+
+/** The entry for the Claude desktop app's config, so it can use this app's chess tools. */
+function ClaudeAppSettings({ config }: { config: unknown }) {
+  const [copied, setCopied] = useState(false);
+  const text = JSON.stringify(config, null, 2);
+  return (
+    <section className="space-y-3">
+      <h2 className="font-semibold">Claude desktop app</h2>
+      <p className="text-sm text-muted">
+        Ask about positions in the Claude desktop app with your Claude subscription, using this app's Stockfish and your
+        library. In the Claude app: Settings → Developer → Edit Config, paste this in (if the file already has
+        "mcpServers", add only the "chess" entry inside it), save, then quit Claude completely and open it again.
+      </p>
+      <pre className="max-h-64 overflow-auto rounded-md bg-surface-2 p-3 text-xs">{text}</pre>
+      <button
+        type="button"
+        className={buttonClass}
+        onClick={async () => {
+          await navigator.clipboard?.writeText(text);
+          setCopied(true);
+        }}
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </button>
     </section>
   );
 }

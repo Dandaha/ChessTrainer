@@ -161,6 +161,9 @@ export const api = {
   settings: () => call<Settings>('GET', '/api/settings'),
   updateSettings: (values: Settings) => call<Settings>('PUT', '/api/settings', values),
   trash: () => call<TrashItem[]>('GET', '/api/trash'),
+  /** Only the desktop app answers this; the browser version gets a 404. */
+  systemInfo: () =>
+    call<{ desktop: boolean; dataDir: string; databasePath: string; envFile: string; mcpConfig: unknown }>('GET', '/api/system/info'),
 
   repertoires: () => call<RepertoireSummary[]>('GET', '/api/repertoires'),
   createRepertoire: (name: string, color: Color) => call<{ id: string }>('POST', '/api/repertoires', { name, color }),

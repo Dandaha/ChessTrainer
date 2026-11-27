@@ -5,7 +5,16 @@ concepts wiki, repertoire builder and trainer, Stockfish, and an AI coach.
 The full spec is in [docs/SPEC.md](docs/SPEC.md); working rules for Claude
 Code are in [CLAUDE.md](CLAUDE.md).
 
-## Requirements
+## Install the app (Windows)
+
+Download the latest installer from this repository's **Releases** page
+(`Chess-Workspace-Setup-<version>.exe`) and run it. Windows may warn that the
+publisher is unknown, since the installer is not code-signed: choose
+**More info → Run anyway**. Stockfish comes with the app; your data stays in
+`%APPDATA%\Chess Workspace` (Settings → Your data), also across updates.
+A new installer is built automatically on every push to `main`.
+
+## Run from source (development)
 
 - Node 22.12 or newer
 - pnpm 10 (`npm install -g pnpm`)
@@ -35,6 +44,7 @@ database path.
 | `apps/server` | Fastify API on 127.0.0.1. All SQL lives in `apps/server/db/`. |
 | `apps/web` | React app: the board (chessground), library screens, sets, present and print modes. |
 | `apps/mcp` | MCP server exposing chess-tools to the Claude desktop app. |
+| `apps/desktop` | Electron wrapper and installer build (`electron-builder.yml`, `scripts/build.mjs`). |
 
 ## The analysis board
 
@@ -155,6 +165,10 @@ What the app deliberately does not do yet, so nobody "fixes" it by accident:
 - A variation that repeats an existing move is merged into it on import.
 - When a file holds several games, the board opens the first; the library (phase 2) takes the rest.
 - The layout is built for a desktop browser; phones are out of scope for v1.
+- The installer is not code-signed, so Windows shows an "unknown publisher" warning once.
+- The desktop app uses Electron 42, the newest line with a ready-made build of the database
+  driver; moving to a newer Electron means building that driver from source in CI.
+- Stockfish (GPLv3) is bundled for personal use; its licence text ships next to it.
 - Full-text search uses SQL `LIKE`, which is fine for thousands of items; SQLite FTS5 can replace it if it gets slow.
 - "Games that reached this position" looks at each game's main line only, not its variations.
 - The coach was tested with a stand-in for the Claude API (no key in the build environment);

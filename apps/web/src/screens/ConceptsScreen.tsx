@@ -8,6 +8,7 @@ import { Markdown } from '../components/Markdown.tsx';
 import { MiniBoard } from '../components/MiniBoard.tsx';
 import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { navigate, useRoute } from '../router.ts';
+import { useAskText } from '../components/AskText.tsx';
 import { useWorkspace } from '../workspace.tsx';
 
 export const CONCEPT_CATEGORIES: { id: ConceptCategory; label: string }[] = [
@@ -37,6 +38,7 @@ export function ConceptsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
+  const askText = useAskText();
 
   useEffect(() => {
     let live = true;
@@ -53,7 +55,7 @@ export function ConceptsScreen() {
   }, [q, refresh]);
 
   const create = async () => {
-    const title = window.prompt('Name of the concept, e.g. "Minority attack"');
+    const title = await askText('New concept', '', 'e.g. Minority attack');
     if (!title?.trim()) return;
     const c = await api.createConcept({ title: title.trim() });
     reload();

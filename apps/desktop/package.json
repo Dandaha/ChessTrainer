@@ -1,0 +1,25 @@
+{
+  "name": "@chess/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chess Workspace as a Windows desktop app",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@chess/chess-core": "workspace:*",
+    "@chess/chess-tools": "workspace:*",
+    "@chess/mcp": "workspace:*",
+    "@chess/server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "electron": "42.11.18",
+    "electron-builder": "26.18.1",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}

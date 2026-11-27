@@ -1,0 +1,31 @@
+# Builds the Windows installer from the folder scripts/build.mjs prepares.
+appId: com.dandaha.chessworkspace
+productName: Chess Workspace
+copyright: Personal use
+directories:
+  app: stage
+  output: release
+  buildResources: build
+# Plain files instead of an archive: the MCP script and the database driver run from them directly.
+asar: false
+npmRebuild: false
+electronVersion: 42.11.18
+files:
+  - "**/*"
+extraResources:
+  - from: stockfish
+    to: stockfish
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Chess Workspace
+  artifactName: Chess-Workspace-Setup-${version}.${ext}
+  deleteAppDataOnUninstall: false
+publish: null

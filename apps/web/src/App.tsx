@@ -14,6 +14,7 @@ import { ConceptsScreen } from './screens/ConceptsScreen.tsx';
 import { SettingsScreen } from './screens/SettingsScreen.tsx';
 import { type Theme, applyTheme, currentTheme } from './storage.ts';
 import { WorkspaceProvider, useWorkspace } from './workspace.tsx';
+import { AskTextProvider } from './components/AskText.tsx';
 
 export interface Screen {
   id: string;
@@ -36,7 +37,9 @@ const SCREENS: Screen[] = [
 export function App() {
   return (
     <WorkspaceProvider>
-      <Shell />
+      <AskTextProvider>
+        <Shell />
+      </AskTextProvider>
     </WorkspaceProvider>
   );
 }

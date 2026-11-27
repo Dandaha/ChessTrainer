@@ -17,6 +17,8 @@ type Purpose = 'panel' | 'tools';
 
 export interface EngineStatus {
   configured: boolean;
+  /** The engine that comes with the desktop app, used when Settings names none. */
+  bundled: boolean;
   path: string | null;
   running: boolean;
   name: string | null;
@@ -78,12 +80,14 @@ export class EngineService {
 
   async status(): Promise<EngineStatus> {
     const path = this.path();
-    if (!path) return { configured: false, path: null, running: false, name: null };
+    const fromSettings = getSettings(this.db).enginePath;
+    const bundled = !(typeof fromSettings === 'string' && fromSettings.trim()) && process.env.STOCKFISH_BUNDLED === '1';
+    if (!path) return { configured: false, bundled: false, path: null, running: false, name: null };
     try {
       const engine = await this.get('tools');
-      return { configured: true, path, running: engine.running, name: engine.name };
+      return { configured: true, bundled, path, running: engine.running, name: engine.name };
     } catch (error) {
-      return { configured: true, path, running: false, name: null, error: (error as Error).message };
+      return { configured: true, bundled, path, running: false, name: null, error: (error as Error).message };
     }
   }
 
