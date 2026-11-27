@@ -9,6 +9,9 @@ directories:
 # Plain files instead of an archive: the MCP script and the database driver run from them directly.
 asar: false
 npmRebuild: false
+# The packager collects node_modules from the pnpm workspace, where the database driver is built for
+# Node, not Electron: this hook swaps in stage/node_modules, which build.mjs --install made for Electron.
+afterPack: scripts/afterPack.cjs
 electronVersion: 42.11.18
 files:
   - "**/*"

@@ -9,7 +9,7 @@ importers:
   .: {}
 
   apps/desktop:
-    dependencies:
+    devDependencies:
       '@chess/chess-core':
         specifier: workspace:*
         version: link:../../packages/chess-core
@@ -22,7 +22,6 @@ importers:
       '@chess/server':
         specifier: workspace:*
         version: link:../server
-    devDependencies:
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5

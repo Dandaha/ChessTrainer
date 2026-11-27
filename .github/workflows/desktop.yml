@@ -77,6 +77,45 @@ jobs:
         working-directory: apps/desktop
         run: pnpm exec electron-builder --win nsis --x64 --config electron-builder.yml
 
+      - name: Check that the packaged app starts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = (Get-Item "apps/desktop/release/win-unpacked/Chess Workspace.exe").FullName
+          # 1. The database driver loads in this Electron (the app run in Node mode, as the MCP server is).
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          $check = Start-Process -FilePath $exe -ArgumentList 'apps/desktop/scripts/check-packed.cjs', 'apps/desktop/release/win-unpacked/resources/app' -Wait -PassThru -NoNewWindow -RedirectStandardOutput check.out -RedirectStandardError check.err
+          Get-Content check.out, check.err
+          if ($check.ExitCode -ne 0) { throw "The packaged app cannot load its database driver" }
+          Remove-Item Env:ELECTRON_RUN_AS_NODE
+          # 2. The app itself starts its local server and finds the bundled Stockfish.
+          $app = Start-Process -FilePath $exe -PassThru
+          try {
+            $info = $null
+            for ($i = 0; $i -lt 45 -and -not $info; $i++) {
+              Start-Sleep -Seconds 2
+              try { $info = Invoke-RestMethod http://127.0.0.1:47123/api/system/info } catch { }
+            }
+            if (-not $info) {
+              $log = Join-Path $env:APPDATA 'Chess Workspace/startup-error.txt'
+              if (Test-Path $log) { Get-Content $log }
+              throw "The app did not start its local server"
+            }
+            Write-Host "Data folder: $($info.dataDir)"
+            $engine = $null
+            for ($i = 0; $i -lt 15 -and -not ($engine -and $engine.bundled); $i++) {
+              Start-Sleep -Seconds 2
+              $engine = Invoke-RestMethod http://127.0.0.1:47123/api/engine/status
+            }
+            $engine | ConvertTo-Json -Compress
+            if (-not $engine.bundled -or $engine.error) { throw "The app did not start the bundled Stockfish" }
+            $page = Invoke-WebRequest http://127.0.0.1:47123/
+            if ($page.Content -notmatch '<div id="root">') { throw "The app did not serve its pages" }
+            Write-Host "The packaged app works: server, database, pages and $($engine.name)"
+          } finally {
+            Get-Process -Name 'Chess Workspace', 'stockfish*' -ErrorAction SilentlyContinue | Stop-Process -Force
+          }
+
       - name: Publish the release
         shell: pwsh
         env:

@@ -1,3 +1,4 @@
+import { rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BrowserWindow, Menu, app, shell } from 'electron';
@@ -31,9 +32,17 @@ if (!app.requestSingleInstanceLock()) {
         stockfishDir: join(resources, 'stockfish'),
         mcp: { command: process.execPath, script: join(here, 'mcp.mjs'), env: { ELECTRON_RUN_AS_NODE: '1' } },
       });
+      rmSync(join(app.getPath('userData'), 'startup-error.txt'), { force: true });
     } catch (error) {
+      const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+      // Also kept in the data folder, where the CI check (and a screenshot-less bug report) can read it.
+      try {
+        writeFileSync(join(app.getPath('userData'), 'startup-error.txt'), `${new Date().toISOString()}\n${message}\n`);
+      } catch {
+        // The data folder itself may be the problem.
+      }
       const { dialog } = await import('electron');
-      dialog.showErrorBox('Chess Workspace could not start', error instanceof Error ? error.stack ?? error.message : String(error));
+      dialog.showErrorBox('Chess Workspace could not start', message);
       app.quit();
       return;
     }

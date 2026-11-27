@@ -79,6 +79,12 @@ if (process.argv.includes('--install')) {
     npm_config_target: electronVersion,
     npm_config_disturl: 'https://electronjs.org/headers',
   });
+  // Ask for Electron's build of the driver by name rather than trusting npm to pass the settings above
+  // through; the log shows the file it downloaded (electron-v<ABI>-win32-x64).
+  run(
+    `node ${JSON.stringify(join(stage, 'node_modules', 'prebuild-install', 'bin.js'))} --runtime=electron --target=${electronVersion} --arch=${process.arch} --verbose`,
+    join(stage, 'node_modules', 'better-sqlite3'),
+  );
 } else {
   console.log('4/4 Skipped installing the database driver (pass --install for the installer)');
 }

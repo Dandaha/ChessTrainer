@@ -6,16 +6,14 @@
   "description": "Chess Workspace as a Windows desktop app",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "smoke": "node scripts/smoke.mjs",
+    "smoke": "node scripts/build.mjs --smoke",
     "typecheck": "tsc --noEmit -p ."
   },
-  "dependencies": {
+  "devDependencies": {
     "@chess/chess-core": "workspace:*",
     "@chess/chess-tools": "workspace:*",
     "@chess/mcp": "workspace:*",
-    "@chess/server": "workspace:*"
-  },
-  "devDependencies": {
+    "@chess/server": "workspace:*",
     "@types/node": "^22.20.5",
     "electron": "42.11.18",
     "electron-builder": "26.18.1",
