@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Engine } from '@chess/chess-tools';
 import { databasePath, openDatabase, runMigrations } from '@chess/server/db/client.ts';
@@ -28,17 +28,31 @@ export interface LocalServerOptions {
 /** A fixed port, so the page keeps the same address (and its saved theme and draft) between starts. */
 const PORTS = [47123, 47124, 47125, 47126, 47127];
 
-/** The bundled Stockfish builds, fastest first; the first one this CPU can run is used. */
+/**
+ * The Stockfish programs in the bundled folder, most likely to be the right one first:
+ * Stockfish 19 and later ship one "universal" build that picks the CPU's fastest code
+ * itself; older releases had an AVX2 build and a plain one.
+ */
+function stockfishCandidates(dir: string): string[] {
+  const windows = process.platform === 'win32';
+  const rank = (name: string) => (/universal/i.test(name) ? 0 : /avx2/i.test(name) ? 1 : /^stockfish(\.exe)?$/i.test(name) ? 3 : 2);
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /^stockfish/i.test(entry.name) && (windows ? /\.exe$/i.test(entry.name) : !entry.name.includes('.')))
+    .map((entry) => entry.name)
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+    .map((name) => join(dir, name));
+}
+
+/** The first bundled Stockfish this computer can run. */
 async function pickStockfish(dir: string): Promise<string | null> {
-  for (const name of ['stockfish-avx2.exe', 'stockfish.exe', 'stockfish-avx2', 'stockfish']) {
-    const path = join(dir, name);
-    if (!existsSync(path)) continue;
+  if (!existsSync(dir)) return null;
+  for (const path of stockfishCandidates(dir)) {
     try {
       const engine = await Engine.start({ path, threads: 1, hashMb: 16 });
       await engine.quit();
       return path;
     } catch {
-      // This build does not run here (e.g. no AVX2): try the next one.
+      // This build does not run here (e.g. it needs a newer CPU): try the next one.
     }
   }
   return null;

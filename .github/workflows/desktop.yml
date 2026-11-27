@@ -50,16 +50,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path sf, apps/desktop/stockfish | Out-Null
-          gh release download --repo official-stockfish/Stockfish --pattern "*windows-x86-64-avx2.zip" --pattern "*windows-x86-64.zip" --dir sf
-          Get-ChildItem sf
-          Expand-Archive (Get-ChildItem sf -Filter "*avx2.zip")[0].FullName -DestinationPath sf/avx2
-          Expand-Archive (Get-ChildItem sf -Filter "*windows-x86-64.zip")[0].FullName -DestinationPath sf/generic
-          Copy-Item (Get-ChildItem sf/avx2 -Recurse -Filter "*.exe")[0].FullName apps/desktop/stockfish/stockfish-avx2.exe
-          Copy-Item (Get-ChildItem sf/generic -Recurse -Filter "*.exe")[0].FullName apps/desktop/stockfish/stockfish.exe
-          $license = Get-ChildItem sf/generic -Recurse -Include "Copying.txt", "COPYING*" | Select-Object -First 1
-          if ($license) { Copy-Item $license.FullName apps/desktop/stockfish/Copying.txt }
-          Get-ChildItem apps/desktop/stockfish
+          # Stockfish 19 ships one universal Windows build; older releases had one per CPU (avx2, plain...).
+          gh release download --repo official-stockfish/Stockfish --pattern "stockfish-windows-x86-64*.zip" --dir sf
+          if ($LASTEXITCODE -ne 0) { throw "Could not download Stockfish" }
+          Get-ChildItem sf | Format-Table Name, Length
+          $rank = { param($n) if ($n -match 'universal') { 0 } elseif ($n -match 'avx2') { 1 } elseif ($n -match 'x86-64\.zip$') { 2 } else { 3 } }
+          $zip = Get-ChildItem sf -Filter "*.zip" | Sort-Object { & $rank $_.Name } | Select-Object -First 1
+          Write-Host "Using $($zip.Name)"
+          Expand-Archive $zip.FullName -DestinationPath sf/x
+          # The zip holds one folder with the program, its licence and its source: keep all of it.
+          $root = Get-Item sf/x
+          $inner = @(Get-ChildItem sf/x)
+          if ($inner.Count -eq 1 -and $inner[0].PSIsContainer) { $root = $inner[0] }
+          Copy-Item (Join-Path $root.FullName '*') apps/desktop/stockfish -Recurse -Force
+          $exe = Get-ChildItem apps/desktop/stockfish -Filter "stockfish*.exe" | Sort-Object { & $rank $_.Name } | Select-Object -First 1
+          if (-not $exe) { Get-ChildItem apps/desktop/stockfish -Recurse | Select-Object -First 40 FullName; throw "No stockfish*.exe at the top of the zip's folder" }
+          Write-Host "Engine: $($exe.Name)"
+          $answer = "uci`nquit`n" | & $exe.FullName
+          $answer | Select-String '^id name'
+          if (-not ($answer -match 'uciok')) { throw "$($exe.Name) did not answer as a UCI engine" }
+          Get-ChildItem apps/desktop/stockfish | Format-Table Name, Length
 
       - name: Build the installer
         working-directory: apps/desktop
