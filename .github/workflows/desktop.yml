@@ -1,0 +1,74 @@
+# Builds the Windows installer on a GitHub Windows machine and publishes it as a release.
+# Download it from the repository's Releases page (latest release, Chess-Workspace-Setup-<version>.exe).
+name: Windows installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-installer
+  cancel-in-progress: true
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      APP_VERSION: 0.1.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+
+      - name: Bundle the app
+        run: node apps/desktop/scripts/build.mjs --install
+
+      - name: Download Stockfish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path sf, apps/desktop/stockfish | Out-Null
+          gh release download --repo official-stockfish/Stockfish --pattern "*windows-x86-64-avx2.zip" --pattern "*windows-x86-64.zip" --dir sf
+          Get-ChildItem sf
+          Expand-Archive (Get-ChildItem sf -Filter "*avx2.zip")[0].FullName -DestinationPath sf/avx2
+          Expand-Archive (Get-ChildItem sf -Filter "*windows-x86-64.zip")[0].FullName -DestinationPath sf/generic
+          Copy-Item (Get-ChildItem sf/avx2 -Recurse -Filter "*.exe")[0].FullName apps/desktop/stockfish/stockfish-avx2.exe
+          Copy-Item (Get-ChildItem sf/generic -Recurse -Filter "*.exe")[0].FullName apps/desktop/stockfish/stockfish.exe
+          $license = Get-ChildItem sf/generic -Recurse -Include "Copying.txt", "COPYING*" | Select-Object -First 1
+          if ($license) { Copy-Item $license.FullName apps/desktop/stockfish/Copying.txt }
+          Get-ChildItem apps/desktop/stockfish
+
+      - name: Build the installer
+        working-directory: apps/desktop
+        run: pnpm exec electron-builder --win nsis --x64 --config electron-builder.yml
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $exe = Get-ChildItem apps/desktop/release -Filter "*.exe" | Select-Object -First 1
+          gh release create "v$env:APP_VERSION" $exe.FullName --title "Chess Workspace $env:APP_VERSION" --latest --notes "Windows installer, built from $env:GITHUB_SHA. Download $($exe.Name) below and run it."
