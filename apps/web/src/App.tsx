@@ -15,23 +15,24 @@ import { SettingsScreen } from './screens/SettingsScreen.tsx';
 import { type Theme, applyTheme, currentTheme } from './storage.ts';
 import { WorkspaceProvider, useWorkspace } from './workspace.tsx';
 import { AskTextProvider } from './components/AskText.tsx';
+import { Icon, type IconName } from './components/icons.tsx';
 
 export interface Screen {
   id: string;
   label: string;
-  icon: string;
+  icon: IconName;
   render(): ReactNode;
 }
 
 const SCREENS: Screen[] = [
-  { id: '', label: 'Home', icon: '⌂', render: () => <HomeScreen /> },
-  { id: 'board', label: 'Board', icon: '♞', render: () => <BoardScreen /> },
-  { id: 'games', label: 'Games', icon: '☰', render: () => <GamesScreen /> },
-  { id: 'positions', label: 'Positions', icon: '▦', render: () => <PositionsScreen /> },
-  { id: 'repertoire', label: 'Repertoire', icon: '⑂', render: () => <RepertoireScreen /> },
-  { id: 'concepts', label: 'Concepts', icon: '❖', render: () => <ConceptsScreen /> },
-  { id: 'training', label: 'Training', icon: '◎', render: () => <TrainingScreen /> },
-  { id: 'settings', label: 'Settings', icon: '⚙', render: () => <SettingsScreen /> },
+  { id: '', label: 'Home', icon: 'home', render: () => <HomeScreen /> },
+  { id: 'board', label: 'Board', icon: 'board', render: () => <BoardScreen /> },
+  { id: 'games', label: 'Games', icon: 'games', render: () => <GamesScreen /> },
+  { id: 'positions', label: 'Positions', icon: 'positions', render: () => <PositionsScreen /> },
+  { id: 'repertoire', label: 'Repertoire', icon: 'repertoire', render: () => <RepertoireScreen /> },
+  { id: 'concepts', label: 'Concepts', icon: 'concepts', render: () => <ConceptsScreen /> },
+  { id: 'training', label: 'Training', icon: 'training', render: () => <TrainingScreen /> },
+  { id: 'settings', label: 'Settings', icon: 'settings', render: () => <SettingsScreen /> },
 ];
 
 export function App() {
@@ -97,9 +98,10 @@ function Shell() {
   return (
     <div className="flex h-full">
       {!fullScreen && (
-        <nav className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-3 md:w-44 md:items-stretch md:px-2 print:hidden">
-          <div className="mb-3 hidden px-2 text-[15px] font-semibold tracking-tight md:block">
-            <span className="text-accent">♞</span> Chess Workspace
+        <nav className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-3 md:w-48 md:items-stretch md:px-2 print:hidden">
+          <div className="mb-3 hidden items-center gap-2 whitespace-nowrap px-2 text-[15px] font-semibold tracking-tight md:flex">
+            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" width={24} height={24} className="rounded-md" />
+            Chess Workspace
           </div>
           {SCREENS.map((s) => (
             <a
@@ -111,9 +113,7 @@ function Shell() {
                 s === screen ? 'bg-accent-soft font-semibold text-text' : 'text-muted hover:bg-surface-2 hover:text-text'
               }`}
             >
-              <span className="w-4 text-center" aria-hidden>
-                {s.icon}
-              </span>
+              <Icon name={s.icon} />
               <span className="hidden md:inline">{s.label}</span>
             </a>
           ))}
@@ -121,9 +121,12 @@ function Shell() {
             <button
               type="button"
               onClick={() => setPalette(true)}
-              className="hidden w-full rounded-md px-2.5 py-1.5 text-left text-xs text-muted hover:bg-surface-2 md:block"
+              className="hidden w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left text-xs text-muted hover:bg-surface-2 md:flex"
             >
-              Jump to… <kbd>Ctrl</kbd> <kbd>K</kbd>
+              <Icon name="search" size={16} />
+              <span>
+                Jump to… <kbd>Ctrl</kbd> <kbd>K</kbd>
+              </span>
             </button>
             <button
               type="button"
@@ -132,7 +135,7 @@ function Shell() {
               title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
               className="flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2"
             >
-              <span className="w-4 text-center">{theme === 'dark' ? '☀' : '☾'}</span>
+              <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
               <span className="hidden md:inline">{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span>
             </button>
           </div>
