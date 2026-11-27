@@ -25,7 +25,8 @@ function typeMoves(...moves: string[]) {
 describe('the repertoire', () => {
   it('adds the line on the board with R, shows it in the explorer, and checks a game against it', async () => {
     const { app } = startServer();
-    await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'Main', color: 'white' } });
+    const created = await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'Main', color: 'white' } });
+    const repertoireId = (created.json() as { id: string }).id;
     render(<App />);
 
     typeMoves('d4', 'Nf6', 'c4', 'e6');
@@ -40,11 +41,25 @@ describe('the repertoire', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Repertoire' }));
     expect(await screen.findByText(/You left your preparation on move 2 with Nf3; your line is c4\./)).toBeTruthy();
 
-    // The explorer lists the moves, mine in bold.
+    // The explorer writes a line without choices on one row, like a game score; mine in bold.
     go('#/repertoire');
     const tree = await screen.findByLabelText('Repertoire tree');
-    await waitFor(() => expect(tree.textContent).toContain('2...e6'));
-    expect(tree.textContent).toContain('1.d4');
+    await waitFor(() => expect(tree.querySelectorAll('[data-line]')).toHaveLength(1));
+    expect(tree.querySelector('[data-line]')!.textContent).toBe('▾1.d4Nf62.c4e6');
     expect(screen.getByText('1.d4').className).toContain('font-semibold');
+
+    // A second reply for Black after 2.c4: the line stops there and each reply gets its own row, indented.
+    const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    await app.inject({ method: 'POST', url: `/api/repertoires/${repertoireId}/line`, payload: { fen: START, sans: ['d4', 'Nf6', 'c4', 'g6'] } });
+    go('#/board');
+    await screen.findByLabelText('Type a move');
+    go('#/repertoire');
+    await waitFor(() => expect(screen.getByLabelText('Repertoire tree').querySelectorAll('[data-line]')).toHaveLength(3));
+    const rows = [...screen.getByLabelText('Repertoire tree').querySelectorAll<HTMLElement>('[data-line]')];
+    expect(rows.map((row) => [row.textContent, row.style.paddingLeft])).toEqual([
+      ['▾1.d4Nf62.c4', '0px'],
+      ['▾2...e6', '14px'],
+      ['▾2...g6side', '14px'],
+    ]);
   });
 });

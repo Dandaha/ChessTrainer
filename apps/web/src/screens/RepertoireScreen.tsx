@@ -22,19 +22,35 @@ import { navigate, useRoute } from '../router.ts';
 import { useWorkspace } from '../workspace.tsx';
 import { isTyping } from './BoardScreen.tsx';
 
-/** A row of the explorer: a tree node with its parent, for keyboard moves. */
-interface Row {
-  node: RepTreeNode;
+/**
+ * A row of the explorer: moves that follow one another without a choice, written on one line like a
+ * game score (1.e4 e5 2.Nf3 Nc6). Only where the repertoire branches does each continuation start a
+ * row of its own, one step further in.
+ */
+interface Line {
+  nodes: RepTreeNode[];
+  /** The move the line continues from (null for the first moves of the repertoire). */
   parent: RepTreeNode | null;
   depth: number;
 }
 
-function flatten(nodes: RepTreeNode[], collapsed: Set<string>, parent: RepTreeNode | null = null, depth = 0, out: Row[] = []): Row[] {
-  for (const node of nodes) {
-    out.push({ node, parent, depth });
-    if (!collapsed.has(node.edge.id)) flatten(node.children, collapsed, node, depth + 1, out);
+function buildLines(starts: RepTreeNode[], collapsed: Set<string>, parent: RepTreeNode | null = null, depth = 0, out: Line[] = []): Line[] {
+  for (const start of starts) {
+    const nodes = [start];
+    let last = start;
+    while (last.children.length === 1 && !collapsed.has(last.edge.id)) {
+      last = last.children[0]!;
+      nodes.push(last);
+    }
+    out.push({ nodes, parent, depth });
+    if (last.children.length > 1 && !collapsed.has(last.edge.id)) buildLines(last.children, collapsed, last, depth + 1, out);
   }
   return out;
+}
+
+/** "4.g3" and "3...Nf6" at the start of a line; inside it Black's moves go without a number, as in a score. */
+function inlineLabel(node: RepTreeNode, first: boolean): string {
+  return first || node.ply % 2 === 1 ? moveLabel(node.ply, node.edge.san) : node.edge.san;
 }
 
 function findNode(nodes: RepTreeNode[], test: (n: RepTreeNode) => boolean): RepTreeNode | undefined {
@@ -78,7 +94,13 @@ export function RepertoireScreen() {
   }, [id, refresh]);
 
   const tree = useMemo(() => repertoireTree(edges), [edges]);
-  const rows = useMemo(() => flatten(tree, collapsed), [tree, collapsed]);
+  const lines = useMemo(() => buildLines(tree, collapsed), [tree, collapsed]);
+  /** Where each shown move sits: its line and the move before it, for the arrow keys. */
+  const placed = useMemo(() => {
+    const map = new Map<string, { line: number; parent: RepTreeNode | null }>();
+    lines.forEach((line, index) => line.nodes.forEach((node, i) => map.set(node.edge.id, { line: index, parent: i ? line.nodes[i - 1]! : line.parent })));
+    return map;
+  }, [lines]);
   const current = selected ? findNode(tree, (n) => n.edge.id === selected) : undefined;
   const fen = current?.fen ?? START_FEN;
   const ply = current?.ply ?? 0;
@@ -115,15 +137,23 @@ export function RepertoireScreen() {
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   keys.current = (event) => {
     if (dialog || isTyping(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
-    const index = rows.findIndex((r) => r.node.edge.id === selected);
-    const row = rows[index];
+    const place = selected ? placed.get(selected) : undefined;
+    const lineIndex = place?.line ?? -1;
     const moves: Record<string, () => void> = {
-      ArrowDown: () => select(rows[Math.min(index + 1, rows.length - 1)]?.node.edge.id ?? null),
-      ArrowUp: () => select(index <= 0 ? null : rows[index - 1]!.node.edge.id),
-      ArrowLeft: () => select(row?.parent?.edge.id ?? null),
+      // Left and right: the move before and after. Up and down: the line above and below.
+      ArrowLeft: () => select(place?.parent?.edge.id ?? null),
       ArrowRight: () => {
-        const next = row ? row.node.children[0] : tree[0];
-        if (next) select(next.edge.id);
+        const next = current && place ? current.children[0] : selected ? undefined : tree[0];
+        if (next && placed.has(next.edge.id)) select(next.edge.id);
+      },
+      ArrowDown: () => {
+        const line = lines[Math.min(lineIndex + 1, lines.length - 1)];
+        if (line) select(line.nodes[0]!.edge.id);
+      },
+      ArrowUp: () => select(lineIndex <= 0 ? null : lines[lineIndex - 1]!.nodes[0]!.edge.id),
+      End: () => {
+        const line = lines[lineIndex];
+        if (line) select(line.nodes[line.nodes.length - 1]!.edge.id);
       },
       Home: () => select(null),
     };
@@ -214,46 +244,56 @@ export function RepertoireScreen() {
           >
             Starting position
           </button>
-          {rows.length === 0 && <p className="px-2 py-3 text-muted">Play a move on the board to start this repertoire.</p>}
-          {rows.map(({ node, depth }) => {
-            const isSel = node.edge.id === selected;
-            const hasKids = node.children.length > 0;
+          {lines.length === 0 && <p className="px-2 py-3 text-muted">Play a move on the board to start this repertoire.</p>}
+          {lines.map((line) => {
+            const last = line.nodes[line.nodes.length - 1]!;
+            const folds = last.children.length > 1 || (collapsed.has(last.edge.id) && last.children.length > 0);
+            const folded = collapsed.has(last.edge.id);
             return (
-              <div key={node.edge.id} className="flex items-center" style={{ paddingLeft: depth * 14 }}>
+              <div key={line.nodes[0]!.edge.id} data-line className="flex items-start" style={{ paddingLeft: line.depth * 14 }}>
                 <button
                   type="button"
-                  aria-label={hasKids ? (collapsed.has(node.edge.id) ? 'Expand' : 'Collapse') : undefined}
-                  disabled={!hasKids}
+                  aria-label={folds ? (folded ? 'Expand' : 'Collapse') : undefined}
+                  disabled={!folds}
                   onClick={() =>
                     setCollapsed((c) => {
                       const next = new Set(c);
-                      if (next.has(node.edge.id)) next.delete(node.edge.id);
-                      else next.add(node.edge.id);
+                      if (next.has(last.edge.id)) next.delete(last.edge.id);
+                      else next.add(last.edge.id);
                       return next;
                     })
                   }
-                  className="w-4 shrink-0 text-xs text-muted disabled:opacity-0"
+                  className="mt-1 w-4 shrink-0 text-xs text-muted disabled:opacity-0"
                 >
-                  {collapsed.has(node.edge.id) ? '▸' : '▾'}
+                  {folded ? '▸' : '▾'}
                 </button>
-                <button
-                  type="button"
-                  data-selected={isSel}
-                  onClick={() => select(node.edge.id)}
-                  className={`flex min-w-0 flex-1 items-center gap-1.5 rounded px-1.5 py-0.5 text-left ${
-                    isSel ? 'bg-selected text-on-selected' : 'hover:bg-surface-2'
-                  }`}
-                >
-                  <span className={node.edge.isMyMove ? 'font-semibold' : isSel ? '' : 'text-muted'}>{moveLabel(node.ply, node.edge.san)}</span>
-                  {!node.edge.isMain && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>side</span>}
-                  {node.edge.priority === 'nice' && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>nice</span>}
-                  {node.edge.comment && <span title={node.edge.comment}>✎</span>}
-                  {node.transposition && (
-                    <span className={`rounded px-1 text-[10px] ${isSel ? 'bg-black/20' : 'bg-accent-soft'}`} title="Reached by another move order too">
-                      ⇄ transposes
-                    </span>
-                  )}
-                </button>
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-0.5">
+                  {line.nodes.map((node, i) => {
+                    const isSel = node.edge.id === selected;
+                    return (
+                      <button
+                        key={node.edge.id}
+                        type="button"
+                        data-selected={isSel}
+                        onClick={() => select(node.edge.id)}
+                        className={`inline-flex items-center gap-1 rounded px-1 py-0.5 text-left ${
+                          isSel ? 'bg-selected text-on-selected' : 'hover:bg-surface-2'
+                        }`}
+                      >
+                        <span className={node.edge.isMyMove ? 'font-semibold' : isSel ? '' : 'text-muted'}>{inlineLabel(node, i === 0)}</span>
+                        {!node.edge.isMain && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>side</span>}
+                        {node.edge.priority === 'nice' && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>nice</span>}
+                        {node.edge.comment && <span title={node.edge.comment}>✎</span>}
+                        {node.transposition && (
+                          <span className={`rounded px-1 text-[10px] ${isSel ? 'bg-black/20' : 'bg-accent-soft'}`} title="Reached by another move order too">
+                            ⇄ transposes
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                  {folded && <span className="px-1 text-xs text-muted">… {last.children.length} {last.children.length === 1 ? 'line' : 'lines'}</span>}
+                </div>
               </div>
             );
           })}
