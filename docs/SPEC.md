@@ -44,7 +44,7 @@ Seven modules share one board component and one database. Each is listed with it
 
 - **Save in one key (S)** from any board: position, side to move, source game, move number, players and event fill in automatically. Only a title is asked for; everything else can be added later.
 - **The same position can be saved more than once**, each save with its own title and idea (e.g. one about the tactic, one about the endgame that follows). The save box shows a hint, "You saved this position before (1)", linking to the earlier save.
-- **Fields:** title, category (tactic, strategy, endgame, opening, calculation, defense), tags, key idea (can be hidden), notes in markdown with clickable lines, linked concepts, source, difficulty.
+- **Fields:** title, category (my own list, starting with tactic, strategy, endgame, opening, calculation, defense; add, rename or remove them on the Positions screen), tags, key idea (can be hidden), notes in markdown with clickable lines, linked concepts, source, difficulty.
 - **Training is opt-in per save.** An "Add to training" toggle, off by default. Beautiful positions, teaching material and things to show friends simply stay in the collection.
 - **Position sets:** named, ordered groups of saved positions for a purpose, e.g. "Lesson: Greek gift sacrifice", "To show Dani", "Most beautiful moves". A position can be in any number of sets.
 - **Present mode:** step through a set full-screen, one position at a time, revealing the idea when I choose. For teaching and showing friends.
@@ -120,6 +120,7 @@ One SQLite database file. The `positions` table is the hub: every other table po
 | collections / collection\_games | Named game collections | id, name, description / collection\_id, game\_id, order |
 | saved\_positions | Positions I chose to keep; several saves may point at the same position | id, position\_id, title, notes\_md, category, key\_idea, side\_to\_solve, difficulty, in\_training (default false), source\_game\_id, source\_ply, created\_at |
 | position\_sets / position\_set\_items | Ordered groups of saves for teaching, showing friends or myself | id, name, description / set\_id, saved\_position\_id, order |
+| position\_categories | The categories saved positions are filed under; a save holds its category by name | id, name, sort\_order, created\_at |
 | concepts | My chess wiki pages | id, title, aliases, category, body\_md, key\_signs, created\_at, updated\_at |
 | concept\_links | Concept ↔ position / game / repertoire move / concept | concept\_id, target\_type, target\_id |
 | tags / taggings | Free tags on anything | tag\_id, name / tag\_id, target\_type, target\_id |

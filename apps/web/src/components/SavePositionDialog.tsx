@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { type ConceptSummary, type PositionSetSummary, type SavedPositionInput, api } from '../api.ts';
+import { CategorySelect } from './CategorySelect.tsx';
 import { ConceptPicker } from './ConceptPicker.tsx';
 import { navigate } from '../router.ts';
 import { Modal } from '../Dialogs.tsx';
-
-export const CATEGORIES = ['tactic', 'strategy', 'endgame', 'opening', 'calculation', 'defense'] as const;
 
 /**
  * Save the position on the board. Only a title is asked for; source, side to
@@ -53,7 +52,7 @@ export function SavePositionDialog({
       const saved = await api.savePosition({
         fen,
         title: title.trim(),
-        category: (category || null) as SavedPositionInput['category'],
+        category: category || null,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
         keyIdea: keyIdea.trim() || null,
         answer: answer.trim() || null,
@@ -124,14 +123,7 @@ export function SavePositionDialog({
           <div className="grid grid-cols-2 gap-2 text-sm">
             <label className="space-y-1">
               <span className="text-muted">Category</span>
-              <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className={field}>
-                <option value="">None</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c[0]!.toUpperCase() + c.slice(1)}
-                  </option>
-                ))}
-              </select>
+              <CategorySelect value={category} onChange={setCategory} allowNew className={field} />
             </label>
             <label className="space-y-1">
               <span className="text-muted">Difficulty</span>

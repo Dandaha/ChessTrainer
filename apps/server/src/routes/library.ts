@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { createPositionCategory, deletePositionCategory, listPositionCategories, renamePositionCategory } from '../../db/categories.ts';
 import type { Db } from '../../db/client.ts';
 import {
   type GameFilters,
@@ -135,6 +136,18 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
   app.post('/api/collections/:id/games/remove', async (req) => {
     removeGamesFromCollection(db, (req.params as { id: string }).id, (req.body as { gameIds: string[] }).gameIds);
     return { ok: true };
+  });
+
+  // Position categories ------------------------------------------------------
+  app.get('/api/position-categories', async () => listPositionCategories(db));
+  app.post('/api/position-categories', async (req) => createPositionCategory(db, String((req.body as { name?: unknown })?.name ?? '')));
+  app.put('/api/position-categories/:id', async (req, reply) => {
+    const category = renamePositionCategory(db, (req.params as { id: string }).id, String((req.body as { name?: unknown })?.name ?? ''));
+    return category ?? reply.code(404).send({ error: 'No such category.' });
+  });
+  app.delete('/api/position-categories/:id', async (req, reply) => {
+    const result = deletePositionCategory(db, (req.params as { id: string }).id);
+    return result.removed ? result : reply.code(404).send({ error: 'No such category.' });
   });
 
   // Saved positions -----------------------------------------------------------

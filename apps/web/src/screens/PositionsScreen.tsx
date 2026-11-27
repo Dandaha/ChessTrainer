@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { type PositionSetSummary, type SavedPosition, api } from '../api.ts';
+import { type PositionCategory, type PositionSetSummary, type SavedPosition, api } from '../api.ts';
 import { MiniBoard } from '../components/MiniBoard.tsx';
-import { CATEGORIES } from '../components/SavePositionDialog.tsx';
+import { CategorySelect, askNewCategory } from '../components/CategorySelect.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { savedToPgn } from '../exporters.ts';
 import { Markdown } from '../components/Markdown.tsx';
@@ -28,6 +28,7 @@ export function PositionsScreen() {
   const [list, setList] = useState('all');
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
+  const [categories, setCategories] = useState<PositionCategory[]>([]);
   const [tag, setTag] = useState('');
   const [tagOptions, setTagOptions] = useState<{ name: string; count: number }[]>([]);
   const [offset, setOffset] = useState(0);
@@ -48,6 +49,7 @@ export function PositionsScreen() {
 
   useEffect(() => {
     api.sets().then(setSets).catch(() => {});
+    api.positionCategories().then(setCategories).catch(() => {});
     api.tags('saved_position').then(setTagOptions).catch(() => {});
   }, [refresh]);
 
@@ -57,7 +59,7 @@ export function PositionsScreen() {
       api
         .savedPositions({
           q: q || undefined,
-          category: (category || undefined) as SavedPosition['category'] & string,
+          category: category || undefined,
           tag: tag || undefined,
           setId: setId || undefined,
           inTraining: list === 'training' ? true : undefined,
@@ -164,19 +166,30 @@ export function PositionsScreen() {
               </div>
             )}
           </div>
+          <CategoriesList
+            categories={categories}
+            active={category}
+            onSelect={(name) => {
+              setCategory(name);
+              setOffset(0);
+            }}
+            onChanged={reload}
+          />
         </aside>
 
         <section className="min-w-0 flex-1 space-y-3 overflow-y-auto p-4">
           <div className="flex flex-wrap gap-2">
             <input aria-label="Search positions" className={`${inputClass} w-64`} placeholder="Search titles, ideas, notes, tags…" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0); }} />
-            <select aria-label="Category" className={inputClass} value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="">Any category</option>
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c[0]!.toUpperCase() + c.slice(1)}
-                </option>
-              ))}
-            </select>
+            <CategorySelect
+              value={category}
+              onChange={(name) => {
+                setCategory(name);
+                setOffset(0);
+              }}
+              noneLabel="Any category"
+              className={inputClass}
+              refreshKey={categories}
+            />
             <select aria-label="Tag" className={inputClass} value={tag} onChange={(e) => setTag(e.target.value)}>
               <option value="">Any tag</option>
               {tagOptions.map((t) => (
@@ -320,14 +333,7 @@ function PositionDetail({
       <div className="grid grid-cols-2 gap-2 text-sm">
         <label className="space-y-1">
           <span className="text-xs text-muted">Category</span>
-          <select aria-label="Category" className={field} value={saved.category ?? ''} onChange={(e) => void update({ category: (e.target.value || null) as SavedPosition['category'] })}>
-            <option value="">None</option>
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c[0]!.toUpperCase() + c.slice(1)}
-              </option>
-            ))}
-          </select>
+          <CategorySelect value={saved.category ?? ''} onChange={(name) => void update({ category: name || null })} allowNew className={field} />
         </label>
         <label className="space-y-1">
           <span className="text-xs text-muted">Difficulty</span>
@@ -415,5 +421,91 @@ function PositionDetail({
         Delete
       </button>
     </aside>
+  );
+}
+
+/** The person's categories with their counts: click to filter; add, rename or remove them. */
+function CategoriesList({
+  categories,
+  active,
+  onSelect,
+  onChanged,
+}: {
+  categories: PositionCategory[];
+  active: string;
+  onSelect(name: string): void;
+  onChanged(): void;
+}) {
+  const ws = useWorkspace();
+  const ask = useAskText();
+  const current = categories.find((c) => c.name === active);
+
+  const run = async (action: () => Promise<void>) => {
+    try {
+      await action();
+    } catch (error) {
+      ws.toast((error as Error).message, true);
+    }
+  };
+
+  return (
+    <div>
+      <div className="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-muted">Categories</div>
+      <SideList
+        items={categories.map((c) => ({ id: c.name, label: c.name, count: c.count }))}
+        activeId={active}
+        // A second click on the active category clears the filter.
+        onSelect={(name) => onSelect(name === active ? '' : name)}
+      />
+      <button
+        type="button"
+        className="mt-1 px-2.5 text-sm text-accent"
+        onClick={() =>
+          void run(async () => {
+            const created = await askNewCategory(ask);
+            if (created) onChanged();
+          })
+        }
+      >
+        + New category
+      </button>
+      {current && (
+        <div className="mt-2 flex gap-3 px-2.5 text-xs">
+          <button
+            type="button"
+            className="text-muted hover:text-text"
+            onClick={() =>
+              void run(async () => {
+                const name = (await ask('Rename category', current.name))?.trim();
+                if (!name || name === current.name) return;
+                const renamed = await api.renamePositionCategory(current.id, name);
+                onSelect(renamed.name);
+                onChanged();
+              })
+            }
+          >
+            Rename
+          </button>
+          <button
+            type="button"
+            className="text-danger"
+            onClick={() =>
+              void run(async () => {
+                const { uncategorized } = await api.deletePositionCategory(current.id);
+                onSelect('');
+                onChanged();
+                ws.toast(
+                  uncategorized
+                    ? `Removed the category “${current.name}”. Its ${uncategorized === 1 ? 'position stays saved' : `${uncategorized} positions stay saved`}, without a category.`
+                    : `Removed the category “${current.name}”.`,
+                );
+              })
+            }
+          >
+            Remove category
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

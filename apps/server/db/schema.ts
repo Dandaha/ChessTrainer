@@ -93,7 +93,20 @@ export const collectionGames = sqliteTable(
   (t) => [primaryKey({ columns: [t.collectionId, t.gameId] })],
 );
 
-export const POSITION_CATEGORIES = ['tactic', 'strategy', 'endgame', 'opening', 'calculation', 'defense'] as const;
+/**
+ * The categories a saved position can be filed under: six to start with (seeded by migration 0006),
+ * which the user can rename, remove or add to.
+ */
+export const positionCategories = sqliteTable(
+  'position_categories',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: text('created_at').notNull().$defaultFn(now),
+  },
+  (t) => [uniqueIndex('position_categories_name_idx').on(t.name)],
+);
 
 /** Positions kept on purpose. Several saves may point at one position, each with its own idea. */
 export const savedPositions = sqliteTable(
@@ -107,7 +120,8 @@ export const savedPositions = sqliteTable(
     fen: text('fen').notNull(),
     title: text('title').notNull(),
     notesMd: text('notes_md'),
-    category: text('category', { enum: POSITION_CATEGORIES }),
+    /** The name of one of position_categories; kept by name, so renaming a category updates its saves. */
+    category: text('category'),
     keyIdea: text('key_idea'),
     /** The move or line that solves it, in SAN; checked in solve mode. */
     answer: text('answer'),

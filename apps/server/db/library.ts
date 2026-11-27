@@ -3,7 +3,6 @@ import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, like, lt, ne,
 import type { Db } from './client.ts';
 import { findOrCreatePosition } from './positions.ts';
 import {
-  POSITION_CATEGORIES,
   collectionGames,
   collections,
   concepts,
@@ -16,6 +15,7 @@ import {
   taggings,
   tags,
 } from './schema.ts';
+import { ensurePositionCategory } from './categories.ts';
 import { dropTaggings, setTags, tagsFor } from './tags.ts';
 
 /**
@@ -84,7 +84,8 @@ export function removeGamesFromCollection(db: Db, collectionId: string, gameIds:
 
 // --- Saved positions ---------------------------------------------------------
 
-export type Category = (typeof POSITION_CATEGORIES)[number];
+/** The name of one of the position categories (db/categories.ts). */
+export type Category = string;
 
 export interface SavedPosition {
   id: string;
@@ -189,8 +190,14 @@ function addToSets(db: Db, savedId: string, setIds: string[]): void {
   }
 }
 
+/** A category as stored: matched to an existing one regardless of case, or added to the list. */
+function categoryName(db: Db, category: string | null | undefined): string | null | undefined {
+  return category ? ensurePositionCategory(db, category) : category === '' ? null : category;
+}
+
 export function createSavedPosition(db: Db, input: SavedPositionInput): SavedPosition {
   const position = findOrCreatePosition(db, input.fen);
+  const category = categoryName(db, input.category);
   const turn = input.fen.trim().split(/\s+/)[1] === 'b' ? 'black' : 'white';
   const id = db.transaction((tx) => {
     const row = tx
@@ -200,7 +207,7 @@ export function createSavedPosition(db: Db, input: SavedPositionInput): SavedPos
         fen: input.fen.trim(),
         title: input.title.trim() || 'Untitled position',
         notesMd: input.notesMd ?? null,
-        category: input.category ?? null,
+        category: category ?? null,
         keyIdea: input.keyIdea ?? null,
         answer: input.answer ?? null,
         sideToSolve: input.sideToSolve ?? turn,
@@ -221,6 +228,7 @@ export function createSavedPosition(db: Db, input: SavedPositionInput): SavedPos
 
 export function updateSavedPosition(db: Db, id: string, input: Partial<Omit<SavedPositionInput, 'fen'>>): SavedPosition | undefined {
   const { tags: tagNames, setIds, ...fields } = input;
+  if ('category' in fields) fields.category = categoryName(db, fields.category);
   db.update(savedPositions).set({ ...fields, updatedAt: now() }).where(eq(savedPositions.id, id)).run();
   if (tagNames) setTags(db, 'saved_position', id, tagNames);
   if (setIds) {
@@ -258,7 +266,7 @@ export function listSavedPositions(db: Db, f: SavedPositionFilters = {}): { tota
       )!,
     );
   }
-  if (f.category) where.push(eq(savedPositions.category, f.category));
+  if (f.category) where.push(sql`lower(${savedPositions.category}) = lower(${f.category})`);
   if (f.inTraining !== undefined) where.push(eq(savedPositions.inTraining, f.inTraining));
   if (f.source === 'game') where.push(isNotNull(savedPositions.sourceGameId));
   if (f.source === 'other') where.push(isNull(savedPositions.sourceGameId));

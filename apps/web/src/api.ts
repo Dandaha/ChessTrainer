@@ -4,6 +4,7 @@ import type { RepertoireSummary } from '@chess/server/db/repertoire.ts';
 import type { CardDetail, QueueSummary, TrainingStats } from '@chess/server/db/training.ts';
 import type { ConceptCategory, ConceptInput, ConceptLinkTarget, ConceptPage, ConceptSummary } from '@chess/server/db/concepts.ts';
 import type { CoachHistoryItem } from '@chess/server/db/coach.ts';
+import type { PositionCategory } from '@chess/server/db/categories.ts';
 import type { Annotations, CoachEvent, CoachMode, CoachRequest, ReviewMoment, Suggestions, Usage } from '@chess/server/coach/coach.ts';
 import type { EngineStatus } from '@chess/server/src/engineService.ts';
 import type { Analysis, EngineLine } from '@chess/chess-tools/score';
@@ -19,6 +20,7 @@ import type {
 } from '@chess/server/db/library.ts';
 
 export type {
+  PositionCategory,
   Annotations,
   CoachEvent,
   CoachHistoryItem,
@@ -148,6 +150,11 @@ export const api = {
     call<SavedPosition>('PUT', `/api/saved-positions/${id}`, changes),
   deleteSavedPosition: (id: string) => call('DELETE', `/api/saved-positions/${id}`),
 
+  positionCategories: () => call<PositionCategory[]>('GET', '/api/position-categories'),
+  createPositionCategory: (name: string) => call<PositionCategory>('POST', '/api/position-categories', { name }),
+  renamePositionCategory: (id: string, name: string) => call<PositionCategory>('PUT', `/api/position-categories/${id}`, { name }),
+  deletePositionCategory: (id: string) =>
+    call<{ removed: boolean; uncategorized: number }>('DELETE', `/api/position-categories/${id}`),
   sets: () => call<PositionSetSummary[]>('GET', '/api/sets'),
   createSet: (name: string) => call<{ id: string }>('POST', '/api/sets', { name }),
   updateSet: (id: string, changes: { name?: string; description?: string }) => call('PUT', `/api/sets/${id}`, changes),
