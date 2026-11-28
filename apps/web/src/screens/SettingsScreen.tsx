@@ -112,6 +112,7 @@ export function SettingsScreen() {
   const confirm = useConfirm();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [trash, setTrash] = useState<TrashItem[] | null>(null);
+  const [trashShown, setTrashShown] = useState(100);
   const theme = useTheme();
   const [system, setSystem] = useState<Awaited<ReturnType<typeof api.systemInfo>> | null>(null);
 
@@ -246,10 +247,11 @@ export function SettingsScreen() {
           </div>
           <p className="text-sm text-muted">Deleted games, positions, sets, collections, repertoires and concepts stay here for 30 days.</p>
           {trash && trash.length === 0 && <Empty>The trash is empty.</Empty>}
+          {trash && trash.length > 0 && (
           <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-            {trash?.map((item) => (
+            {trash.slice(0, trashShown).map((item) => (
               <li key={`${item.kind}${item.id}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                <span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">
                   {item.label} <span className="text-xs text-muted">· {item.kind.replace('_', ' ')} · {item.deletedAt.slice(0, 10)}</span>
                 </span>
                 <button
@@ -266,6 +268,13 @@ export function SettingsScreen() {
               </li>
             ))}
           </ul>
+          )}
+          {/* A big import deleted by mistake fills the trash: it shows a page at a time. */}
+          {trash && trash.length > trashShown && (
+            <button type="button" className={buttonClass} onClick={() => setTrashShown((n) => n + 100)}>
+              Show more ({(trash.length - trashShown).toLocaleString('en')} more)
+            </button>
+          )}
         </section>
       </div>
     </div>

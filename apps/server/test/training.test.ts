@@ -124,7 +124,7 @@ describe('training cards', () => {
     expect(queue(db, { now: later, newPerDay: 0 })[0]!.card.id).toBe(a!.card.id);
     const s = stats(db, now);
     expect(s.byRepertoire[0]).toMatchObject({ cards: 2, reviews: 2, accuracy: 0.5 });
-    expect(s.weakest[0]!.label).toBe('Main: (d4)');
+    expect(s.weakest[0]!.label).toBe('(1.d4) · Main');
   });
 });
 

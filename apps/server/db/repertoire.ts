@@ -9,7 +9,7 @@ import {
   isWhiteMove,
   playMove,
   positionKey,
-  unreachableEdges,
+  movesCutBy,
 } from '@chess/chess-core';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
@@ -211,12 +211,7 @@ export function updateMove(
 export function deleteMove(db: Db, id: string): number {
   const move = db.select().from(repertoireMoves).where(eq(repertoireMoves.id, id)).get();
   if (!move) return 0;
-  const all = getEdges(db, move.repertoireId);
-  const before = new Set(unreachableEdges(all).map((e) => e.id));
-  const cut = unreachableEdges(all.filter((e) => e.id !== id))
-    .map((e) => e.id)
-    .filter((edgeId) => !before.has(edgeId));
-  const ids = [id, ...cut];
+  const ids = movesCutBy(getEdges(db, move.repertoireId), id);
   db.transaction((tx) => {
     tx.delete(repertoireMoves).where(inArray(repertoireMoves.id, ids)).run();
     // If the deleted move was the main line, the next move from that position takes over.

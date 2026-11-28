@@ -7,7 +7,7 @@ export const inputClass =
 export const buttonClass = 'rounded-md border border-line bg-surface px-3 py-1.5 text-sm hover:bg-surface-2 disabled:opacity-40';
 export const primaryClass =
   'rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:opacity-90 disabled:opacity-40';
-export const dangerClass = 'rounded-md border border-line px-3 py-1.5 text-sm text-danger hover:bg-surface-2';
+export const dangerClass = 'rounded-md border border-line px-3 py-1.5 text-sm text-danger hover:bg-surface-2 disabled:opacity-40';
 
 /** A screen's header: its title (the open set or collection, named whole), small actions on it beside
  * the title, and the screen's buttons on the right. */

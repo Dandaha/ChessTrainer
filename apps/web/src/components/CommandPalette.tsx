@@ -22,6 +22,7 @@ export function CommandPalette({
   const ws = useWorkspace();
   const [text, setText] = useState('');
   const [found, setFound] = useState<Item[]>([]);
+  const [searching, setSearching] = useState(false);
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -31,10 +32,11 @@ export function CommandPalette({
 
   useEffect(() => {
     const q = text.trim();
-    if (q.length < 2) {
-      setFound([]);
-      return;
-    }
+    // The results of the words before are not the results of these: none until these answer, so
+    // Enter never opens something the new words did not find.
+    setFound([]);
+    setSearching(q.length >= 2);
+    if (q.length < 2) return;
     let live = true;
     const timer = setTimeout(() => {
       Promise.all([
@@ -43,6 +45,7 @@ export function CommandPalette({
         searchExtra(q),
       ]).then(([g, p, extra]) => {
         if (!live) return;
+        setSearching(false);
         setFound([
           ...g.games.map((game) => ({
             key: `g${game.id}`,
@@ -103,7 +106,7 @@ export function CommandPalette({
             if (e.key === 'ArrowUp') setActive((a) => Math.max(a - 1, 0));
             if (e.key === 'Enter') choose(items[active]);
           }}
-          placeholder="Go to a screen, a game (player, event, opening) or a saved position…"
+          placeholder="Go to a screen, a game, a saved position, a repertoire or a concept…"
           className="w-full border-b border-line bg-surface px-4 py-3 text-sm outline-none"
         />
         <ul className="max-h-[50vh] overflow-y-auto py-1">
@@ -117,20 +120,33 @@ export function CommandPalette({
                   i === active ? 'bg-accent-soft' : ''
                 }`}
               >
-                <span>{item.label}</span>
-                <span className="text-xs text-muted">{item.hint}</span>
+                <span className="min-w-0 truncate">{item.label}</span>
+                <span className="shrink-0 text-xs text-muted">{item.hint}</span>
               </button>
             </li>
           ))}
-          {items.length === 0 && <li className="px-4 py-3 text-sm text-muted">Nothing found.</li>}
+          {items.length === 0 && <li className="px-4 py-3 text-sm text-muted">{searching ? 'Searching…' : 'Nothing found.'}</li>}
         </ul>
       </div>
     </div>
   );
 }
 
-/** Later phases (concepts, repertoires) add their own results here. */
-export const paletteSources: ((q: string) => Promise<Item[]>)[] = [];
+/** Screens add their own results here (concepts); repertoires are found by name below. */
+export const paletteSources: ((q: string) => Promise<Item[]>)[] = [
+  async (q) => {
+    const words = q.toLowerCase();
+    return (await api.repertoires())
+      .filter((r) => r.name.toLowerCase().includes(words))
+      .slice(0, 6)
+      .map((r) => ({
+        key: `r${r.id}`,
+        label: `${r.color === 'white' ? '♔' : '♚'} ${r.name}`,
+        hint: `Repertoire · ${r.moves} moves`,
+        run: () => navigate(`repertoire/${r.id}`),
+      }));
+  },
+];
 
 async function searchExtra(q: string): Promise<Item[]> {
   const lists = await Promise.all(paletteSources.map((source) => source(q).catch(() => [])));

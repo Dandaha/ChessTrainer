@@ -267,8 +267,9 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:justify-center">
         <section className="analysis-board flex min-w-0 flex-col items-center gap-3 md:flex-1 md:items-end">
           <div className="flex w-full justify-center gap-2 md:justify-end">
-            {engineOn && (
-              // Level with the board, not with the strips above and below it.
+            {engineOn && (!engine.error || end) && (
+              // Level with the board, not with the strips above and below it. None for an engine that
+              // could not start: an empty bar would read as an even position.
               <div className="flex py-6">
                 <EvalBar
                   line={best}

@@ -260,6 +260,19 @@ export function unreachableEdges(edges: RepEdge[], startFen: string = START_FEN)
 }
 
 /**
+ * The moves that deleting a move takes with it: itself, and every move it leaves unreachable from
+ * the start. A position also reached by another move order keeps its moves.
+ */
+export function movesCutBy(edges: RepEdge[], id: string, startFen: string = START_FEN): string[] {
+  if (!edges.some((e) => e.id === id)) return [];
+  const before = new Set(unreachableEdges(edges, startFen).map((e) => e.id));
+  const cut = unreachableEdges(edges.filter((e) => e.id !== id), startFen)
+    .map((e) => e.id)
+    .filter((edgeId) => !before.has(edgeId));
+  return [id, ...cut];
+}
+
+/**
  * How often a reply comes up in a line drill: a must-know reply 3× a nice-to-know one. The opponent's
  * replies are equals otherwise; which one is listed first (its main flag) only orders them.
  */

@@ -139,7 +139,7 @@ export function LineDrill({ repertoireId, guide = [], onEnd }: { repertoireId: s
       {error ? (
         <p className="p-6 text-danger">{error}</p>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 overflow-auto p-6 md:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col items-center-safe justify-center-safe gap-8 overflow-auto p-6 md:flex-row">
           <Board
             node={node}
             orientation={color}

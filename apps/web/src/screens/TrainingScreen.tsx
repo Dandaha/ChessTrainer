@@ -1,7 +1,7 @@
-import { type Color, type MoveNode, answerLine, createGame, describeGameEnd, displayComment, gameEnd, lineLabel, moveLabel, moveSpellings, playMove } from '@chess/chess-core';
+import { type Color, type MoveNode, answerLine, createGame, describeGameEnd, displayComment, gameEnd, lineLabel, moveSpellings, playMove } from '@chess/chess-core';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { dialogOpen } from '../Dialogs.tsx';
-import { type CardDetail, type QueueSummary, type SavedPosition, type TrainingStats, api } from '../api.ts';
+import { type CardDetail, type QueueSummary, type SavedPosition, type TrainingStats, api, useServerOnline } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
 import { Markdown } from '../components/Markdown.tsx';
 import { Empty, PageHeader, buttonClass, primaryClass } from '../components/ui.tsx';
@@ -81,6 +81,7 @@ export function TrainingScreen() {
   // With a repertoire chosen, the counts are that repertoire's, as its session will show them.
   const [scopeName, setScopeName] = useState<string | null>(null);
   const refresh = useCallback(() => {
+    setError(null);
     api.trainingSummary(repertoireId).then(setSummary).catch((e: Error) => setError(e.message));
     api.trainingStats().then(setStats).catch(() => {});
     if (repertoireId)
@@ -94,6 +95,12 @@ export function TrainingScreen() {
     else setScopeName(null);
   }, [repertoireId]);
   useEffect(refresh, [refresh]);
+  // Lost and found again: the counts come back by themselves. While it is lost the banner at the
+  // bottom says so; the page does not say it a second time.
+  const online = useServerOnline();
+  useEffect(() => {
+    if (online && error) refresh();
+  }, [online]);
 
   const start = async (type?: 'repertoire_move' | 'saved_position') => {
     try {
@@ -133,7 +140,14 @@ export function TrainingScreen() {
     <div className="flex h-full flex-col">
       <PageHeader title="Training" />
       <div className="mx-auto w-full max-w-4xl space-y-8 p-6">
-        {error && <Empty>{error}</Empty>}
+        {error && online && (
+          <Empty>
+            {error}{' '}
+            <button type="button" className="font-medium text-accent hover:underline" onClick={refresh}>
+              Try again
+            </button>
+          </Empty>
+        )}
         {summary && (
           <section className="space-y-3 rounded-xl border border-line bg-surface p-5">
             <h2 className="text-lg font-semibold">Today{scopeName ? ` in ${scopeName}` : ''}</h2>
@@ -143,6 +157,15 @@ export function TrainingScreen() {
                 Nothing to train yet. Your main-line moves become cards as soon as a repertoire has them, and saved
                 positions join when you tick “In training”.
               </p>
+            ) : summary.repertoireDue + summary.positionsDue + summary.newToday === 0 ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted">All done for today: each card comes back on the day it is due.{repertoireId ? ' Drilling lines is practice, any time.' : ''}</p>
+                {repertoireId && (
+                  <button type="button" className={buttonClass} onClick={() => navigate(`training?drill=${repertoireId}&from=training`)} title="Whole lines from the first move, as practice">
+                    Drill lines
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={primaryClass} onClick={() => void start()}>
@@ -155,10 +178,10 @@ export function TrainingScreen() {
                 )}
                 {!repertoireId && (
                   <>
-                    <button type="button" className={buttonClass} onClick={() => void start('repertoire_move')}>
+                    <button type="button" className={buttonClass} onClick={() => void start('repertoire_move')} disabled={summary.repertoireDue + summary.newToday === 0}>
                       Repertoire only
                     </button>
-                    <button type="button" className={buttonClass} onClick={() => void start('saved_position')}>
+                    <button type="button" className={buttonClass} onClick={() => void start('saved_position')} disabled={summary.positionsDue + summary.newToday === 0}>
                       Positions only
                     </button>
                   </>
@@ -344,7 +367,11 @@ function Session({
       // Reviewed now, so no longer new: it comes back to be answered, not shown (learn mode is once).
       if (again) setCards((list) => [...list, { ...card, card: { ...card.card, state: card.card.state === 0 ? 1 : card.card.state } }]);
       if (index + 1 >= cards.length + (again ? 1 : 0)) onEnd([]);
-      else setIndex(index + 1);
+      else {
+        // The answer goes with its card, in the same step: the next card never shows the last one's.
+        setOutcome(null);
+        setIndex(index + 1);
+      }
     },
     [card, outcome, failed, index, cards, onEnd, ws],
   );
@@ -357,7 +384,10 @@ function Session({
       setResults(done);
       if (gotIt) setRight((r) => r + 1);
       if (index + 1 >= cards.length) onEnd(done);
-      else setIndex(index + 1);
+      else {
+        setOutcome(null);
+        setIndex(index + 1);
+      }
     },
     [card, results, index, cards, onEnd],
   );
@@ -602,7 +632,7 @@ function Session({
           Stop <kbd>Esc</kbd>
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 overflow-auto p-6 md:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col items-center-safe justify-center-safe gap-8 overflow-auto p-6 md:flex-row">
         <Board node={node} orientation={color} autoShapes={arrows} viewOnly={!ready || !!outcome} onMove={(f, t, p) => void onMove(f, t, p)} onShapes={() => {}} />
         <div className="w-full max-w-sm space-y-4">
           {card.kind === 'repertoire_move' ? (
@@ -612,10 +642,11 @@ function Session({
                 {card.card.state === 0 && ' · new'}
                 {card.nice && ' · nice to know'}
               </p>
-              <p className="text-sm">{card.line.map((san, i) => moveLabel(i + 1, san)).join(' ') || 'Starting position'}</p>
-              <h2 className="text-xl font-semibold">
-                {!ready ? 'Watch the line…' : learning && !outcome ? `New move: play ${card.answer.san}` : 'Your move'}
-              </h2>
+              <p className="text-sm">{lineLabel(card.line.map((san, i) => ({ ply: i + 1, san }))) || 'Starting position'}</p>
+              {/* Answered, the result below says how it went: no heading asks for a move any more. */}
+              {!outcome && (
+                <h2 className="text-xl font-semibold">{!ready ? 'Watch the line…' : learning ? `New move: play ${card.answer.san}` : 'Your move'}</h2>
+              )}
               {learning && ready && !outcome && card.answer.comment && <p className="text-sm">{displayComment(card.answer.comment)}</p>}
             </>
           ) : (

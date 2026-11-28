@@ -33,7 +33,7 @@ describe('training', () => {
     fireEvent.keyDown(window, { key: 'Enter' });
 
     // Card 2: after 1.e4 c5 2.Nf3, my move is d6; e6 is not it.
-    await screen.findByText('1.e4 1...c5 2.Nf3');
+    await screen.findByText('1.e4 c5 2.Nf3');
     await screen.findByText('New move: play d6', {}, { timeout: 3000 });
     type('e6');
     expect(await screen.findByText('Your repertoire plays d6 here, not e6.')).toBeTruthy();

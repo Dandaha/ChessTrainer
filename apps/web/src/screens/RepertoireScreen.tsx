@@ -10,6 +10,7 @@ import {
   lineLabel,
   moveLabel,
   moveSpellings,
+  movesCutBy,
   nagGlyph,
   passTurn,
   playMove,
@@ -92,6 +93,11 @@ function countBelow(node: RepTreeNode): number {
   return node.transposition ? 0 : node.children.reduce((n, child) => n + 1 + countBelow(child), 0);
 }
 
+/** A tree line's indent: a step per level for the first six, then a small one, so a deep tree keeps room for its moves. */
+function indent(depth: number): number {
+  return Math.min(depth, 6) * 14 + Math.max(0, depth - 6) * 4;
+}
+
 /** The moves from the start to a move of the tree. */
 function lineTo(nodes: RepTreeNode[], edgeId: string, trail: string[] = []): string[] {
   for (const n of nodes) {
@@ -132,7 +138,15 @@ export function RepertoireScreen() {
 
   useEffect(() => {
     if (!id) return;
-    api.repertoire(id).then((r) => setEdges(r.edges)).catch(() => setEdges([]));
+    // Only the repertoire still chosen: a slow answer for one picked a moment before is dropped.
+    let live = true;
+    api
+      .repertoire(id)
+      .then((r) => live && setEdges(r.edges))
+      .catch(() => live && setEdges([]));
+    return () => {
+      live = false;
+    };
   }, [id, refresh]);
 
   const tree = useMemo(() => repertoireTree(edges), [edges]);
@@ -160,6 +174,21 @@ export function RepertoireScreen() {
     return names;
   }, [openings, tree]);
   const current = selected ? findNode(tree, (n) => n.edge.id === selected) : undefined;
+  // A move folded out of sight (Collapse all, or its branch collapsed) hands the selection to the
+  // nearest move above it that is still shown, so the tree, the board and the arrow keys agree.
+  useEffect(() => {
+    if (!selected || placed.has(selected) || !current) return;
+    const path: RepTreeNode[] = [];
+    const walk = (nodes: RepTreeNode[]): boolean =>
+      nodes.some((n) => {
+        path.push(n);
+        if (n.edge.id === selected || walk(n.children)) return true;
+        path.pop();
+        return false;
+      });
+    walk(tree);
+    setSelected([...path].reverse().find((n) => placed.has(n.edge.id))?.edge.id ?? null);
+  }, [placed]);
   const fen = current?.fen ?? START_FEN;
   const ply = current?.ply ?? 0;
   const color: Color = repertoire?.color ?? 'white';
@@ -230,41 +259,51 @@ export function RepertoireScreen() {
   const addTyped = async () => {
     const text = typed.trim();
     if (!text) return;
+    let san: string | null = null;
     for (const spelling of moveSpellings(text)) {
       try {
         const move = /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(spelling)
           ? { from: spelling.slice(0, 2).toLowerCase(), to: spelling.slice(2, 4).toLowerCase(), promotion: spelling[4]?.toLowerCase() }
           : spelling;
-        const san = playMove(boardNode(fen, '', ply), move).san;
-        setTyped('');
-        await addSan(san);
-        return;
+        san = playMove(boardNode(fen, '', ply), move).san;
+        break;
       } catch {
         // the next spelling
       }
     }
-    ws.toast(`${text} is not a legal move here.`, true);
+    if (!san) return ws.toast(`${text} is not a legal move here.`, true);
+    // The box keeps the move if it could not be added (the library out of reach).
+    if (await addSan(san)) setTyped('');
   };
 
   const addSan = (san: string) => addLine([san]);
 
-  /** Adds moves from the position shown (one, or an engine line up to a move) and goes to the last. */
-  const addLine = async (sans: string[]) => {
-    if (!repertoire || !sans.length) return;
+  /** Adds moves from the position shown (one, or an engine line up to a move) and goes to the last; says whether they were added. */
+  const addLine = async (sans: string[]): Promise<boolean> => {
+    if (!repertoire || !sans.length) return false;
     const played: MoveNode[] = [];
     let at = boardNode(fen, '', ply);
     try {
       for (const san of sans) played.push((at = playMove(at, san)));
     } catch {
-      return;
+      return false;
     }
     const lastFrom = positionKey((played.at(-2) ?? boardNode(fen, '', ply)).fen);
-    await api.addLine(repertoire.id, fen, sans);
-    const { edges: next } = await api.repertoire(repertoire.id);
-    setEdges(next);
-    const added = next.find((e) => e.fromKey === lastFrom && e.san === sans.at(-1));
-    if (added) select(added.id);
+    try {
+      await api.addLine(repertoire.id, fen, sans);
+      const { edges: next } = await api.repertoire(repertoire.id);
+      setEdges(next);
+      const added = next.find((e) => e.fromKey === lastFrom && e.san === sans.at(-1));
+      if (added) select(added.id);
+    } catch (error) {
+      ws.toast(`Could not add ${lineLabel(played)}: ${(error as Error).message}`, true);
+      reload();
+      return false;
+    }
     if (sans.length > 1) ws.toast(`Added ${lineLabel(played)}.`);
+    // The move counts in the repertoire list.
+    api.repertoires().then(setList).catch(() => {});
+    return true;
   };
 
   // The move before and after along the line shown (the arrow keys and the wheel over the board).
@@ -313,6 +352,20 @@ export function RepertoireScreen() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  if (list && list.length > 0 && route.parts[1] && !repertoire) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="Repertoire" />
+        <div className="mx-auto max-w-lg space-y-4 p-8">
+          <Empty>This repertoire is not in the library: it may have been deleted (Settings → Trash can bring it back).</Empty>
+          <button type="button" className={primaryClass} onClick={() => navigate('repertoire')}>
+            Show my repertoires
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (list && list.length === 0) {
     return (
       <div className="flex h-full flex-col">
@@ -358,6 +411,8 @@ export function RepertoireScreen() {
           onChange={(e) => {
             select(null);
             navigate(`repertoire/${e.target.value}`);
+            // The arrow keys go back to the tree, not to the next repertoire.
+            e.currentTarget.blur();
           }}
         >
           {list?.map((r) => (
@@ -375,10 +430,10 @@ export function RepertoireScreen() {
           disabled={!repertoire}
           onClick={async () => {
             if (!repertoire) return;
-            const name = (await askText('Rename repertoire', repertoire.name))?.trim();
-            if (!name || name === repertoire.name) return;
-            await api.renameRepertoire(repertoire.id, name);
-            reload();
+            const name = await askText('Rename repertoire', repertoire.name, '', async (text) => {
+              if (text.trim() && text.trim() !== repertoire.name) await api.renameRepertoire(repertoire.id, text.trim());
+            });
+            if (name) reload();
           }}
         >
           Rename
@@ -440,7 +495,7 @@ export function RepertoireScreen() {
         {/* The tree, and under it the selected move's editor, beside the board: annotating needs no scrolling. */}
         <div className="flex min-h-0 flex-col gap-3 md:h-full md:w-[20rem] md:shrink-0 md:overflow-y-auto xl:w-[26rem]">
         {showLines && (
-          <div className="shrink-0 rounded-xl border border-line bg-surface" aria-label="Engine lines">
+          <div className="shrink-0 rounded-xl border border-line bg-surface md:max-h-[45%] md:overflow-y-auto" aria-label="Engine lines">
             <EnginePanel
               state={engine}
               settings={engineSettings}
@@ -477,7 +532,7 @@ export function RepertoireScreen() {
             const folds = last.children.length > 1 || (collapsed.has(last.edge.id) && last.children.length > 0);
             const folded = collapsed.has(last.edge.id);
             return (
-              <div key={line.nodes[0]!.edge.id} data-line className="flex items-start" style={{ paddingLeft: line.depth * 14 }}>
+              <div key={line.nodes[0]!.edge.id} data-line className="flex items-start" style={{ paddingLeft: indent(line.depth) }}>
                 <button
                   type="button"
                   aria-label={folds ? (folded ? 'Expand' : 'Collapse') : undefined}
@@ -536,9 +591,11 @@ export function RepertoireScreen() {
                 key={current.edge.id}
                 node={current}
                 onChanged={reload}
+                cut={movesCutBy(edges, current.edge.id).length - 1}
                 onDeleted={(n) => {
                   ws.toast(`Deleted ${n} move${n === 1 ? '' : 's'}.`);
-                  select(null);
+                  // The place stays: the move before the deleted one.
+                  select(placed.get(current.edge.id)?.parent?.edge.id ?? null);
                   reload();
                 }}
                 onOpenBoard={() => {
@@ -571,7 +628,8 @@ export function RepertoireScreen() {
           <div className="board-fit flex w-full justify-center md:min-h-[16rem] md:flex-1">
             {/* As tall as the board, so the eval bar beside it is too. */}
             <div className="flex h-fit w-full justify-center gap-2 md:w-auto">
-              {engineOn && <EvalBar line={best} flipped={color === 'black'} />}
+              {/* No bar for an engine that could not start: an empty bar would read as an even position. */}
+              {engineOn && !engine.error && <EvalBar line={best} flipped={color === 'black'} />}
               <Board
                 node={boardNode(fen, current?.edge.uci ?? '', ply)}
                 orientation={color}
@@ -696,10 +754,32 @@ function Switch({ on, onToggle, label, shortcut, swatch }: { on: boolean; onTogg
 
 function NewRepertoire({ onCreated }: { onCreated(id: string): void }) {
   const [name, setName] = useState('Main');
-  const create = async (color: Color) => onCreated((await api.createRepertoire(name, color)).id);
+  const [error, setError] = useState<string | null>(null);
+  const create = async (color: Color) => {
+    try {
+      onCreated((await api.createRepertoire(name, color)).id);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   return (
     <div className="space-y-3">
-      <input aria-label="Name" className={`${inputClass} w-full`} value={name} onChange={(e) => setName(e.target.value)} placeholder="Main, Surprise weapons…" />
+      <input
+        aria-label="Name"
+        className={`${inputClass} w-full`}
+        value={name}
+        maxLength={200}
+        onChange={(e) => {
+          setName(e.target.value);
+          setError(null);
+        }}
+        placeholder="Main, Surprise weapons…"
+      />
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
       <div className="flex gap-2">
         <button type="button" className={primaryClass} onClick={() => void create('white')}>
           ♔ For White
@@ -714,11 +794,14 @@ function NewRepertoire({ onCreated }: { onCreated(id: string): void }) {
 
 function MoveEditor({
   node,
+  cut,
   onChanged,
   onDeleted,
   onOpenBoard,
 }: {
   node: RepTreeNode;
+  /** How many moves after this one deleting it takes too: those reached by no other move order. */
+  cut: number;
   onChanged(): void;
   onDeleted(n: number): void;
   onOpenBoard(): void;
@@ -749,10 +832,25 @@ function MoveEditor({
         <span className="font-semibold">{moveLabel(node.ply, e.san)}</span>
         {/* Whose move it is follows from the repertoire's colour, so it is shown, not chosen. */}
         <span className="text-xs text-muted">{e.isMyMove ? 'my move' : 'expected reply'}</span>
-        <select aria-label="Priority" className={inputClass} value={e.priority} onChange={(ev) => void update({ priority: ev.target.value as 'must' | 'nice' })}>
-          <option value="must">Must know</option>
-          <option value="nice">Nice to know</option>
-        </select>
+        {/* Two buttons rather than a select: a select keeps the focus, and the arrow keys would change it. */}
+        <div role="group" aria-label="Priority" className="inline-flex overflow-hidden rounded-md border border-line text-xs">
+          {(
+            [
+              ['must', 'Must know'],
+              ['nice', 'Nice to know'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={e.priority === value}
+              className={`px-2 py-1 ${e.priority === value ? 'bg-accent-soft font-semibold text-text' : 'text-muted hover:bg-surface-2'}`}
+              onClick={() => e.priority !== value && void update({ priority: value })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         {!e.isMain &&
           (e.isMyMove ? (
             <button type="button" className={buttonClass} onClick={() => void update({ isMain: true })} title="The move you play here; the other becomes your side move">
@@ -783,15 +881,16 @@ function MoveEditor({
       />
       <LinkedConcepts targetType="repertoire_move" targetId={e.id} />
       <div className="flex gap-2">
-        <button type="button" className={buttonClass} onClick={onOpenBoard}>
-          Open on analysis board
+        <button type="button" className={`${buttonClass} whitespace-nowrap`} onClick={onOpenBoard} title="The line to this move on the analysis board">
+          Open on board
         </button>
         <button
           type="button"
-          className={dangerClass}
+          className={`${dangerClass} whitespace-nowrap`}
+          title="Delete this move, and the moves after it that no other move order reaches"
           onClick={async () => {
             // Not kept in the trash, and the moves' training progress goes with them: ask when it is more than one move.
-            const after = countBelow(node);
+            const after = cut;
             if (
               after > 0 &&
               !(await confirm({
@@ -806,7 +905,7 @@ function MoveEditor({
             onDeleted(deleted);
           }}
         >
-          Delete move and what follows
+          Delete from here
         </button>
       </div>
     </div>
@@ -840,7 +939,9 @@ function ImportRepertoire({ repertoire, onClose, onDone }: { repertoire: Reperto
           onClick={async () => {
             try {
               const r = await api.importRepertoire(repertoire.id, text);
-              ws.toast(`Added ${r.added} move${r.added === 1 ? '' : 's'} (${r.existing} already there) from ${r.games} game${r.games === 1 ? '' : 's'}.`);
+              // Nothing came in: the reasons in the dialog say it all, without a toast beside them.
+              if (r.added || r.existing || !r.errors.length)
+                ws.toast(`Added ${r.added} move${r.added === 1 ? '' : 's'} (${r.existing} already there) from ${r.games} game${r.games === 1 ? '' : 's'}.`);
               onDone();
               if (r.errors.length) {
                 setProblems(r.errors.map((e) => (e.message.startsWith('Game ') ? e.message : `Game ${e.gameIndex + 1}${e.line ? `, line ${e.line}` : ''}: ${e.message}`)));

@@ -38,7 +38,7 @@ describe('request bodies', () => {
     const concept = (await server.inject({ method: 'POST', url: '/api/concepts', payload: { title: 'Minority attack' } })).json();
     const blank = await server.inject({ method: 'PUT', url: `/api/concepts/${concept.id}`, payload: { title: ' ' } });
     expect(blank.statusCode).toBe(400);
-    expect(blank.json().error).toBe('title: A concept needs a title.');
+    expect(blank.json().error).toBe('A concept needs a title.');
     expect((await server.inject({ method: 'GET', url: `/api/concepts/${concept.id}` })).json().title).toBe('Minority attack');
   });
 
@@ -49,6 +49,15 @@ describe('request bodies', () => {
     expect((await server.inject({ method: 'PUT', url: '/api/settings', payload: { rating: 99999 } })).statusCode).toBe(400);
     const bad = await server.inject({ method: 'POST', url: '/api/training/check', payload: { fen: START, uci: 'e4' } });
     expect(bad.statusCode).toBe(400);
-    expect(bad.json().error).toBe('uci: A move is written like e2e4.');
+    expect(bad.json().error).toBe('A move is written like e2e4.');
+  });
+
+  it('says in words what is wrong with a field', async () => {
+    const server = app();
+    const error = async (method: 'POST' | 'PUT', url: string, payload: object) => (await server.inject({ method, url, payload })).json().error;
+    expect(await error('POST', '/api/collections', { name: 'x'.repeat(201) })).toBe('The name is too long: at most 200 characters.');
+    expect(await error('PUT', '/api/settings', { rating: 99999 })).toMatch(/^The rating can be at most \d+\.$/);
+    expect(await error('POST', '/api/games/import/lichess', { username: 'a', max: 0 })).toBe('The number of games must be at least 1.');
+    expect(await error('POST', '/api/games/import/lichess', { username: 'a', max: 1.5 })).toBe('The number of games must be a whole number.');
   });
 });

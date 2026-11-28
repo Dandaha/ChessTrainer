@@ -14,9 +14,46 @@ export class BadRequest extends Error {
 export function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
   const result = schema.safeParse(body ?? {});
   if (result.success) return result.data;
-  const issue = result.error.issues[0]!;
+  throw new BadRequest(sentenceFor(result.error.issues[0]!));
+}
+
+/** Fields whose name alone would not say what they are. */
+const FIELD_WORDS: Record<string, string> = { max: 'number of games', pgn: 'PGN', fen: 'FEN', bodyMd: 'text', notesMd: 'notes', sans: 'moves', ids: 'items' };
+
+/** A field as the person knows it: "the name", "the number of games"; one item of a list: "a tag". */
+function fieldWords(path: PropertyKey[]): { the: string; one: string; words: string } {
+  const key = [...path].reverse().find((p): p is string => typeof p === 'string');
+  if (!key) return { the: 'the request', one: 'an item', words: 'items' };
+  const words = FIELD_WORDS[key] ?? key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  const single = words.endsWith('s') && !words.endsWith('ss') ? words.slice(0, -1) : words;
+  return { the: `the ${words}`, one: `${/^[aeiou]/i.test(single) ? 'an' : 'a'} ${single}`, words };
+}
+
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** A sentence for what was wrong with a body: "The name is too long: at most 200 characters." */
+export function sentenceFor(issue: z.core.$ZodIssue): string {
+  // A schema's own message is a sentence already ("A concept needs a title.").
+  if (!/^(Too (big|small)|Invalid)/.test(issue.message)) return issue.message;
+  const { the, one, words } = fieldWords(issue.path);
+  const inList = typeof issue.path.at(-1) === 'number';
+  const subject = capital(inList ? one : the);
+  const be = !inList && the.endsWith('s') && !the.endsWith('ss') ? 'are' : 'is';
+  if (issue.code === 'too_big') {
+    if (issue.origin === 'string') return `${subject} ${be} too long: at most ${issue.maximum} characters.`;
+    if (issue.origin === 'array') return `Too many ${words}: at most ${issue.maximum}.`;
+    return `${subject} can be at most ${issue.maximum}.`;
+  }
+  if (issue.code === 'too_small') {
+    if (issue.origin === 'string') return `${subject} cannot be empty.`;
+    if (issue.origin === 'array') return `${subject} needs at least ${issue.minimum}.`;
+    return `${subject} must be at least ${issue.minimum}.`;
+  }
+  if (issue.code === 'invalid_type' && (issue.expected === 'int' || issue.expected === 'number')) {
+    return `${subject} must be a${issue.expected === 'int' ? ' whole' : ''} number.`;
+  }
   const where = issue.path.length ? `${issue.path.join('.')}: ` : '';
-  throw new BadRequest(`${where}${issue.message}`);
+  return `${where}${issue.message}`;
 }
 
 const id = z.string().min(1).max(64);

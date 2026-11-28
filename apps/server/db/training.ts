@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { type Color, type RepEdge, START_FEN, createGame, playMove, positionKey, repertoireTree } from '@chess/chess-core';
+import { type Color, type RepEdge, START_FEN, createGame, lineLabel, moveLabel, playMove, positionKey, repertoireTree } from '@chess/chess-core';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { type Card, type Grade, Rating, State, createEmptyCard, fsrs } from 'ts-fsrs';
 import type { Db } from './client.ts';
@@ -460,7 +460,12 @@ export function stats(db: Db, now = new Date()): TrainingStats {
     if (weakest.length >= 10) break;
     const d = details.make(card);
     if (!d) continue;
-    const label = d.kind === 'repertoire_move' ? `${d.repertoire.name}: ${[...d.line, `(${d.answer.san})`].join(' ')}` : d.saved.title;
+    // The moves first, numbered, and the move to find in brackets ("1.d4 d5 2.c4 (2...e6)"); where it
+    // is from after them, so a long repertoire name never hides the line.
+    const label =
+      d.kind === 'repertoire_move'
+        ? `${lineLabel(d.line.map((san, i) => ({ ply: i + 1, san })))} (${moveLabel(d.line.length + 1, d.answer.san)}) · ${d.repertoire.name}`.trim()
+        : d.saved.title;
     weakest.push({ cardId: card.id, label, lapses: card.lapses, reviews: s.reviews, accuracy: s.correct / s.reviews });
   }
 
