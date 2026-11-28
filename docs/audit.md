@@ -22,11 +22,13 @@ All fixed on 28 November 2026:
 - dialogs, the concept picker, `compare_moves`, concept titles, the theme button, the offline notice and Markdown.
 
 ## Data and engineering
-- Imports are slow: about 5 ms a game (5,000 games ≈ 35 s), most of it chess.js building a full move object for every move; the app stays usable meanwhile, but the dialog shows no progress.
-- The database grows ≈ 40 KB per game, mostly the position index (≈ 3 GB at the spec's 100k games).
-- The training queue takes ≈ 2.7 s on a 5,000-move repertoire (details built for every new card before keeping 20).
-- A FEN game without `SetUp "1"` is written without it; NAGs above 255 are accepted.
-- The installer's database driver is installed with `npm install --no-package-lock`, so its own dependencies float between builds.
+
+All fixed on 28 November 2026:
+- The game index keeps a 64-bit hash per position instead of a row of text: 10 KB a game instead of 29 (about 1 GB at 100,000 games), with existing libraries moved over and compacted on update.
+- Imports run about 40% faster (5 ms a game) and the dialog counts the games as they download and import. Most of what is left is chess.js replaying each move; a faster move generator would need a new dependency.
+- The training queue and statistics build only the cards they show: 0.12 s instead of 7 s on a 5,000-move repertoire. The repertoire tree no longer replays every move (1.2 s down to 24 ms).
+- Games from a set-up position are written with `SetUp "1"`; NAGs outside 1–255 are dropped.
+- The installer's database driver comes from a committed lockfile.
 
 ## Missing compared with standard chess software
 
