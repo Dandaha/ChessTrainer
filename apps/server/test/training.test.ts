@@ -2,8 +2,9 @@ import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { openDatabase, runMigrations } from '../db/client.ts';
 import { createSavedPosition, updateSavedPosition, updateSettings } from '../db/library.ts';
-import { addLine, createRepertoire, reachesByMyMove } from '../db/repertoire.ts';
-import { engineCache } from '../db/schema.ts';
+import { addLine, createRepertoire, getEdges, reachesByMyMove, updateMove } from '../db/repertoire.ts';
+import { engineCache, trainingCards } from '../db/schema.ts';
+import { eq } from 'drizzle-orm';
 import { queue, review, stats, summary } from '../db/training.ts';
 import { buildApp } from '../src/app.ts';
 import { EngineService } from '../src/engineService.ts';
@@ -228,5 +229,42 @@ describe('without an engine', () => {
     expect(check).toMatchObject({ answerMatch: true, engine: null });
     expect(check.engineError).toMatch(/Settings/);
     await app.close();
+  });
+});
+
+describe('nice to know', () => {
+  function withNiceLine() {
+    const db = freshDb();
+    const id = createRepertoire(db, { name: 'Main', color: 'white' });
+    addLine(db, id, START, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O']);
+    addLine(db, id, START, ['e4', 'b6', 'd4']); // a rare reply, marked nice to know below
+    const b6 = getEdges(db, id).find((e) => e.san === 'b6')!;
+    updateMove(db, b6.id, { priority: 'nice' });
+    return { db, id };
+  }
+
+  it('introduces the must-know moves first, however deep, and marks the others', () => {
+    const { db } = withNiceLine();
+    const cards = queue(db, { newPerDay: 20 });
+    const answers = cards.map((c) => (c.kind === 'repertoire_move' ? `${c.answer.san}${c.nice ? '*' : ''}` : ''));
+    expect(answers).toEqual(['e4', 'Nf3', 'Bb5', 'Ba4', 'O-O', 'd4*']);
+  });
+
+  it('schedules a nice-to-know card further out than a must-know one', () => {
+    const { db } = withNiceLine();
+    const cards = queue(db, { newPerDay: 20 });
+    const must = cards.find((c) => c.kind === 'repertoire_move' && c.answer.san === 'Ba4')!;
+    const nice = cards.find((c) => c.kind === 'repertoire_move' && c.answer.san === 'd4')!;
+    // Both learned ten days ago with the same memory, and due today.
+    const now = new Date('2026-06-15T12:00:00Z');
+    for (const c of [must, nice]) {
+      db.update(trainingCards)
+        .set({ state: 2, stability: 10, difficulty: 5, reps: 3, lapses: 0, lastReview: '2026-06-05T12:00:00.000Z', due: '2026-06-15T00:00:00.000Z', scheduledDays: 10 })
+        .where(eq(trainingCards.id, c.card.id))
+        .run();
+    }
+    const dueMust = new Date(review(db, must.card.id, 3, true, now)!.due).getTime();
+    const dueNice = new Date(review(db, nice.card.id, 3, true, now)!.due).getTime();
+    expect(dueNice).toBeGreaterThan(dueMust * 1 + 3 * 86_400_000);
   });
 });

@@ -15,6 +15,11 @@ import { repertoireMoves, repertoires, savedPositions, trainingCards, trainingRe
  */
 
 const scheduler = fsrs({ enable_fuzz: true });
+/**
+ * "Nice to know" lines are scheduled for 80% recall instead of 90%: their reviews come further apart,
+ * so the moves that must be known get most of the time.
+ */
+const niceScheduler = fsrs({ enable_fuzz: true, request_retention: 0.8 });
 
 export type CardRow = typeof trainingCards.$inferSelect;
 
@@ -152,6 +157,8 @@ export interface RepertoireCardDetail {
   fen: string;
   /** My main move here, and my other prepared moves (accepted as well, but not the main one). */
   answer: { san: string; uci: string; comment: string | null };
+  /** "Nice to know" rather than must-know (the move, or a move on the line to it, is marked so). */
+  nice: boolean;
   alternatives: { san: string; uci: string }[];
 }
 
@@ -164,17 +171,24 @@ export interface PositionCardDetail {
 export type CardDetail = RepertoireCardDetail | PositionCardDetail;
 
 /** For each repertoire, the moves leading to every position it reaches (shortest order first). */
-function linesTo(edges: RepEdge[]): Map<string, string[]> {
-  const paths = new Map<string, string[]>([[positionKey(START_FEN), []]]);
-  const walk = (nodes: ReturnType<typeof repertoireTree>, trail: string[]) => {
+function linesTo(edges: RepEdge[]): { lines: Map<string, string[]>; nice: Map<string, boolean> } {
+  const start = positionKey(START_FEN);
+  const paths = new Map<string, string[]>([[start, []]]);
+  // Whether the line to a position passes a move marked "nice to know": then all of it is.
+  const nice = new Map<string, boolean>([[start, false]]);
+  const walk = (nodes: ReturnType<typeof repertoireTree>, trail: string[], niceSoFar: boolean) => {
     for (const n of nodes) {
       const path = [...trail, n.edge.san];
-      if (!paths.has(n.edge.toKey)) paths.set(n.edge.toKey, path);
-      if (!n.transposition) walk(n.children, path);
+      const isNice = niceSoFar || n.edge.priority === 'nice';
+      if (!paths.has(n.edge.toKey)) {
+        paths.set(n.edge.toKey, path);
+        nice.set(n.edge.toKey, isNice);
+      }
+      if (!n.transposition) walk(n.children, path, isNice);
     }
   };
-  walk(repertoireTree(edges), []);
-  return paths;
+  walk(repertoireTree(edges), [], false);
+  return { lines: paths, nice };
 }
 
 /**
@@ -197,6 +211,7 @@ function detailer(db: Db) {
     byId: Map<string, RepEdge>;
     byFrom: Map<string, RepEdge[]>;
     lines: Map<string, string[]>;
+    nice: Map<string, boolean>;
   };
   const contexts = new Map<string, Context | null>();
   const contextOf = (card: CardRow): Context | null => {
@@ -209,7 +224,7 @@ function detailer(db: Db) {
       for (const e of edges) byFrom.set(e.fromKey, [...(byFrom.get(e.fromKey) ?? []), e]);
       contexts.set(
         id,
-        info ? { info: { id, name: info.name, color: info.color }, byId: new Map(edges.map((e) => [e.id, e])), byFrom, lines: linesTo(edges) } : null,
+        info ? { info: { id, name: info.name, color: info.color }, byId: new Map(edges.map((e) => [e.id, e])), byFrom, ...linesTo(edges) } : null,
       );
     }
     return contexts.get(id)!;
@@ -217,6 +232,13 @@ function detailer(db: Db) {
 
   return {
     repertoireOf: (card: CardRow) => moveRepertoire.get(card.targetId),
+
+    /** Whether a repertoire card is "nice to know": its move, or a move on the line to it, is marked so. */
+    nice(card: CardRow): boolean {
+      const ctx = contextOf(card);
+      const edge = ctx?.byId.get(card.targetId);
+      return !!edge && (edge.priority === 'nice' || ctx!.nice.get(edge.fromKey) === true);
+    },
 
     /** How many moves from the start a repertoire card's position is; undefined when it can't be reached. */
     depth(card: CardRow): number | undefined {
@@ -249,6 +271,7 @@ function detailer(db: Db) {
         startFen: START_FEN,
         fen,
         answer: { san: edge.san, uci: edge.uci, comment: edge.comment },
+        nice: edge.priority === 'nice' || ctx.nice.get(edge.fromKey) === true,
         alternatives: (ctx.byFrom.get(edge.fromKey) ?? []).filter((e) => e.isMyMove && e.id !== edge.id).map((e) => ({ san: e.san, uci: e.uci })),
       };
     },
@@ -315,11 +338,12 @@ export function queue(
   }
   // New repertoire moves (shallowest lines first) and new positions take turns for the day's slots.
   const newLeft = Math.min(limit - shown.length, Math.max(0, (options.newPerDay ?? 20) - newSeenToday(db, now)));
+  // Must-know moves first, then nice-to-know ones; the shallowest lines first within each.
   const moves = cards
     .filter((c) => c.state === 0 && c.targetType === 'repertoire_move')
-    .map((card) => ({ card, depth: details.depth(card) }))
-    .filter((m): m is { card: CardRow; depth: number } => m.depth !== undefined)
-    .sort((a, b) => a.depth - b.depth)
+    .map((card) => ({ card, depth: details.depth(card), nice: details.nice(card) }))
+    .filter((m): m is { card: CardRow; depth: number; nice: boolean } => m.depth !== undefined)
+    .sort((a, b) => Number(a.nice) - Number(b.nice) || a.depth - b.depth)
     .map((m) => m.card);
   const positions = cards.filter((c) => c.state === 0 && c.targetType === 'saved_position');
   const next = (list: CardRow[], from: { i: number }): CardDetail | null => {
@@ -353,7 +377,8 @@ export const RATINGS = { again: Rating.Again, hard: Rating.Hard, good: Rating.Go
 export function review(db: Db, cardId: string, rating: 1 | 2 | 3 | 4, correct: boolean, now = new Date()): CardRow | undefined {
   const row = db.select().from(trainingCards).where(eq(trainingCards.id, cardId)).get();
   if (!row) return undefined;
-  const next = scheduler.next(toFsrs(row), now, rating as Grade);
+  const nice = row.targetType === 'repertoire_move' && detailer(db).nice(row);
+  const next = (nice ? niceScheduler : scheduler).next(toFsrs(row), now, rating as Grade);
   db.transaction((tx) => {
     tx.update(trainingCards).set(fromFsrs(next.card)).where(eq(trainingCards.id, cardId)).run();
     tx.insert(trainingReviews).values({ cardId, rating, correct, reviewedAt: now.toISOString() }).run();
