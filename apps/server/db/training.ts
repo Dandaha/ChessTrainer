@@ -63,9 +63,19 @@ export function syncCards(db: Db, now = new Date()): void {
       .all()
       .map((r) => ({ targetType: 'saved_position' as const, targetId: r.id })),
   ];
+  // Most calls find every card there already: insert only the missing ones.
+  const have = new Set(
+    db
+      .select({ targetType: trainingCards.targetType, targetId: trainingCards.targetId })
+      .from(trainingCards)
+      .all()
+      .map((c) => `${c.targetType}|${c.targetId}`),
+  );
+  const missing = wanted.filter((w) => !have.has(`${w.targetType}|${w.targetId}`));
+  if (!missing.length) return;
   const empty = fromFsrs(createEmptyCard(now));
   db.transaction((tx) => {
-    for (const w of wanted) {
+    for (const w of missing) {
       tx.insert(trainingCards).values({ id: randomUUID(), ...w, ...empty }).onConflictDoNothing().run();
     }
   });
@@ -167,50 +177,83 @@ function linesTo(edges: RepEdge[]): Map<string, string[]> {
   return paths;
 }
 
-function details(db: Db, cards: CardRow[]): CardDetail[] {
-  const repIds = cards.filter((c) => c.targetType === 'repertoire_move').map((c) => c.targetId);
-  const moveRows = repIds.length
-    ? db.select({ id: repertoireMoves.id, repertoireId: repertoireMoves.repertoireId }).from(repertoireMoves).where(inArray(repertoireMoves.id, repIds)).all()
-    : [];
-  const byRepertoire = new Map<string, { edges: RepEdge[]; lines: Map<string, string[]>; info: { id: string; name: string; color: Color } }>();
+/**
+ * Builds the details of cards one at a time, as a session shows them: a repertoire's moves and lines
+ * are loaded once, when its first card is asked for, and a card's position is played out only when
+ * the card is wanted (a large repertoire has thousands of new cards, and a day shows twenty).
+ */
+function detailer(db: Db) {
+  const moveRepertoire = new Map(
+    db
+      .select({ id: repertoireMoves.id, repertoireId: repertoireMoves.repertoireId })
+      .from(repertoireMoves)
+      .where(and(eq(repertoireMoves.isMyMove, true), eq(repertoireMoves.isMain, true)))
+      .all()
+      .map((m) => [m.id, m.repertoireId]),
+  );
   const repertoireList = listRepertoires(db);
-  for (const id of new Set(moveRows.map((m) => m.repertoireId))) {
-    const edges = getEdges(db, id);
-    const info = repertoireList.find((r) => r.id === id)!;
-    byRepertoire.set(id, { edges, lines: linesTo(edges), info: { id, name: info.name, color: info.color } });
-  }
-  const out: CardDetail[] = [];
-  for (const card of cards) {
-    if (card.targetType === 'saved_position') {
-      const saved = getSavedPosition(db, card.targetId);
-      if (saved) out.push({ card, kind: 'saved_position', saved });
-      continue;
+  type Context = {
+    info: { id: string; name: string; color: Color };
+    byId: Map<string, RepEdge>;
+    byFrom: Map<string, RepEdge[]>;
+    lines: Map<string, string[]>;
+  };
+  const contexts = new Map<string, Context | null>();
+  const contextOf = (card: CardRow): Context | null => {
+    const id = moveRepertoire.get(card.targetId);
+    if (!id) return null;
+    if (!contexts.has(id)) {
+      const info = repertoireList.find((r) => r.id === id);
+      const edges = info ? getEdges(db, id) : [];
+      const byFrom = new Map<string, RepEdge[]>();
+      for (const e of edges) byFrom.set(e.fromKey, [...(byFrom.get(e.fromKey) ?? []), e]);
+      contexts.set(
+        id,
+        info ? { info: { id, name: info.name, color: info.color }, byId: new Map(edges.map((e) => [e.id, e])), byFrom, lines: linesTo(edges) } : null,
+      );
     }
-    const repId = moveRows.find((m) => m.id === card.targetId)?.repertoireId;
-    const rep = repId ? byRepertoire.get(repId) : undefined;
-    const edge = rep?.edges.find((e) => e.id === card.targetId);
-    const line = edge ? rep!.lines.get(edge.fromKey) : undefined;
-    if (!rep || !edge || !line) continue; // not reachable from the start: nothing to drill
-    let fen = START_FEN;
-    try {
-      fen = playFrom(START_FEN, line);
-    } catch {
-      continue;
-    }
-    out.push({
-      card,
-      kind: 'repertoire_move',
-      repertoire: rep.info,
-      line,
-      startFen: START_FEN,
-      fen,
-      answer: { san: edge.san, uci: edge.uci, comment: edge.comment },
-      alternatives: rep.edges.filter((e) => e.fromKey === edge.fromKey && e.isMyMove && e.id !== edge.id).map((e) => ({ san: e.san, uci: e.uci })),
-    });
-  }
-  return out;
-}
+    return contexts.get(id)!;
+  };
 
+  return {
+    repertoireOf: (card: CardRow) => moveRepertoire.get(card.targetId),
+
+    /** How many moves from the start a repertoire card's position is; undefined when it can't be reached. */
+    depth(card: CardRow): number | undefined {
+      const ctx = contextOf(card);
+      const edge = ctx?.byId.get(card.targetId);
+      return edge ? ctx!.lines.get(edge.fromKey)?.length : undefined;
+    },
+
+    /** The card as a session shows it, or null when there is nothing to drill. */
+    make(card: CardRow): CardDetail | null {
+      if (card.targetType === 'saved_position') {
+        const saved = getSavedPosition(db, card.targetId);
+        return saved ? { card, kind: 'saved_position', saved } : null;
+      }
+      const ctx = contextOf(card);
+      const edge = ctx?.byId.get(card.targetId);
+      const line = edge ? ctx!.lines.get(edge.fromKey) : undefined;
+      if (!ctx || !edge || !line) return null; // not reachable from the start: nothing to drill
+      let fen: string;
+      try {
+        fen = playFrom(START_FEN, line);
+      } catch {
+        return null;
+      }
+      return {
+        card,
+        kind: 'repertoire_move',
+        repertoire: ctx.info,
+        line,
+        startFen: START_FEN,
+        fen,
+        answer: { san: edge.san, uci: edge.uci, comment: edge.comment },
+        alternatives: (ctx.byFrom.get(edge.fromKey) ?? []).filter((e) => e.isMyMove && e.id !== edge.id).map((e) => ({ san: e.san, uci: e.uci })),
+      };
+    },
+  };
+}
 
 function playFrom(fen: string, sans: string[]): string {
   let node = createGame(fen).root;
@@ -260,20 +303,48 @@ export function queue(
   options: { now?: Date; newPerDay?: number; repertoireId?: string; type?: 'repertoire_move' | 'saved_position'; limit?: number } = {},
 ): CardDetail[] {
   const now = options.now ?? new Date();
+  const limit = options.limit ?? 200;
   syncCards(db, now);
   const cards = activeCards(db, options);
-  const due = cards.filter((c) => isDue(c, now)).sort((a, b) => a.due.localeCompare(b.due));
-  const newLeft = Math.max(0, (options.newPerDay ?? 20) - newSeenToday(db, now));
-  // New repertoire moves (shallowest lines first) and new positions take turns for the day's slots.
-  const freshCards = details(db, cards.filter((c) => c.state === 0));
-  const moves = freshCards.filter((c) => c.kind === 'repertoire_move').sort((a, b) => (a as RepertoireCardDetail).line.length - (b as RepertoireCardDetail).line.length);
-  const positions = freshCards.filter((c) => c.kind === 'saved_position');
-  const fresh: CardDetail[] = [];
-  for (let i = 0; fresh.length < newLeft && (i < moves.length || i < positions.length); i += 1) {
-    if (i < moves.length) fresh.push(moves[i]!);
-    if (i < positions.length && fresh.length < newLeft) fresh.push(positions[i]!);
+  const details = detailer(db);
+  const shown: CardDetail[] = [];
+  for (const card of cards.filter((c) => isDue(c, now)).sort((a, b) => a.due.localeCompare(b.due))) {
+    if (shown.length >= limit) return shown;
+    const detail = details.make(card);
+    if (detail) shown.push(detail);
   }
-  return [...details(db, due), ...fresh].slice(0, options.limit ?? 200);
+  // New repertoire moves (shallowest lines first) and new positions take turns for the day's slots.
+  const newLeft = Math.min(limit - shown.length, Math.max(0, (options.newPerDay ?? 20) - newSeenToday(db, now)));
+  const moves = cards
+    .filter((c) => c.state === 0 && c.targetType === 'repertoire_move')
+    .map((card) => ({ card, depth: details.depth(card) }))
+    .filter((m): m is { card: CardRow; depth: number } => m.depth !== undefined)
+    .sort((a, b) => a.depth - b.depth)
+    .map((m) => m.card);
+  const positions = cards.filter((c) => c.state === 0 && c.targetType === 'saved_position');
+  const next = (list: CardRow[], from: { i: number }): CardDetail | null => {
+    while (from.i < list.length) {
+      const detail = details.make(list[from.i++]!);
+      if (detail) return detail;
+    }
+    return null;
+  };
+  const inMoves = { i: 0 };
+  const inPositions = { i: 0 };
+  let added = 0;
+  while (added < newLeft && (inMoves.i < moves.length || inPositions.i < positions.length)) {
+    const move = next(moves, inMoves);
+    if (move) {
+      shown.push(move);
+      added += 1;
+    }
+    const position = added < newLeft ? next(positions, inPositions) : null;
+    if (position) {
+      shown.push(position);
+      added += 1;
+    }
+  }
+  return shown;
 }
 
 export const RATINGS = { again: Rating.Again, hard: Rating.Hard, good: Rating.Good, easy: Rating.Easy } as const;
@@ -323,7 +394,7 @@ export function stats(db: Db, now = new Date()): TrainingStats {
   });
 
   const cards = activeCards(db);
-  const cardDetails = details(db, cards);
+  const details = detailer(db);
   const perCard = new Map<string, { reviews: number; correct: number }>();
   for (const r of reviews) {
     const s = perCard.get(r.cardId) ?? { reviews: 0, correct: 0 };
@@ -344,25 +415,28 @@ export function stats(db: Db, now = new Date()): TrainingStats {
     return { reviews: total, accuracy: total ? right / total : null };
   };
 
+  // Counted without building each card (a large repertoire has thousands): a repertoire card counts
+  // when its position can be reached from the start.
+  const reachable = cards.filter((c) => c.targetType === 'repertoire_move' && details.depth(c) !== undefined);
   const byRepertoire = listRepertoires(db).map((r) => {
-    const ids = cardDetails.filter((d) => d.kind === 'repertoire_move' && d.repertoire.id === r.id).map((d) => d.card.id);
+    const ids = reachable.filter((c) => details.repertoireOf(c) === r.id).map((c) => c.id);
     return { id: r.id, name: r.name, color: r.color, cards: ids.length, ...accuracy(ids) };
   });
-  const positionIds = cardDetails.filter((d) => d.kind === 'saved_position').map((d) => d.card.id);
+  const positionIds = cards.filter((c) => c.targetType === 'saved_position').map((c) => c.id);
 
-  const weakest = cardDetails
-    .map((d) => {
-      const s = perCard.get(d.card.id);
-      if (!s || s.reviews === 0) return null;
-      const label =
-        d.kind === 'repertoire_move'
-          ? `${d.repertoire.name}: ${[...d.line, `(${d.answer.san})`].join(' ')}`
-          : d.saved.title;
-      return { cardId: d.card.id, label, lapses: d.card.lapses, reviews: s.reviews, accuracy: s.correct / s.reviews };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null && x.accuracy < 1)
-    .sort((a, b) => a.accuracy - b.accuracy || b.lapses - a.lapses)
-    .slice(0, 10);
+  // The cards most often missed, built only for the ten shown.
+  const missed = cards
+    .map((card) => ({ card, s: perCard.get(card.id) }))
+    .filter((m): m is { card: CardRow; s: { reviews: number; correct: number } } => !!m.s && m.s.reviews > 0 && m.s.correct < m.s.reviews)
+    .sort((a, b) => a.s.correct / a.s.reviews - b.s.correct / b.s.reviews || b.card.lapses - a.card.lapses);
+  const weakest: { cardId: string; label: string; lapses: number; reviews: number; accuracy: number }[] = [];
+  for (const { card, s } of missed) {
+    if (weakest.length >= 10) break;
+    const d = details.make(card);
+    if (!d) continue;
+    const label = d.kind === 'repertoire_move' ? `${d.repertoire.name}: ${[...d.line, `(${d.answer.san})`].join(' ')}` : d.saved.title;
+    weakest.push({ cardId: card.id, label, lapses: card.lapses, reviews: s.reviews, accuracy: s.correct / s.reviews });
+  }
 
   return { days, byRepertoire, positions: { cards: positionIds.length, ...accuracy(positionIds) }, weakest };
 }

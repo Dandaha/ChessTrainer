@@ -1,7 +1,7 @@
 import { collapseWhitespace, shapeCommands } from './annotations.ts';
 import type { Color } from './board.ts';
-import { START_FEN, positionKey } from './positionKey.ts';
-import { type Game, type MoveNode, addMove, createGame, isWhiteMove, moveNumber, playMove, setComment } from './tree.ts';
+import { START_FEN, normalizeFen, positionKey } from './positionKey.ts';
+import { type Game, type MoveNode, addMove, createGame, isWhiteMove, moveNumber, playMove, plyFromFen, setComment } from './tree.ts';
 
 /**
  * A repertoire is a graph, not a tree: each move is an edge from one position
@@ -113,27 +113,29 @@ export interface RepTreeNode {
  */
 export function repertoireTree(edges: RepEdge[], startFen: string = START_FEN): RepTreeNode[] {
   const byFrom = edgesByFrom(edges);
-  const seen = new Set<string>([positionKey(startFen)]);
-  const root = createGame(startFen).root;
+  const startKey = positionKey(startFen);
+  const seen = new Set<string>([startKey]);
+  const halfmove = Number(normalizeFen(startFen).split(' ')[4]) || 0;
 
-  // Breadth first, so the shortest move order to a position is the one expanded.
+  // Breadth first, so the shortest move order to a position is the one expanded. Each move already
+  // knows the position it leads to, so a node's FEN is that key and the move counters, with no need
+  // to play the move again (on a repertoire of thousands of moves that took seconds).
   const roots: RepTreeNode[] = [];
-  const queue: { fen: string; ply: number; into: RepTreeNode[] }[] = [{ fen: startFen, ply: root.ply, into: roots }];
-  while (queue.length) {
-    const { fen, ply, into } = queue.shift()!;
-    for (const edge of byFrom.get(positionKey(fen)) ?? []) {
-      let next: string;
-      try {
-        next = playMove({ ...root, fen, ply }, edge.san).fen;
-      } catch {
-        continue; // an edge whose move no longer fits its position is skipped
-      }
+  const queue: { key: string; ply: number; halfmove: number; into: RepTreeNode[] }[] = [
+    { key: startKey, ply: plyFromFen(startFen), halfmove, into: roots },
+  ];
+  for (let i = 0; i < queue.length; i += 1) {
+    const { key, ply, halfmove: clock, into } = queue[i]!;
+    for (const edge of byFrom.get(key) ?? []) {
+      // The 50-move clock starts again after a pawn move (SAN starting with a file) or a capture.
+      const nextClock = /^[a-h]|x/.test(edge.san) ? 0 : clock + 1;
+      const fen = `${edge.toKey} ${nextClock} ${Math.floor((ply + 1) / 2) + 1}`;
       const transposition = seen.has(edge.toKey);
-      const node: RepTreeNode = { edge, fen: next, ply: ply + 1, children: [], transposition };
+      const node: RepTreeNode = { edge, fen, ply: ply + 1, children: [], transposition };
       into.push(node);
       if (!transposition) {
         seen.add(edge.toKey);
-        queue.push({ fen: next, ply: ply + 1, into: node.children });
+        queue.push({ key: edge.toKey, ply: ply + 1, halfmove: nextClock, into: node.children });
       }
     }
   }

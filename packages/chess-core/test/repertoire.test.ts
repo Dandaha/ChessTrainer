@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseGame, writePgn } from '../pgn.ts';
-import { positionKey } from '../positionKey.ts';
+import { normalizeFen, positionKey } from '../positionKey.ts';
+import { type MoveNode } from '../tree.ts';
 import {
   type RepEdge,
   checkGame,
@@ -103,6 +104,29 @@ describe('the repertoire graph', () => {
     const nf6 = edges.find((e) => e.san === 'Nf6')!;
     const cut = unreachableEdges(edges.filter((e) => e !== nf6));
     expect(cut.map((e) => e.san)).toEqual(['c4', 'e6', 'Nc3', 'Nf3']);
+  });
+});
+
+describe('the repertoire tree', () => {
+  it('gives every node the FEN the moves reach, move counters included, without playing them', () => {
+    // Pawn moves and captures reset the 50-move clock; piece moves and castling count it up.
+    const pgn = '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 (3... Nf6 4. O-O Nxe4 5. Re1) 4. Bxc6 dxc6 5. O-O f6 6. d4 exd4 7. Nxd4 c5 8. Nb3 Qxd1 9. Rxd1 *';
+    const game = parseGame(pgn);
+    const expected = new Map<string, string>();
+    const walk = (node: MoveNode) => {
+      expected.set(positionKey(node.fen), normalizeFen(node.fen));
+      node.children.forEach(walk);
+    };
+    walk(game.root);
+    const fens: string[] = [];
+    const collect = (nodes: ReturnType<typeof repertoireTree>) =>
+      nodes.forEach((n) => {
+        fens.push(n.fen);
+        collect(n.children);
+      });
+    collect(repertoireTree(store(pgn, 'white')));
+    expect(fens.length).toBe(expected.size - 1);
+    for (const fen of fens) expect(fen).toBe(expected.get(positionKey(fen)));
   });
 });
 
