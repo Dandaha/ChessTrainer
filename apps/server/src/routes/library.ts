@@ -8,7 +8,7 @@ import {
   importGames,
   listGames,
   saveGame,
-  updateGameMeta,
+  updateGame,
 } from '../../db/games.ts';
 import {
   type Category,
@@ -83,8 +83,7 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
     const { id } = req.params as { id: string };
     const body = parseBody(bodies.gameUpdate, req.body);
     if (!getGame(db, id)) return reply.code(404).send({ error: 'No such game.' });
-    if (body.pgn) saveGame(db, { id, pgn: body.pgn });
-    updateGameMeta(db, id, body);
+    updateGame(db, id, body);
     return getGame(db, id);
   });
 

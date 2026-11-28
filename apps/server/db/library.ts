@@ -5,15 +5,18 @@ import { findOrCreatePosition } from './positions.ts';
 import {
   collectionGames,
   collections,
+  conceptLinks,
   concepts,
   games,
   positionSetItems,
   positionSets,
+  repertoireMoves,
   repertoires,
   savedPositions,
   settings,
   taggings,
   tags,
+  trainingCards,
 } from './schema.ts';
 import { ensurePositionCategory } from './categories.ts';
 import { dropTaggings, setTags, tagsFor } from './tags.ts';
@@ -195,7 +198,14 @@ function categoryName(db: Db, category: string | null | undefined): string | nul
   return category ? ensurePositionCategory(db, category) : category === '' ? null : category;
 }
 
+function checkSets(db: Db, setIds: string[] | undefined): void {
+  if (!setIds?.length) return;
+  const known = new Set(db.select({ id: positionSets.id }).from(positionSets).where(inArray(positionSets.id, setIds)).all().map((r) => r.id));
+  if (setIds.some((setId) => !known.has(setId))) throw new LibraryInputError('No such position set.');
+}
+
 export function createSavedPosition(db: Db, input: SavedPositionInput): SavedPosition {
+  checkSets(db, input.setIds);
   const position = findOrCreatePosition(db, input.fen);
   const category = categoryName(db, input.category);
   const turn = input.fen.trim().split(/\s+/)[1] === 'b' ? 'black' : 'white';
@@ -226,17 +236,27 @@ export function createSavedPosition(db: Db, input: SavedPositionInput): SavedPos
   return getSavedPosition(db, id)!;
 }
 
+/** A request naming something that is not there; the route answers 400 with the message. */
+export class LibraryInputError extends Error {
+  readonly statusCode = 400;
+}
+
+/** Changes a saved position: its fields, tags and sets together, in one transaction. */
 export function updateSavedPosition(db: Db, id: string, input: Partial<Omit<SavedPositionInput, 'fen'>>): SavedPosition | undefined {
   const { tags: tagNames, setIds, ...fields } = input;
-  if ('category' in fields) fields.category = categoryName(db, fields.category);
-  db.update(savedPositions).set({ ...fields, updatedAt: now() }).where(eq(savedPositions.id, id)).run();
-  if (tagNames) setTags(db, 'saved_position', id, tagNames);
-  if (setIds) {
-    db.delete(positionSetItems)
-      .where(and(eq(positionSetItems.savedPositionId, id), setIds.length ? notInArray(positionSetItems.setId, setIds) : undefined))
-      .run();
-    addToSets(db, id, setIds);
-  }
+  checkSets(db, setIds);
+  db.transaction((tx) => {
+    const t = tx as unknown as Db;
+    if ('category' in fields) fields.category = categoryName(t, fields.category);
+    t.update(savedPositions).set({ ...fields, updatedAt: now() }).where(eq(savedPositions.id, id)).run();
+    if (tagNames) setTags(t, 'saved_position', id, tagNames);
+    if (setIds) {
+      t.delete(positionSetItems)
+        .where(and(eq(positionSetItems.savedPositionId, id), setIds.length ? notInArray(positionSetItems.setId, setIds) : undefined))
+        .run();
+      addToSets(t, id, setIds);
+    }
+  });
   return getSavedPosition(db, id);
 }
 
@@ -489,8 +509,30 @@ export function purgeTrash(db: Db, olderThanDays = 30): number {
     const gone = (rows: { id: string }[]) => rows.map((r) => r.id);
     const gameIds = gone(tx.select({ id: games.id }).from(games).where(lt(games.deletedAt, cutoff)).all());
     const savedIds = gone(tx.select({ id: savedPositions.id }).from(savedPositions).where(lt(savedPositions.deletedAt, cutoff)).all());
+    const conceptIds = gone(tx.select({ id: concepts.id }).from(concepts).where(lt(concepts.deletedAt, cutoff)).all());
+    // A purged repertoire takes its moves with it (cascade); their links and cards must go too.
+    const moveIds = gone(
+      tx
+        .select({ id: repertoireMoves.id })
+        .from(repertoireMoves)
+        .innerJoin(repertoires, eq(repertoires.id, repertoireMoves.repertoireId))
+        .where(lt(repertoires.deletedAt, cutoff))
+        .all(),
+    );
     dropTaggings(tx as unknown as Db, 'game', gameIds);
     dropTaggings(tx as unknown as Db, 'saved_position', savedIds);
+    // Links and training cards point at their target by type and id, with no foreign key to clear them.
+    const targets = [
+      ['game', gameIds],
+      ['saved_position', savedIds],
+      ['concept', conceptIds],
+      ['repertoire_move', moveIds],
+    ] as const;
+    for (const [type, ids] of targets) {
+      if (!ids.length) continue;
+      tx.delete(conceptLinks).where(and(eq(conceptLinks.targetType, type), inArray(conceptLinks.targetId, ids))).run();
+      if (type !== 'game') tx.delete(trainingCards).where(and(eq(trainingCards.targetType, type), inArray(trainingCards.targetId, ids))).run();
+    }
     for (const table of Object.values(TRASH_TABLES)) {
       purged += tx.delete(table).where(lt(table.deletedAt, cutoff)).run().changes;
     }

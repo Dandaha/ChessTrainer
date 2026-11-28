@@ -275,16 +275,27 @@ export function saveGame(db: Db, input: { id?: string; pgn: string }): string {
   });
 }
 
-export function updateGameMeta(
+/**
+ * Changes a library game: its moves (PGN), notes, "my colour" and tags, all in one transaction, so a
+ * change that fails part-way leaves the game as it was.
+ */
+export function updateGame(
   db: Db,
   id: string,
-  meta: { notes?: string | null; tags?: string[]; myColor?: 'white' | 'black' | null },
+  changes: { pgn?: string; notes?: string | null; tags?: string[]; myColor?: 'white' | 'black' | null },
 ): void {
-  const set: Partial<typeof games.$inferInsert> = { updatedAt: new Date().toISOString() };
-  if (meta.notes !== undefined) set.notes = meta.notes;
-  if (meta.myColor !== undefined) set.myColor = meta.myColor;
-  db.update(games).set(set).where(eq(games.id, id)).run();
-  if (meta.tags) setTags(db, 'game', id, meta.tags);
+  // Parsed before anything is written: a PGN that does not read stops here with a 400.
+  const game = changes.pgn ? parseGame(changes.pgn) : null;
+  const writer = positionWriter(db);
+  db.transaction((tx) => {
+    const set: Partial<typeof games.$inferInsert> = { updatedAt: new Date().toISOString() };
+    if (game) Object.assign(set, { pgn: writePgn(game), ...columnsFor(game) });
+    if (changes.notes !== undefined) set.notes = changes.notes;
+    if (changes.myColor !== undefined) set.myColor = changes.myColor;
+    tx.update(games).set(set).where(eq(games.id, id)).run();
+    if (game) writer.write(id, game);
+    if (changes.tags) setTags(tx as unknown as Db, 'game', id, changes.tags);
+  });
 }
 
 function positionIdFor(db: Db, fen: string): string | undefined {
