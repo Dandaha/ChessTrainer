@@ -72,7 +72,8 @@ export async function startLocalServer(options: LocalServerOptions): Promise<{ u
   backupIfDue(db, backupFolder);
   purgeTrash(db);
   const engines = new EngineService(db);
-  const app = buildApp(db, engines);
+  // Warnings and server errors go to server.log in the data folder, where a problem can be traced.
+  const app = buildApp(db, engines, undefined, { logFile: join(options.dataDir, 'server.log') });
 
   // Stockfish comes with the app; Settings can still point to another binary.
   const stockfish = options.stockfishDir && !process.env.STOCKFISH_PATH ? pickStockfish(options.stockfishDir) : Promise.resolve(null);

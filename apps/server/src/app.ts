@@ -1,4 +1,5 @@
 import { InvalidFenError, PgnParseError } from '@chess/chess-core';
+import { renameSync, statSync } from 'node:fs';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Db } from '../db/client.ts';
 import { countPositions } from '../db/positions.ts';
@@ -18,11 +19,16 @@ export function buildApp(
   db: Db,
   engines: EngineService = new EngineService(db),
   coachClient?: (apiKey: string) => StreamingClient,
-  /** Where backups go; beside the database file unless given (tests give a temporary folder). */
-  options: { backupFolder?: string } = {},
+  options: {
+    /** Where backups go; beside the database file unless given (tests give a temporary folder). */
+    backupFolder?: string;
+    /** A file for warnings and server errors (the installed app's server.log); the console otherwise. */
+    logFile?: string;
+  } = {},
 ): FastifyInstance {
+  if (options.logFile) keepLogSmall(options.logFile);
   // Large PGN files arrive in one request.
-  const app = Fastify({ logger: { level: 'warn' }, bodyLimit: 64 * 1024 * 1024 });
+  const app = Fastify({ logger: { level: 'warn', ...(options.logFile ? { file: options.logFile } : {}) }, bodyLimit: 64 * 1024 * 1024 });
 
   // Only the app's own pages may use the API. A web page elsewhere cannot, not even through DNS
   // rebinding (a hostile name that resolves to 127.0.0.1): the Host must be a local name, and the
@@ -77,5 +83,16 @@ function isLocalOrigin(origin: string): boolean {
     return url.protocol === 'http:' && LOCAL_NAMES.has(url.hostname.toLowerCase());
   } catch {
     return false;
+  }
+}
+
+const LOG_LIMIT_BYTES = 1_048_576;
+
+/** Past 1 MB the log starts afresh, keeping the previous one as server.log.1. */
+function keepLogSmall(file: string): void {
+  try {
+    if (statSync(file).size > LOG_LIMIT_BYTES) renameSync(file, `${file}.1`);
+  } catch {
+    // No log yet.
   }
 }

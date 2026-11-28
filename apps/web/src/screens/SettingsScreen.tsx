@@ -88,8 +88,9 @@ export function SettingsScreen() {
           <section className="space-y-2">
             <h2 className="font-semibold">Your data</h2>
             <p className="text-sm text-muted">
-              Your games, positions, repertoires, concepts, training and the API key are kept in this folder. Copy it
-              somewhere safe to back everything up; uninstalling the app leaves it in place.
+              Your games, positions, repertoires, concepts, training and the API key are kept in this folder;
+              uninstalling the app leaves it in place. If something goes wrong, server.log and updates.log there say
+              what happened.
             </p>
             <code className="block rounded-md bg-surface-2 px-3 py-2 text-xs break-all">{system.dataDir}</code>
           </section>
