@@ -13,6 +13,7 @@ import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql
 import type { Db } from './client.ts';
 import { collectionGames, collections, gamePositions, games, positions, taggings, tags } from './schema.ts';
 import { setTags, tagsFor } from './tags.ts';
+import { containsText } from './search.ts';
 
 export type GameSource = 'file' | 'lichess' | 'chesscom' | 'manual';
 
@@ -279,27 +280,26 @@ function positionIdFor(db: Db, fen: string): string | undefined {
 
 function conditions(db: Db, f: GameFilters): SQL[] | null {
   const where: SQL[] = [isNull(games.deletedAt)];
-  const contains = (value: string) => `%${value.replace(/[%_]/g, (c) => `\\${c}`)}%`;
   if (f.q) {
-    const q = contains(f.q);
+    const q = f.q;
     where.push(
       or(
-        like(games.white, q),
-        like(games.black, q),
-        like(games.event, q),
-        like(games.openingName, q),
-        like(games.eco, q),
-        like(games.notes, q),
+        containsText(games.white, q),
+        containsText(games.black, q),
+        containsText(games.event, q),
+        containsText(games.openingName, q),
+        containsText(games.eco, q),
+        containsText(games.notes, q),
       )!,
     );
   }
-  if (f.player) where.push(or(like(games.white, contains(f.player)), like(games.black, contains(f.player)))!);
+  if (f.player) where.push(or(containsText(games.white, f.player), containsText(games.black, f.player))!);
   if (f.opening) {
     const code = f.opening.trim().toUpperCase();
     where.push(
       /^[A-E]\d{0,2}$/.test(code)
         ? like(games.eco, `${code}%`)
-        : or(like(games.openingName, contains(f.opening)), like(games.eco, contains(f.opening)))!,
+        : or(containsText(games.openingName, f.opening), containsText(games.eco, f.opening))!,
     );
   }
   if (f.result) where.push(eq(games.result, f.result));

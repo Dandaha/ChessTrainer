@@ -23,6 +23,8 @@ function freshDb() {
   return db;
 }
 
+const FEN_START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
 const TWO_GAMES = `[Event "Club"]
 [Site "https://lichess.org/abcd1234"]
 [Date "2026.03.01"]
@@ -84,6 +86,22 @@ describe('the game library', () => {
     const chesscom = '[Site "Chess.com"]\n[Link "https://www.chess.com/game/live/123456789"]\n[White "A"]\n[Black "B"]\n\n1. e4 *\n';
     importGames(db, chesscom, { source: 'chesscom' });
     expect(importGames(db, chesscom.replace('1. e4 *', '1. e4 e5 *'), { source: 'chesscom' }).duplicates).toBe(1);
+  });
+
+  it('searches literally and without regard to case in any alphabet', () => {
+    const db = freshDb();
+    const game = (white: string, black: string, moves: string) => `[White "${white}"]\n[Black "${black}"]\n\n${moves} *\n`;
+    importGames(db, [game('tyler_920', 'Каспаров', '1. e4 e5'), game('tylerX920', 'Müller', '1. d4 d5'), game('A 50% chance', 'B', '1. c4 c5')].join('\n'), {
+      source: 'file',
+    });
+    expect(listGames(db, { q: 'tyler_920' }).games.map((g) => g.white)).toEqual(['tyler_920']);
+    expect(listGames(db, { player: 'каспаров' }).total).toBe(1);
+    expect(listGames(db, { player: 'MÜLLER' }).total).toBe(1);
+    expect(listGames(db, { q: '50%' }).total).toBe(1);
+    expect(listGames(db, { q: '%' }).total).toBe(1);
+    createSavedPosition(db, { fen: FEN_START, title: 'pawn_storm 50% idea' });
+    expect(listSavedPositions(db, { q: 'PAWN_STORM' }).total).toBe(1);
+    expect(listSavedPositions(db, { q: 'pawnXstorm' }).total).toBe(0);
   });
 
   it('reports a broken game and imports the rest', () => {

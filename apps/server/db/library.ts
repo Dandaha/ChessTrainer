@@ -1,5 +1,5 @@
 import { positionKey } from '@chess/chess-core';
-import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, like, lt, ne, notInArray, or, sql } from 'drizzle-orm';
+import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, notInArray, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { findOrCreatePosition } from './positions.ts';
 import {
@@ -17,6 +17,7 @@ import {
 } from './schema.ts';
 import { ensurePositionCategory } from './categories.ts';
 import { dropTaggings, setTags, tagsFor } from './tags.ts';
+import { containsText } from './search.ts';
 
 /**
  * Collections of games, saved positions, position sets, settings and the
@@ -24,7 +25,6 @@ import { dropTaggings, setTags, tagsFor } from './tags.ts';
  */
 
 const now = () => new Date().toISOString();
-const contains = (value: string) => `%${value.replace(/[%_]/g, (c) => `\\${c}`)}%`;
 
 // --- Collections -------------------------------------------------------------
 
@@ -248,20 +248,20 @@ export function getSavedPosition(db: Db, id: string): SavedPosition | undefined 
 export function listSavedPositions(db: Db, f: SavedPositionFilters = {}): { total: number; positions: SavedPosition[] } {
   const where: SQL[] = [isNull(savedPositions.deletedAt)];
   if (f.q) {
-    const q = contains(f.q);
+    const q = f.q;
     where.push(
       or(
-        like(savedPositions.title, q),
-        like(savedPositions.notesMd, q),
-        like(savedPositions.keyIdea, q),
-        like(savedPositions.sourceLabel, q),
+        containsText(savedPositions.title, q),
+        containsText(savedPositions.notesMd, q),
+        containsText(savedPositions.keyIdea, q),
+        containsText(savedPositions.sourceLabel, q),
         inArray(
           savedPositions.id,
           db
             .select({ id: taggings.targetId })
             .from(taggings)
             .innerJoin(tags, eq(tags.id, taggings.tagId))
-            .where(and(eq(taggings.targetType, 'saved_position'), like(tags.name, q))),
+            .where(and(eq(taggings.targetType, 'saved_position'), containsText(tags.name, q))),
         ),
       )!,
     );

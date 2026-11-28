@@ -1,5 +1,5 @@
 import { positionKey } from '@chess/chess-core';
-import { type SQL, and, desc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
+import { type SQL, and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { type GameSummary, listGames } from './games.ts';
 import { type SavedPosition, getSavedPosition } from './library.ts';
@@ -7,6 +7,7 @@ import { findOrCreatePosition } from './positions.ts';
 import { getRepertoire } from './repertoire.ts';
 import { CONCEPT_CATEGORIES, CONCEPT_LINK_TARGETS, conceptLinks, concepts, positions, repertoireMoves, savedPositions, taggings, tags } from './schema.ts';
 import { setTags, tagsFor } from './tags.ts';
+import { containsText } from './search.ts';
 
 export type ConceptCategory = (typeof CONCEPT_CATEGORIES)[number];
 export type ConceptLinkTarget = (typeof CONCEPT_LINK_TARGETS)[number];
@@ -41,7 +42,6 @@ export interface ConceptInput {
 }
 
 const now = () => new Date().toISOString();
-const contains = (value: string) => `%${value.replace(/[%_]/g, (c) => `\\${c}`)}%`;
 
 const summaryColumns = {
   id: concepts.id,
@@ -59,8 +59,8 @@ function toSummaries(db: Db, rows: { id: string; title: string; aliases: string;
 export function listConcepts(db: Db, f: { q?: string; category?: ConceptCategory; tag?: string } = {}): ConceptSummary[] {
   const where: SQL[] = [isNull(concepts.deletedAt)];
   if (f.q) {
-    const q = contains(f.q);
-    where.push(or(like(concepts.title, q), like(concepts.aliases, q), like(concepts.bodyMd, q), like(concepts.keySigns, q))!);
+    const q = f.q;
+    where.push(or(containsText(concepts.title, q), containsText(concepts.aliases, q), containsText(concepts.bodyMd, q), containsText(concepts.keySigns, q))!);
   }
   if (f.category) where.push(eq(concepts.category, f.category));
   if (f.tag) {

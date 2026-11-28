@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { type BetterSQLite3Database, drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { fold } from './search.ts';
 import * as schema from './schema.ts';
 
 /** All SQL in the app goes through this folder. */
@@ -27,6 +28,8 @@ export function openDatabase(path: string = databasePath()): { db: Db; close: ()
   const sqlite = new Database(path);
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
+  // Case folding for search in every alphabet (db/search.ts).
+  sqlite.function('fold', { deterministic: true }, (value: unknown) => (typeof value === 'string' ? fold(value) : value));
   return { db: drizzle(sqlite, { schema }), close: () => sqlite.close() };
 }
 
