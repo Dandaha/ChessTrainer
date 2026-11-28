@@ -187,45 +187,57 @@ class Lexer {
   }
 }
 
-/** Reads every game in a PGN text. Games that fail are reported and skipped. */
-export function parsePgn(text: string): ParseResult {
+/**
+ * Reads the games of a PGN text one at a time, in order: each is a game or the reason it could not be
+ * read. Lets a long import work in batches (and let other work in between) instead of in one go.
+ */
+export function* readPgnGames(text: string): Generator<{ game: Game } | { error: PgnError }> {
   const lexer = new Lexer(text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'));
-  const games: Game[] = [];
-  const errors: PgnError[] = [];
+  let index = 0;
   let chunk: Token[] = [];
   let sawMovetext = false;
 
-  const flush = () => {
+  function* flush(): Generator<{ game: Game } | { error: PgnError }> {
     if (chunk.length) {
-      const gameIndex = games.length + errors.length;
+      const gameIndex = index++;
       try {
-        games.push(buildGame(chunk));
+        yield { game: buildGame(chunk) };
       } catch (error) {
-        errors.push(toPgnError(error, gameIndex, chunk[0]?.line ?? lexer.line));
+        yield { error: toPgnError(error, gameIndex, chunk[0]?.line ?? lexer.line) };
       }
     }
     chunk = [];
     sawMovetext = false;
-  };
+  }
 
   for (;;) {
     let token: Token | null;
     try {
       token = lexer.next();
     } catch (error) {
-      errors.push(toPgnError(error, games.length + errors.length, lexer.line));
+      yield { error: toPgnError(error, index++, lexer.line) };
       chunk = [];
       sawMovetext = false;
       lexer.skipToNextGame();
       continue;
     }
     if (!token) break;
-    if (token.kind === 'tag' && sawMovetext) flush();
+    if (token.kind === 'tag' && sawMovetext) yield* flush();
     chunk.push(token);
     if (token.kind !== 'tag') sawMovetext = true;
-    if (token.kind === 'result') flush();
+    if (token.kind === 'result') yield* flush();
   }
-  flush();
+  yield* flush();
+}
+
+/** Reads every game in a PGN text. Games that fail are reported and skipped. */
+export function parsePgn(text: string): ParseResult {
+  const games: Game[] = [];
+  const errors: PgnError[] = [];
+  for (const item of readPgnGames(text)) {
+    if ('game' in item) games.push(item.game);
+    else errors.push(item.error);
+  }
   return { games, errors };
 }
 

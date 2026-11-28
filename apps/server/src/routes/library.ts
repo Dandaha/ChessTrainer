@@ -5,7 +5,7 @@ import {
   type GameFilters,
   gamesAtPosition,
   getGame,
-  importGames,
+  importGamesInBatches,
   listGames,
   saveGame,
   updateGame,
@@ -102,21 +102,21 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
 
   app.post('/api/games/import', async (req) => {
     const body = parseBody(bodies.pgnImport, req.body);
-    return importGames(db, body.pgn, { source: 'file', myNames: myNames(), collectionId: body.collectionId });
+    return importGamesInBatches(db, body.pgn, { source: 'file', myNames: myNames(), collectionId: body.collectionId });
   });
 
   app.post('/api/games/import/lichess', async (req) => {
     const body = parseBody(bodies.accountImport, req.body);
     const pgn = await fetchLichessGames(body.username, body.max ?? 500, process.env.LICHESS_TOKEN || undefined);
     if (body.mine) updateSettings(db, { lichessUsername: body.username.trim() });
-    return importGames(db, pgn, { source: 'lichess', myNames: myNames(), collectionId: body.collectionId });
+    return importGamesInBatches(db, pgn, { source: 'lichess', myNames: myNames(), collectionId: body.collectionId });
   });
 
   app.post('/api/games/import/chesscom', async (req) => {
     const body = parseBody(bodies.accountImport, req.body);
     const pgn = await fetchChesscomGames(body.username, body.max ?? 500);
     if (body.mine) updateSettings(db, { chesscomUsername: body.username.trim() });
-    return importGames(db, pgn, { source: 'chesscom', myNames: myNames(), collectionId: body.collectionId });
+    return importGamesInBatches(db, pgn, { source: 'chesscom', myNames: myNames(), collectionId: body.collectionId });
   });
 
   app.get('/api/positions/games', async (req) => {

@@ -7,6 +7,7 @@ import {
   parseGame,
   parsePgn,
   positionKey,
+  readPgnGames,
   writePgn,
 } from '@chess/chess-core';
 import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from 'drizzle-orm';
@@ -187,12 +188,11 @@ function positionWriter(db: Db) {
 }
 
 /** Imports every game in a PGN text. Games already in the library are skipped. */
-export function importGames(db: Db, text: string, options: ImportOptions): ImportReport {
-  const { games: parsed, errors } = parsePgn(text);
-  const report: ImportReport = { imported: 0, duplicates: 0, variants: 0, errors, gameIds: [] };
+/** Writes a batch of parsed games in one transaction, adding to the report. */
+function writeGames(db: Db, parsed: Game[], options: ImportOptions, report: ImportReport): void {
   const writer = positionWriter(db);
-
   db.transaction((tx) => {
+    // Appended after the collection's last game, which a previous batch may have just added.
     let order = options.collectionId
       ? (tx
           .select({ n: sql<number>`coalesce(max(${collectionGames.sortOrder}), 0)` })
@@ -246,6 +246,39 @@ export function importGames(db: Db, text: string, options: ImportOptions): Impor
       }
     }
   });
+}
+
+/** Imports every game of a PGN text in one go: for small texts and tests. */
+export function importGames(db: Db, text: string, options: ImportOptions): ImportReport {
+  const { games: parsed, errors } = parsePgn(text);
+  const report: ImportReport = { imported: 0, duplicates: 0, variants: 0, errors, gameIds: [] };
+  writeGames(db, parsed, options, report);
+  return report;
+}
+
+/** How long one batch may keep the server busy before it lets other requests through. */
+const BATCH_MS = 100;
+
+/**
+ * Imports a PGN text in batches, each in its own transaction, handing the server back between them:
+ * a library of thousands of games comes in without freezing the app, and the games stay findable as
+ * they arrive. A batch that fails leaves the batches before it imported.
+ */
+export async function importGamesInBatches(db: Db, text: string, options: ImportOptions): Promise<ImportReport> {
+  const report: ImportReport = { imported: 0, duplicates: 0, variants: 0, errors: [], gameIds: [] };
+  let batch: Game[] = [];
+  let started = performance.now();
+  for (const item of readPgnGames(text)) {
+    if ('error' in item) report.errors.push(item.error);
+    else batch.push(item.game);
+    if (performance.now() - started >= BATCH_MS) {
+      writeGames(db, batch, options, report);
+      batch = [];
+      await new Promise((resolve) => setImmediate(resolve));
+      started = performance.now();
+    }
+  }
+  writeGames(db, batch, options, report);
   return report;
 }
 
