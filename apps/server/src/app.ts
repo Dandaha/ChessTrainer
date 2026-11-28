@@ -20,6 +20,17 @@ export function buildApp(
   // Large PGN files arrive in one request.
   const app = Fastify({ logger: { level: 'warn' }, bodyLimit: 64 * 1024 * 1024 });
 
+  // Only the app's own pages may use the API. A web page elsewhere cannot, not even through DNS
+  // rebinding (a hostile name that resolves to 127.0.0.1): the Host must be a local name, and the
+  // Origin, which browsers send with every write and every cross-site read, must be local too.
+  app.addHook('onRequest', async (req, reply) => {
+    if (!isLocalHost(req.headers.host)) return reply.code(403).send({ error: 'This server only answers Chess Workspace itself.' });
+    const origin = req.headers.origin;
+    if (origin !== undefined && !isLocalOrigin(origin)) return reply.code(403).send({ error: 'This server only answers Chess Workspace itself.' });
+  });
+  // Bodies are JSON; a plain-text body is what a cross-site form could send.
+  app.removeContentTypeParser('text/plain');
+
   app.setErrorHandler((error, _req, reply) => {
     if (error instanceof ImportSourceError) return reply.code(error.status).send({ error: error.message });
     if (error instanceof PgnParseError || error instanceof InvalidFenError) {
@@ -42,4 +53,25 @@ export function buildApp(
   coachRoutes(app, db, engines, coachClient);
   app.addHook('onClose', async () => engines.shutdown());
   return app;
+}
+
+const LOCAL_NAMES = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+/** "127.0.0.1:47123", "localhost", "[::1]:5173" — never a name that only resolves to this machine. */
+export function isLocalHost(host: string | undefined): boolean {
+  if (!host) return false;
+  try {
+    return LOCAL_NAMES.has(new URL(`http://${host}`).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function isLocalOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'http:' && LOCAL_NAMES.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
 }

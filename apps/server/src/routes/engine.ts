@@ -8,6 +8,16 @@ import type { EngineService } from '../engineService.ts';
 /** Phase 4: Stockfish analysis (live and cached) and spaced-repetition training. */
 export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineService): void {
   app.get('/api/engine/status', async () => engines.status());
+  // Settings tries a path here before saving it, so a wrong one never replaces a working engine.
+  app.post('/api/engine/test', async (req, reply) => {
+    const path = String((req.body as { path?: unknown })?.path ?? '').trim();
+    if (!path) return reply.code(400).send({ error: 'Give the full path of the engine program.' });
+    try {
+      return { name: await engines.test(path) };
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof EngineError ? error.message : `${path} could not be started.` });
+    }
+  });
 
   app.post('/api/engine/evaluate', async (req) => {
     const body = req.body as { fen: string; depth?: number; multipv?: number };

@@ -196,6 +196,7 @@ export const api = {
     call<{ repertoire: RepertoireSummary; moves: RepEdge[]; reached: boolean }[]>('GET', `/api/repertoires/at${query({ fen })}`),
   checkGame: (pgn: string, color?: Color) =>
     call<{ repertoire: RepertoireSummary; result: RepertoireCheck; message: string }[]>('POST', '/api/repertoires/check', { pgn, color }),
+  testEngine: (path: string) => call<{ name: string }>('POST', '/api/engine/test', { path }),
   engineStatus: () => call<EngineStatus>('GET', '/api/engine/status'),
   evaluate: (fen: string, depth = 18, multipv = 3) => call<Analysis>('POST', '/api/engine/evaluate', { fen, depth, multipv }),
   engineStreamUrl: (fen: string, multipv = 3) => `/api/engine/stream${query({ fen, multipv })}`,

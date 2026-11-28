@@ -78,6 +78,15 @@ export class EngineService {
     await entry.engine.quit();
   }
 
+  /** Starts the program at `path` once to see that it answers as a UCI engine; returns its name. */
+  async test(path: string): Promise<string> {
+    if (!existsSync(path)) throw new EngineError(`There is no file at ${path}.`);
+    const engine = await Engine.start({ path, threads: 1, hashMb: 16 });
+    const name = engine.name;
+    await engine.quit();
+    return name;
+  }
+
   async status(): Promise<EngineStatus> {
     const path = this.path();
     const fromSettings = getSettings(this.db).enginePath;

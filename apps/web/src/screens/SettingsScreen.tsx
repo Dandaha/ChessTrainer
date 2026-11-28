@@ -149,10 +149,21 @@ function EngineSettings({ settings, onSave }: { settings: Settings | null; onSav
       .catch(() => {});
   }, []);
 
+  // A new path is tried first and saved only if it answers as an engine; an empty one goes back to the
+  // built-in Stockfish.
   const test = async () => {
     setTesting(true);
-    await onSave({ enginePath: path.trim() });
     try {
+      const wanted = path.trim();
+      if (wanted) {
+        try {
+          await api.testEngine(wanted);
+        } catch (error) {
+          setStatus({ configured: true, bundled: false, path: wanted, running: false, name: null, error: `${(error as Error).message} The engine in use is unchanged.` });
+          return;
+        }
+      }
+      await onSave({ enginePath: wanted });
       setStatus(await api.engineStatus());
     } finally {
       setTesting(false);
