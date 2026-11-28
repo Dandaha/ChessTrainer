@@ -242,7 +242,8 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
   }, [outcome, grade, onEnd]);
 
   const onMove = async (from: string, to: string, promotion?: string) => {
-    if (!card || !node || outcome || !ready) return;
+    // While Stockfish checks the answer, the board waits: a second move would land on the card.
+    if (!card || !node || outcome || !ready || checking) return;
     let played: MoveNode;
     try {
       played = playMove(node, promotion ? { from, to, promotion } : { from, to });
@@ -276,25 +277,22 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
     setChecking(true);
     try {
       const result = await api.checkMove(card.saved.fen, played.uci, card.saved.answer);
-      const engineGood = result.engine?.good;
-      const correct = result.answerMatch ?? engineGood ?? false;
-      const engineLine = result.engine
-        ? result.engine.good
-          ? `Stockfish agrees${result.engine.best && result.engine.best !== result.san ? ` (its first choice is ${result.engine.best})` : ''}.`
-          : `Stockfish prefers ${result.engine.best}; ${result.san} gives away ${result.engine.loss >= 50 ? 'the win' : `${result.engine.loss.toFixed(1)} pawns`}.`
-        : result.engineError
-          ? `No engine check: ${result.engineError}`
-          : '';
+      // Right when it is the written answer, or when Stockfish finds it as good: a second mate, or
+      // another move that wins as much, counts, as on Lichess and ChessTempo.
+      const engineGood = result.engine?.good === true;
+      const correct = result.answerMatch === true || engineGood;
       setOutcome({
-        correct: correct || result.answerMatch === true,
+        correct,
         suggested: correct ? 3 : 1,
         message:
-          result.answerMatch === null
-            ? `You played ${result.san}.`
-            : result.answerMatch
-              ? `Right: ${result.san} is your answer.`
-              : `Your answer was ${card.saved.answer}; you played ${result.san}.`,
-        detail: engineLine,
+          result.answerMatch === true
+            ? `Right: ${result.san} is your answer.`
+            : result.answerMatch === false
+              ? engineGood
+                ? `${result.san} works too (your answer was ${card.saved.answer}).`
+                : `Your answer was ${card.saved.answer}; you played ${result.san}.`
+              : `You played ${result.san}.`,
+        detail: engineVerdict(result, card.saved.fen),
       });
     } catch (e) {
       ws.toast((e as Error).message, true);
@@ -410,4 +408,22 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Stockfish's view of the move, in words. Scores come from White's side; they are turned to the
+ * mover's side, so "gives away the win" is said only when a win really turns into something less.
+ */
+function engineVerdict(result: Awaited<ReturnType<typeof api.checkMove>>, fen: string): string {
+  const engine = result.engine;
+  if (!engine) return result.engineError ? `No engine check: ${result.engineError}` : '';
+  if (engine.good) return `Stockfish agrees${engine.best && engine.best !== result.san ? ` (its first choice is ${engine.best})` : ''}.`;
+  const side = fen.split(' ')[1] === 'b' ? -1 : 1;
+  const best = engine.bestScore * side;
+  const played = engine.playedScore * side;
+  const MATE = 50;
+  if (best >= MATE && played >= 3) return `Stockfish prefers ${engine.best}, which mates; ${result.san} still wins, more slowly.`;
+  if (best >= 2 && played < 1) return `Stockfish prefers ${engine.best}; ${result.san} gives away the win.`;
+  if (best > -1 && played <= -2) return `Stockfish prefers ${engine.best}; ${result.san} loses.`;
+  return `Stockfish prefers ${engine.best}; ${result.san} costs ${Math.min(engine.loss, 9.9).toFixed(1)} pawns.`;
 }

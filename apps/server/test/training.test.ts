@@ -6,6 +6,7 @@ import { addLine, createRepertoire } from '../db/repertoire.ts';
 import { engineCache } from '../db/schema.ts';
 import { queue, review, stats, summary } from '../db/training.ts';
 import { buildApp } from '../src/app.ts';
+import { firstAnswerMove } from '../src/routes/engine.ts';
 
 function freshDb() {
   const { db } = openDatabase(':memory:');
@@ -90,6 +91,29 @@ describe.skipIf(!existsSync(STOCKFISH))('the engine through the API', () => {
     expect(right).toMatchObject({ san: 'Rd8#', answerMatch: true, engine: { best: 'Rd8#', good: true } });
     const wrong = (await app.inject({ method: 'POST', url: '/api/training/check', payload: { fen, uci: 'g2g3', answer: 'Rd8#' } })).json();
     expect(wrong).toMatchObject({ san: 'g3', answerMatch: false, engine: { good: false } });
+    // Two rooks, two mates: the one not written down is as good as the answer.
+    const twoRooks = '6k1/5ppp/8/8/8/8/5PPP/RR4K1 w - - 0 1';
+    const other = (await app.inject({ method: 'POST', url: '/api/training/check', payload: { fen: twoRooks, uci: 'b1b8', answer: 'Ra8#' } })).json();
+    expect(other).toMatchObject({ san: 'Rb8#', answerMatch: false, engine: { good: true } });
+    await app.close();
+  });
+});
+
+describe('a written answer', () => {
+  it('is read from its first move, whatever the numbering', () => {
+    expect(firstAnswerMove('Bxh7+ Kxh7 Ng5+')).toBe('Bxh7+');
+    expect(firstAnswerMove('1. e4 e5')).toBe('e4');
+    expect(firstAnswerMove('2... Qh4#')).toBe('Qh4#');
+    expect(firstAnswerMove('2. ... Qh4#')).toBe('Qh4#');
+    expect(firstAnswerMove('   ')).toBeUndefined();
+    expect(firstAnswerMove(null)).toBeUndefined();
+  });
+
+  it('answers 400, not a server error, for an illegal move', async () => {
+    const app = buildApp(freshDb());
+    const check = await app.inject({ method: 'POST', url: '/api/training/check', payload: { fen: START, uci: 'e2e5', answer: 'e4' } });
+    expect(check.statusCode).toBe(400);
+    expect(check.json().error).toBe('That move is not legal in this position.');
     await app.close();
   });
 });

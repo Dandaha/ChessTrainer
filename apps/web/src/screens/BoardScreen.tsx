@@ -405,7 +405,9 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
             sourceGameId: ws.linked?.id ?? null,
             sourcePly: ws.linked ? current.ply : null,
             sourceLabel,
-            answer: current.children[0] ? current.children[0].san : null,
+            // Not the game's next move: in a saved game that is often the very mistake worth saving.
+            // Left empty, training judges the answer with Stockfish.
+            answer: null,
           }}
           onClose={() => setDialog(null)}
           onSaved={(title) => {

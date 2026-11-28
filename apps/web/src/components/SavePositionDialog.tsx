@@ -146,7 +146,13 @@ export function SavePositionDialog({
             </label>
             <label className="space-y-1">
               <span className="text-muted">Answer (SAN)</span>
-              <input aria-label="Answer" value={answer} onChange={(e) => setAnswer(e.target.value)} className={field} />
+              <input
+                aria-label="Answer"
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                placeholder="e.g. Bxh7+ (empty: Stockfish judges)"
+                className={field}
+              />
             </label>
             <label className="space-y-1">
               <span className="text-muted">Add to set</span>

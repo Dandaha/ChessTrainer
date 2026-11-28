@@ -72,12 +72,16 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
    * against Stockfish when it is set up (a move within half a pawn of the best
    * one counts as good).
    */
-  app.post('/api/training/check', async (req) => {
+  app.post('/api/training/check', async (req, reply) => {
     const body = req.body as { fen: string; uci: string; answer?: string | null };
-    const played = playMove(createGame(body.fen).root, { from: body.uci.slice(0, 2), to: body.uci.slice(2, 4), promotion: body.uci[4] });
-    const clean = (san: string) => san.replace(/[+#!?]/g, '');
-    const firstAnswer = body.answer?.replace(/\d+\.(\.\.)?/g, ' ').trim().split(/\s+/)[0];
-    const answerMatch = firstAnswer ? clean(firstAnswer) === clean(played.san) : null;
+    let played: ReturnType<typeof playMove>;
+    try {
+      played = playMove(createGame(body.fen).root, { from: body.uci.slice(0, 2), to: body.uci.slice(2, 4), promotion: body.uci[4] });
+    } catch {
+      return reply.code(400).send({ error: 'That move is not legal in this position.' });
+    }
+    const firstAnswer = firstAnswerMove(body.answer);
+    const answerMatch = firstAnswer ? cleanSan(firstAnswer) === cleanSan(played.san) : null;
     let engine: { best: string; bestScore: number; playedScore: number; loss: number; good: boolean } | null = null;
     let engineError: string | null = null;
     try {
@@ -97,4 +101,18 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
     }
     return { san: played.san, answerMatch, engine, engineError };
   });
+}
+
+const cleanSan = (san: string) => san.replace(/[+#!?]/g, '');
+
+/**
+ * The first move of a written answer: "Bxh7+ Kxh7 Ng5+", "1. e4", "2... Qh4#" and "2. ... Qh4#" all
+ * work. Move numbers and lone dots are not moves.
+ */
+export function firstAnswerMove(answer: string | null | undefined): string | undefined {
+  return answer
+    ?.trim()
+    .split(/\s+/)
+    .map((token) => token.replace(/^\d+\.+/, ''))
+    .find((token) => token && !/^\.+$/.test(token));
 }
