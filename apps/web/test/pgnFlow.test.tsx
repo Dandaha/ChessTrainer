@@ -95,6 +95,25 @@ describe('PGN import and export', () => {
     expect(exportedPgn()).toContain('[FEN "8/4P3/8/8/8/8/k7/4K3 w - - 0 1"]');
   });
 
+  it('goes into a side line from the keyboard: ↓ picks it at the branch, → enters', () => {
+    render(<App />);
+    openPgn('1. e4 e5 2. Nf3 (2. Bc4 Nf6) 2... Nc6 *');
+    fireEvent.keyDown(window, { key: 'Home' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    const choices = () => screen.getByLabelText('Continuations');
+    expect(choices().textContent).toContain('2.Nf3');
+    expect(choices().textContent).toContain('2.Bc4');
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(moveButton('Bc4').dataset.current).toBe('true');
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(moveButton('Nf6').dataset.current).toBe('true');
+    // Away from a branch, ↑ still goes to the start.
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(screen.queryByLabelText('Continuations')).toBeNull();
+  });
+
   it('says when the game is over and can write the result into the PGN', () => {
     render(<App />);
     openPgn('1. f3 e5 2. g4 *');

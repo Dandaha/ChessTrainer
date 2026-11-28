@@ -1,4 +1,4 @@
-import { type GameEnd, describeGameEnd, gameEnd, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
@@ -106,9 +106,11 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
     const actions: Record<string, () => void> = {
       ArrowLeft: g.back,
       ArrowRight: g.forward,
-      ArrowUp: g.toStart,
+      // At a branch point ↑ and ↓ pick the continuation → follows, as on Lichess; elsewhere they go to
+      // the start and the end, like Home and End.
+      ArrowUp: () => (current.children.length > 1 ? g.choose(-1) : g.toStart()),
       Home: g.toStart,
-      ArrowDown: g.toEnd,
+      ArrowDown: () => (current.children.length > 1 ? g.choose(1) : g.toEnd()),
       End: g.toEnd,
       f: ws.flip,
       '/': () => moveInput.current?.focus(),
@@ -270,6 +272,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 
         <aside className="flex max-h-[calc(100dvh-7rem)] min-h-[24rem] w-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel lg:w-[26rem]">
           <MoveList game={game} currentId={current.id} onSelect={g.goTo} onMenu={(id, x, y) => setMenu({ id, x, y })} />
+          <Branches node={current} choice={g.choice} onEnter={g.goTo} />
           <GameOver end={end} result={game.result} atEnd={!current.children.length} onSetResult={g.setResult} />
           <div className="flex border-t border-line text-sm" role="tablist">
             {tabs.map((t) => (
@@ -443,6 +446,35 @@ function GameOver({ end, result, atEnd, onSetResult }: { end: GameEnd | null; re
           Set the result to {end.result === '1/2-1/2' ? '½–½' : end.result}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * At a branch point, the continuations to choose from: ↑ and ↓ move the choice, → or a click goes
+ * into it. The main line is first.
+ */
+function Branches({ node, choice, onEnter }: { node: MoveNode; choice: number; onEnter(id: string): void }) {
+  if (node.children.length < 2) return null;
+  const white = node.fen.split(' ')[1] === 'w';
+  const number = Number(node.fen.split(' ')[5] ?? 1);
+  return (
+    <div className="border-t border-line px-3 py-1.5 text-sm" aria-label="Continuations">
+      <span className="mr-2 text-xs text-muted">
+        <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>→</kbd> enter:
+      </span>
+      {node.children.map((child, i) => (
+        <button
+          key={child.id}
+          type="button"
+          aria-pressed={i === choice}
+          onClick={() => onEnter(child.id)}
+          className={`mr-1 rounded px-1.5 py-0.5 ${i === choice ? 'bg-selected text-on-selected' : 'hover:bg-surface-2'}`}
+        >
+          {white ? `${number}.` : `${number}...`}
+          {child.san}
+        </button>
+      ))}
     </div>
   );
 }

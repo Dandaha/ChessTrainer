@@ -15,7 +15,7 @@ import {
   promoteVariation,
   toggleNag,
 } from '@chess/chess-core';
-import { useCallback, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 /**
  * The game on the board and where we are in it. The tree is edited in place;
@@ -41,6 +41,10 @@ export interface GameApi {
   goTo(id: string): void;
   back(): void;
   forward(): void;
+  /** At a branch point: which continuation → follows (0 is the main line). */
+  choice: number;
+  /** Picks another continuation at a branch point: +1 the next one down, -1 the one above. */
+  choose(step: 1 | -1): void;
   toStart(): void;
   toEnd(): void;
   /** Plays a line of moves from a node (not necessarily the current one) and shows its end. */
@@ -70,6 +74,9 @@ export function useGame(
 ): GameApi {
   const [game, setGame] = useState<Game>(initial);
   const [currentId, setCurrentId] = useState(() => game.root.id);
+  // Which continuation → follows at a branch point; back to the main line on every new position.
+  const [choice, setChoice] = useState(0);
+  useEffect(() => setChoice(0), [currentId]);
   const [version, bump] = useReducer((n: number) => n + 1, 0);
   const [cleanVersion, setCleanVersion] = useState(-1);
   const undoStack = useRef<Snapshot[]>([]);
@@ -101,8 +108,13 @@ export function useGame(
       if (parent) setCurrentId(parent.id);
     },
     forward: () => {
-      const next = current.children[0];
+      const next = current.children[Math.min(choice, current.children.length - 1)] ?? current.children[0];
       if (next) setCurrentId(next.id);
+    },
+    choice: Math.min(choice, Math.max(0, current.children.length - 1)),
+    choose: (step) => {
+      const n = current.children.length;
+      if (n > 1) setChoice((c) => (((Math.min(c, n - 1) + step) % n) + n) % n);
     },
     toStart: () => setCurrentId(game.root.id),
     toEnd: () => setCurrentId(mainlineFrom(current).at(-1)!.id),

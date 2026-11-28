@@ -154,8 +154,8 @@ export function ExportDialog({ pgn, fileName, onClose }: { pgn: string; fileName
 
 const SHORTCUTS: [string, string][] = [
   ['← →', 'Previous / next move'],
-  ['↑ or Home', 'Starting position'],
-  ['↓ or End', 'End of the line'],
+  ['↑ or Home', 'Starting position (at a branch, ↑ picks the line above)'],
+  ['↓ or End', 'End of the line (at a branch, ↓ picks the line below; → goes into it)'],
   ['F', 'Flip the board'],
   ['/', 'Type a move'],
   ['Delete', 'Delete from the current move'],
