@@ -20,13 +20,16 @@ export interface BoardState {
 export function boardState(fen: string): BoardState {
   const chess = new Chess(fen);
   const dests = new Map<Square, Square[]>();
+  const add = (from: Square, to: Square) => {
+    const list = dests.get(from);
+    if (!list) dests.set(from, [to]);
+    else if (!list.includes(to)) list.push(to);
+  };
   for (const move of chess.moves({ verbose: true })) {
-    const list = dests.get(move.from);
-    if (list) {
-      if (!list.includes(move.to)) list.push(move.to);
-    } else {
-      dests.set(move.from, [move.to]);
-    }
+    add(move.from, move.to);
+    // Castling can also be done by putting the king on its rook.
+    const rook = rookSquareFor(move);
+    if (rook) add(move.from, rook);
   }
   const outcome = chess.isCheckmate()
     ? 'checkmate'
@@ -62,4 +65,23 @@ export function passTurn(fen: string): string | null {
   const [placement, turn, castling, , , fullmove = '1'] = fen.trim().split(/\s+/);
   const next = [placement, turn === 'w' ? 'b' : 'w', castling, '-', '0', String(Number(fullmove) + (turn === 'b' ? 1 : 0))].join(' ');
   return isValidFen(next) ? next : null;
+}
+
+/** The rook's square for a castling move (h1 for White's O-O), or null. */
+function rookSquareFor(move: { flags: string; from: string }): Square | null {
+  if (!move.flags.includes('k') && !move.flags.includes('q')) return null;
+  return `${move.flags.includes('k') ? 'h' : 'a'}${move.from[1]}` as Square;
+}
+
+/**
+ * The square a king really goes to when it is put on its own rook to castle (g1 for e1-h1), or null
+ * when the move is not that.
+ */
+export function castleTarget(fen: string, from: string, to: string): string | null {
+  const chess = new Chess(fen);
+  const king = chess.get(from as Square);
+  const rook = chess.get(to as Square);
+  if (king?.type !== 'k' || rook?.type !== 'r' || rook.color !== king.color) return null;
+  const castle = chess.moves({ square: from as Square, verbose: true }).find((m) => rookSquareFor(m) === to);
+  return castle ? castle.to : null;
 }

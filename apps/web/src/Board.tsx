@@ -9,9 +9,11 @@ import {
   type MoveNode,
   type ShapeColor,
   boardState,
+  castleTarget,
   isPromotion,
 } from '@chess/chess-core';
 import { useEffect, useRef, useState } from 'react';
+import { pieceImage } from './pieces.ts';
 
 /**
  * The chessground board for one position. Moves and drawings go back up
@@ -79,8 +81,10 @@ export function Board({ node, orientation, autoShapes = [], viewOnly = false, on
         events: {
           after: (orig, dest) => {
             const { node: at } = handlers.current;
-            if (isPromotion(at.fen, orig, dest)) setPromotion({ from: orig, to: dest });
-            else handlers.current.onMove(orig, dest);
+            // A king put on its own rook castles: the move is the king's two-square step.
+            const to = castleTarget(at.fen, orig, dest) ?? dest;
+            if (isPromotion(at.fen, orig, to)) setPromotion({ from: orig, to });
+            else handlers.current.onMove(orig, to);
           },
         },
       },
@@ -127,7 +131,7 @@ export function Board({ node, orientation, autoShapes = [], viewOnly = false, on
     <div className="board-frame relative select-none">
       <div ref={element} className="h-full w-full" data-testid="board" />
       {promotion && (
-        <PromotionPicker color={boardState(node.fen).turn} onChoose={choosePromotion} />
+        <PromotionPicker color={boardState(node.fen).turn} square={promotion.to} orientation={orientation} onChoose={choosePromotion} />
       )}
     </div>
   );
@@ -140,7 +144,18 @@ const PIECES: { key: string; name: string; white: string; black: string }[] = [
   { key: 'n', name: 'Knight', white: '♘', black: '♞' },
 ];
 
-function PromotionPicker({ color, onChoose }: { color: Color; onChoose(piece: string | null): void }) {
+/** The pieces to promote to, in a column over the promotion square, as on Lichess. */
+function PromotionPicker({
+  color,
+  square,
+  orientation,
+  onChoose,
+}: {
+  color: Color;
+  square: string;
+  orientation: Color;
+  onChoose(piece: string | null): void;
+}) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const piece = PIECES.find((p) => p.key === event.key.toLowerCase());
@@ -152,28 +167,33 @@ function PromotionPicker({ color, onChoose }: { color: Color; onChoose(piece: st
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onChoose]);
 
+  const file = square.charCodeAt(0) - 97;
+  const rank = Number(square[1]) - 1;
+  const column = orientation === 'white' ? file : 7 - file;
+  const top = orientation === 'white' ? 7 - rank : rank;
+  // From the edge the pawn reached, towards the middle.
+  const rowOf = (i: number) => (top === 0 ? i : 7 - i);
+
   return (
-    <div
-      className="absolute inset-0 z-10 flex items-center justify-center bg-black/40"
-      onClick={() => onChoose(null)}
-    >
-      <div
-        className="flex gap-2 rounded-xl bg-surface p-3 shadow-panel"
-        role="dialog"
-        aria-label="Promote to"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {PIECES.map((p) => (
+    <div className="absolute inset-0 z-10 bg-black/40" onClick={() => onChoose(null)}>
+      <div role="dialog" aria-label="Promote to" onClick={(e) => e.stopPropagation()}>
+        {PIECES.map((p, i) => (
           <button
             key={p.key}
             type="button"
             onClick={() => onChoose(p.key)}
-            className="flex h-16 w-16 flex-col items-center justify-center rounded-lg text-4xl leading-none text-text hover:bg-surface-2"
+            className="absolute rounded-full bg-surface bg-center bg-no-repeat shadow-panel hover:bg-accent-soft"
+            style={{
+              left: `${column * 12.5}%`,
+              top: `${rowOf(i) * 12.5}%`,
+              width: '12.5%',
+              height: '12.5%',
+              backgroundImage: `url("${pieceImage(color === 'white' ? p.key.toUpperCase() : p.key)}")`,
+              backgroundSize: '80%',
+            }}
             title={`${p.name} (${p.key.toUpperCase()})`}
-          >
-            {color === 'white' ? p.white : p.black}
-            <span className="mt-1 text-[10px] text-muted">{p.key.toUpperCase()}</span>
-          </button>
+            aria-label={p.name}
+          />
         ))}
       </div>
     </div>
