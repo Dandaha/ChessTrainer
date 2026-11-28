@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openDatabase, runMigrations } from '../db/client.ts';
-import { addLine, createRepertoire, deleteMove, getEdges, listRepertoires, repertoiresAt, updateMove } from '../db/repertoire.ts';
+import { addEdges, addLine, createRepertoire, deleteMove, getEdges, listRepertoires, repertoiresAt, updateMove } from '../db/repertoire.ts';
 import { buildApp } from '../src/app.ts';
 
 function freshDb() {
@@ -59,6 +59,30 @@ describe('repertoires in the database', () => {
     expect(getEdges(db, id).map((e) => e.san)).toEqual(['d4', 'c4']);
   });
 
+  it('refuses a line from a set-up position the repertoire does not reach, and takes one from a position it does', () => {
+    const db = freshDb();
+    const id = createRepertoire(db, { name: 'Main', color: 'white' });
+    const SICILIAN_C3 = 'rnbqkbnr/pp1ppppp/8/2p5/4P3/2P5/PP1P1PPP/RNBQKBNR b KQkq - 0 2';
+    expect(() => addLine(db, id, SICILIAN_C3, ['Nf6'])).toThrow('set-up position this repertoire does not reach yet');
+    expect(getEdges(db, id)).toHaveLength(0);
+    addLine(db, id, START, ['d4', 'Nf6', 'c4']);
+    expect(addLine(db, id, AFTER_D4_NF6_C4, ['e6'])).toEqual({ added: 1, existing: 0 });
+  });
+
+  it('leaves moves that were out of reach already when deleting an unrelated move', () => {
+    const db = freshDb();
+    const id = createRepertoire(db, { name: 'Main', color: 'white' });
+    addLine(db, id, START, ['e4', 'e5']);
+    // A line saved from a set-up position before such lines were refused.
+    const orphan = 'rnbqkbnr/pp1ppppp/8/2p5/4P3/2P5/PP1P1PPP/RNBQKBNR b KQkq - 0 2';
+    addEdges(db, id, [
+      { fromFen: orphan, toFen: 'rnbqkb1r/pp1ppppp/5n2/2p5/4P3/2P5/PP1P1PPP/RNBQKBNR w KQkq - 1 3', san: 'Nf6', uci: 'g8f6', isMyMove: false, isMain: true, comment: null, nags: [] },
+    ]);
+    const e5 = getEdges(db, id).find((e) => e.san === 'e5')!;
+    expect(deleteMove(db, e5.id)).toBe(1);
+    expect(getEdges(db, id).map((e) => e.san)).toEqual(['e4', 'Nf6']);
+  });
+
   it('answers what each repertoire has at a position, including a transposition', () => {
     const db = freshDb();
     const white = createRepertoire(db, { name: 'Main', color: 'white' });
@@ -92,6 +116,19 @@ describe('the repertoire API', () => {
     });
     expect(check.json()[0].message).toBe('You left your preparation on move 2 with ...e6; your line is ...d6 or ...Nc6.');
     await app.close();
+  });
+
+  it('imports a chapter that starts where an earlier one reached, and reports one that starts nowhere', async () => {
+    const app = buildApp(freshDb());
+    const { id } = (await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'Main', color: 'white' } })).json();
+    const pgn = [
+      '[Event "Chapter 1"]\n\n1. d4 Nf6 2. c4 *',
+      `[Event "Chapter 2"]\n[SetUp "1"]\n[FEN "${AFTER_D4_NF6_C4}"]\n\n2... e6 3. Nc3 *`,
+      '[Event "Chapter 3"]\n[SetUp "1"]\n[FEN "rnbqkbnr/pp1ppppp/8/2p5/4P3/2P5/PP1P1PPP/RNBQKBNR b KQkq - 0 2"]\n\n2... Nf6 *',
+    ].join('\n\n');
+    const result = (await app.inject({ method: 'POST', url: `/api/repertoires/${id}/import`, payload: { pgn } })).json();
+    expect(result).toMatchObject({ added: 5, games: 3 });
+    expect(result.errors).toEqual([{ gameIndex: 2, line: 0, message: expect.stringContaining('Game 3 starts from a set-up position') }]);
   });
 
   it('explains that the gap finder needs a Lichess token', async () => {

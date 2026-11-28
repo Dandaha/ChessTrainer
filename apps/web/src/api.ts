@@ -187,7 +187,11 @@ export const api = {
   addLine: (id: string, fen: string, sans: string[]) =>
     call<{ added: number; existing: number }>('POST', `/api/repertoires/${id}/line`, { fen, sans }),
   importRepertoire: (id: string, pgn: string) =>
-    call<{ added: number; existing: number; games: number; errors: unknown[] }>('POST', `/api/repertoires/${id}/import`, { pgn }),
+    call<{ added: number; existing: number; games: number; errors: { gameIndex: number; line: number; message: string }[] }>(
+      'POST',
+      `/api/repertoires/${id}/import`,
+      { pgn },
+    ),
   exportRepertoire: (id: string) => call<{ pgn: string }>('GET', `/api/repertoires/${id}/export`),
   updateRepertoireMove: (id: string, changes: { isMain?: boolean; priority?: Priority; comment?: string | null; isMyMove?: boolean }) =>
     call('PUT', `/api/repertoire-moves/${id}`, changes),

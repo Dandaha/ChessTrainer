@@ -16,6 +16,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from '../../db/client.ts';
 import { getSettings, softDelete } from '../../db/library.ts';
 import {
+  NOT_CONNECTED,
   addEdges,
   addLine,
   createRepertoire,
@@ -23,6 +24,7 @@ import {
   getEdges,
   getRepertoire,
   listRepertoires,
+  reachedPositions,
   renameRepertoire,
   repertoiresAt,
   updateMove,
@@ -59,7 +61,23 @@ export function repertoireRoutes(app: FastifyInstance, db: Db): void {
     const repertoire = getRepertoire(db, id);
     if (!repertoire) return reply.code(404).send({ error: 'No such repertoire.' });
     const { games, errors } = parsePgn((req.body as { pgn: string }).pgn);
-    const result = addEdges(db, id, games.flatMap((g) => edgesFromGame(g, repertoire.color)));
+    // A game (or study chapter) must start where the repertoire, or an earlier game in the file, reaches.
+    const reached = reachedPositions(db, id);
+    const unreadable = new Set(errors.map((e) => e.gameIndex));
+    let index = -1;
+    const edges = games.flatMap((game) => {
+      do index += 1;
+      while (unreadable.has(index));
+      if (!reached.has(positionKey(game.root.fen))) {
+        errors.push({ gameIndex: index, line: 0, message: `Game ${index + 1} ${NOT_CONNECTED}` });
+        return [];
+      }
+      const moves = edgesFromGame(game, repertoire.color);
+      for (const move of moves) reached.add(positionKey(move.toFen));
+      return moves;
+    });
+    const result = addEdges(db, id, edges);
+    errors.sort((a, b) => a.gameIndex - b.gameIndex);
     return { ...result, games: games.length, errors };
   });
 

@@ -497,9 +497,18 @@ function MoveEditor({
 function ImportRepertoire({ repertoire, onClose, onDone }: { repertoire: RepertoireSummary; onClose(): void; onDone(): void }) {
   const ws = useWorkspace();
   const [text, setText] = useState('');
+  // Games that could not be read or did not connect to the repertoire: the dialog stays open on them.
+  const [problems, setProblems] = useState<string[]>([]);
   return (
     <Modal title={`Import into “${repertoire.name}” (${repertoire.color})`} onClose={onClose}>
       <textarea aria-label="PGN" rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder="PGN with variations; every move becomes part of the repertoire." className={`${inputClass} w-full font-mono`} />
+      {problems.length > 0 && (
+        <div role="alert" className="mt-2 max-h-40 space-y-1 overflow-auto text-sm text-danger">
+          {problems.map((problem) => (
+            <p key={problem}>{problem}</p>
+          ))}
+        </div>
+      )}
       <div className="mt-3 flex justify-between">
         <label className={`${buttonClass} cursor-pointer`}>
           Open file…
@@ -514,7 +523,11 @@ function ImportRepertoire({ repertoire, onClose, onDone }: { repertoire: Reperto
               const r = await api.importRepertoire(repertoire.id, text);
               ws.toast(`Added ${r.added} move${r.added === 1 ? '' : 's'} (${r.existing} already there) from ${r.games} game${r.games === 1 ? '' : 's'}.`);
               onDone();
-              onClose();
+              if (r.errors.length) {
+                setProblems(r.errors.map((e) => (e.message.startsWith('Game ') ? e.message : `Game ${e.gameIndex + 1}${e.line ? `, line ${e.line}` : ''}: ${e.message}`)));
+              } else {
+                onClose();
+              }
             } catch (e) {
               ws.toast((e as Error).message, true);
             }

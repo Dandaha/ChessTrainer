@@ -132,10 +132,29 @@ export function addEdges(db: Db, repertoireId: string, edges: NewEdge[]): { adde
   return { added, existing };
 }
 
+/** A line that cannot go into the repertoire; the route answers 400 with the message. */
+export class RepertoireError extends Error {
+  readonly statusCode = 400;
+}
+
+/**
+ * The positions a new line may start from: the starting position and every position the
+ * repertoire's moves already reach. A line from anywhere else could never be shown or trained.
+ */
+export function reachedPositions(db: Db, repertoireId: string): Set<string> {
+  return new Set([positionKey(START_FEN), ...getEdges(db, repertoireId).map((e) => e.toKey)]);
+}
+
+export const NOT_CONNECTED =
+  'starts from a set-up position this repertoire does not reach yet. A repertoire grows from the starting position: add the moves that lead to this position first.';
+
 /** Adds a line of moves from a position: what R does on the analysis board. */
 export function addLine(db: Db, repertoireId: string, startFen: string, sans: string[]): { added: number; existing: number } {
   const repertoire = getRepertoire(db, repertoireId);
   if (!repertoire) throw new Error('No such repertoire.');
+  if (sans.length && !reachedPositions(db, repertoireId).has(positionKey(startFen || START_FEN))) {
+    throw new RepertoireError(`This line ${NOT_CONNECTED}`);
+  }
   const root = createGame(startFen || START_FEN).root;
   let node = root;
   const edges: NewEdge[] = [];
@@ -185,12 +204,18 @@ export function updateMove(
   });
 }
 
-/** Deletes a move and every move that can no longer be reached without it. Returns how many went. */
+/**
+ * Deletes a move and the moves only it led to. Moves that were out of reach already (lines added
+ * from a set-up position before that was refused) are left alone: this delete did not cut them off.
+ */
 export function deleteMove(db: Db, id: string): number {
   const move = db.select().from(repertoireMoves).where(eq(repertoireMoves.id, id)).get();
   if (!move) return 0;
-  const remaining = getEdges(db, move.repertoireId).filter((e) => e.id !== id);
-  const cut = unreachableEdges(remaining).map((e) => e.id);
+  const all = getEdges(db, move.repertoireId);
+  const before = new Set(unreachableEdges(all).map((e) => e.id));
+  const cut = unreachableEdges(all.filter((e) => e.id !== id))
+    .map((e) => e.id)
+    .filter((edgeId) => !before.has(edgeId));
   const ids = [id, ...cut];
   db.transaction((tx) => {
     tx.delete(repertoireMoves).where(inArray(repertoireMoves.id, ids)).run();
