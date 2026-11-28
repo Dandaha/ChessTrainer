@@ -514,6 +514,16 @@ function whenChecked(iso: string): string {
  * ready to restart into, or why a check failed. It follows along while something is happening.
  * Only the desktop app answers; the browser version shows nothing here.
  */
+/**
+ * A version as people read it: a stable one by its two numbers ("1.0"), a test version whole and
+ * marked ("1.0.80 (test version)"). The 0.1.x builds from before stable versions stay as they are.
+ */
+export function shownVersion(version: string): string {
+  const [major, minor, patch] = version.split('.');
+  if (Number(major) < 1) return version;
+  return patch === '0' ? `${major}.${minor}` : `${version} (test version)`;
+}
+
 function UpdateSettings() {
   const ws = useWorkspace();
   const [info, setInfo] = useState<UpdateInfo | null>(null);
@@ -548,7 +558,7 @@ function UpdateSettings() {
   return (
     <section className="space-y-3">
       <h2 className="font-semibold">Updates</h2>
-      <p className="text-sm">Chess Workspace {info.version}</p>
+      <p className="text-sm">Chess Workspace {shownVersion(info.version)}</p>
       <div aria-live="polite" className="space-y-2 text-sm">
         {status.state === 'unavailable' && <p className="text-muted">Updates come only to the installed app.</p>}
         {status.state === 'idle' && (
@@ -569,7 +579,7 @@ function UpdateSettings() {
         {status.state === 'downloading' && (
           <>
             <p>
-              Downloading {status.version}… {status.percent}%
+              Downloading {shownVersion(status.version)}… {status.percent}%
             </p>
             <div
               role="progressbar"
@@ -585,7 +595,7 @@ function UpdateSettings() {
         )}
         {status.state === 'ready' && (
           <div className="flex flex-wrap items-center gap-3">
-            <p className="font-medium">Version {status.version} is ready.</p>
+            <p className="font-medium">Version {shownVersion(status.version)} is ready.</p>
             <button
               type="button"
               className={`${primaryClass} shrink-0`}

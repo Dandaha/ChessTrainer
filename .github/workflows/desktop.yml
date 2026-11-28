@@ -38,7 +38,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     env:
-      APP_VERSION: 0.1.${{ github.run_number }}
+      # A stable version is published when the workflow is run by hand with "stable" ticked.
+      STABLE: ${{ github.event_name == 'workflow_dispatch' && inputs.stable && 'true' || 'false' }}
       # The Stockfish build that ships with the app: a fixed release, checked by its SHA-256 (the digest
       # GitHub lists for the asset). To move to a newer Stockfish, change both together.
       STOCKFISH_TAG: sf_19
@@ -46,6 +47,30 @@ jobs:
       STOCKFISH_SHA256: 3c8bf1f9ea66a09350a40df4f632288285ac206d99f33ab5842c408fc30b48a7
     steps:
       - uses: actions/checkout@v4
+
+      # Versions: stable ones are 1.0, 1.1, 1.2… (1.0 comes after the 0.1.x builds). A test version is
+      # the stable version it builds on and the build's number, e.g. 1.0.80: newer than 1.0, older than
+      # 1.1, so every installed app orders them right.
+      - name: Choose the version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>$null
+          if ($LASTEXITCODE -ne 0 -or -not $tag) { $tag = 'v0.0.0' }
+          $parts = $tag.TrimStart('v').Split('.')
+          $major = [int]$parts[0]
+          $minor = [int]$parts[1]
+          if ($env:STABLE -eq 'true') {
+            if ($major -eq 0) { $version = '1.0.0' } else { $version = "$major.$($minor + 1).0" }
+            $shown = ($version -replace '\.0$', '')
+          } else {
+            $version = "$major.$minor.$env:GITHUB_RUN_NUMBER"
+            $shown = $version
+          }
+          "APP_VERSION=$version" >> $env:GITHUB_ENV
+          "SHOWN_VERSION=$shown" >> $env:GITHUB_ENV
+          Write-Host "Version $version (the latest stable is $tag)"
 
       - uses: pnpm/action-setup@v4
 
@@ -148,7 +173,6 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          STABLE: ${{ github.event_name == 'workflow_dispatch' && inputs.stable && 'true' || 'false' }}
         run: |
           $ErrorActionPreference = 'Stop'
           # The installer, plus what the installed apps read to update themselves:
@@ -160,13 +184,13 @@ jobs:
           Get-Content "$release/latest.yml"
           if ($env:STABLE -eq 'true') {
             $notes = @"
-          Chess Workspace $env:APP_VERSION, the stable version.
+          Chess Workspace $env:SHOWN_VERSION, the stable version.
 
           **To install:** download Chess-Workspace-Setup-$env:APP_VERSION.exe below and run it. Windows may warn that the app is from an unknown publisher (the installer is not signed): in the browser choose Keep, and in the blue "Windows protected your PC" box choose **More info**, then **Run anyway**. Your games and positions are kept in your own user folder, and the app updates itself from then on.
 
           Built from $env:GITHUB_SHA.
           "@
-            gh release create "v$env:APP_VERSION" @files --title "Chess Workspace $env:APP_VERSION" --latest --notes $notes
+            gh release create "v$env:APP_VERSION" @files --title "Chess Workspace $env:SHOWN_VERSION" --latest --notes $notes
           } else {
             # A test version: installed apps with "Test versions" on take it; the stable ones skip it.
             gh release create "v$env:APP_VERSION" @files --title "Chess Workspace $env:APP_VERSION (test version)" --prerelease --latest=false --notes "Test version, built from $env:GITHUB_SHA. Installed apps get it only with Settings → Updates → Test versions switched on."

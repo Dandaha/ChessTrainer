@@ -23,6 +23,10 @@ Two kinds of release are published:
   hand (Actions → Windows installer → Run workflow, with *stable* ticked). Every
   installed app takes them; a student's copy takes nothing else.
 
+Stable versions are numbered 1.0, 1.1, 1.2… A test version carries the stable
+version it builds on and the build's number, such as 1.0.80: newer than 1.0 and
+older than 1.1, so every installed app orders them correctly.
+
 The installed app updates itself: it checks when it opens and every six hours,
 downloads a new version in the background and offers to restart into it
 (otherwise it installs when the app is closed). **Settings → Updates** shows the

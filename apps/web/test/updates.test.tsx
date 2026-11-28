@@ -62,3 +62,13 @@ describe('the Updates section', () => {
     expect(screen.queryByRole('heading', { name: 'Updates' })).toBeNull();
   });
 });
+
+describe('version names', () => {
+  it('reads a stable version by two numbers and marks a test version', async () => {
+    const { shownVersion } = await import('../src/screens/SettingsScreen.tsx');
+    expect(shownVersion('1.0.0')).toBe('1.0');
+    expect(shownVersion('1.12.0')).toBe('1.12');
+    expect(shownVersion('1.0.80')).toBe('1.0.80 (test version)');
+    expect(shownVersion('0.1.65')).toBe('0.1.65');
+  });
+});
