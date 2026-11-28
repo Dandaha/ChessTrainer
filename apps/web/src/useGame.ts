@@ -25,6 +25,7 @@ import { useCallback, useReducer, useRef, useState } from 'react';
 interface Snapshot {
   game: Game;
   currentId: string;
+  context?: unknown;
 }
 
 export interface GameApi {
@@ -57,19 +58,28 @@ export interface GameApi {
   undo(): void;
 }
 
-export function useGame(initial: () => Game = () => createGame()): GameApi {
+/**
+ * `context` is stored with each undo step and handed back on undo: the workspace keeps which library
+ * game was open there, so undoing a New brings back the game and its link, not a copy.
+ */
+export function useGame(
+  initial: () => Game = () => createGame(),
+  context?: { current: () => unknown; restore: (value: unknown) => void },
+): GameApi {
   const [game, setGame] = useState<Game>(initial);
   const [currentId, setCurrentId] = useState(() => game.root.id);
   const [version, bump] = useReducer((n: number) => n + 1, 0);
   const [cleanVersion, setCleanVersion] = useState(-1);
   const undoStack = useRef<Snapshot[]>([]);
+  const contextRef = useRef(context);
+  contextRef.current = context;
 
   const current = findNode(game.root, currentId) ?? game.root;
   const path = pathTo(game.root, current.id);
 
   /** Remembers the game before a change that loses work, so Ctrl+Z can bring it back. */
   const snapshot = useCallback(() => {
-    undoStack.current.push({ game: structuredClone(game), currentId });
+    undoStack.current.push({ game: structuredClone(game), currentId, context: contextRef.current?.current() });
     if (undoStack.current.length > 50) undoStack.current.shift();
   }, [game, currentId]);
 
@@ -165,6 +175,7 @@ export function useGame(initial: () => Game = () => createGame()): GameApi {
       if (!last) return;
       setGame(last.game);
       setCurrentId(last.currentId);
+      contextRef.current?.restore(last.context);
       bump();
     },
   };

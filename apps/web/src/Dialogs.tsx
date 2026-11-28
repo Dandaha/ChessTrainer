@@ -42,7 +42,7 @@ export function ImportDialog({
   onClose,
 }: {
   /** Returns an error message, or null when the text loaded. */
-  onLoad(text: string): string | null;
+  onLoad(text: string): string | null | Promise<string | null>;
   onClose(): void;
 }) {
   const [text, setText] = useState('');
@@ -52,9 +52,10 @@ export function ImportDialog({
   useEffect(() => area.current?.focus(), []);
 
   const load = (value = text) => {
-    const problem = onLoad(value);
-    if (problem) setError(problem);
-    else onClose();
+    const settle = (problem: string | null) => (problem ? setError(problem) : onClose());
+    const result = onLoad(value);
+    if (result instanceof Promise) void result.then(settle);
+    else settle(result);
   };
 
   const openFile = async (file: File | undefined) => {

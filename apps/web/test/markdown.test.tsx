@@ -1,13 +1,16 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { Markdown } from '../src/components/Markdown.tsx';
+import { AskTextProvider } from '../src/components/AskText.tsx';
 import { WorkspaceProvider } from '../src/workspace.tsx';
 
 function show(text: string, fen?: string) {
   return render(
-    <WorkspaceProvider>
-      <Markdown text={text} fen={fen} />
-    </WorkspaceProvider>,
+    <AskTextProvider>
+      <WorkspaceProvider>
+        <Markdown text={text} fen={fen} />
+      </WorkspaceProvider>
+    </AskTextProvider>,
   );
 }
 

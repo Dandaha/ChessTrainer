@@ -10,6 +10,7 @@ import {
 } from '@chess/chess-core';
 import { type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react';
 import { type GameDetail, api } from './api.ts';
+import { useConfirm } from './components/AskText.tsx';
 import { loadText } from './loadText.ts';
 import { navigate } from './router.ts';
 import { readDraft, writeDraft } from './storage.ts';
@@ -36,14 +37,17 @@ export interface Workspace {
   setOrientation(color: Color): void;
   flip(): void;
   /** Shows a library game on the board, at a ply of its main line if given. */
-  openGame(detail: GameDetail, ply?: number): void;
+  openGame(detail: GameDetail, ply?: number): Promise<void>;
   openGameById(id: string, ply?: number): Promise<void>;
-  /** Opens pasted PGN or FEN on the board; returns an error message or null. */
-  openText(text: string): string | null;
-  openFen(fen: string, orientation?: Color): void;
+  /**
+   * Opens pasted PGN or FEN on the board and gives back an error message, or null. Straight away,
+   * unless edits on the board have to be asked about first.
+   */
+  openText(text: string): string | null | Promise<string | null>;
+  openFen(fen: string, orientation?: Color): Promise<void>;
   /** Opens a position with a line of moves played from it, showing the end of the line. */
-  openLine(fen: string, sans: string[]): void;
-  newGame(): void;
+  openLine(fen: string, sans: string[]): Promise<void>;
+  newGame(): Promise<void>;
   /** Saves the board's game into the library (new) or back into its library game. */
   saveToLibrary(): Promise<void>;
   toast(text: string, error?: boolean): void;
@@ -85,6 +89,8 @@ function gameLabel(game: Game): string {
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const draft = useRef(readSavedDraft());
+  const confirm = useConfirm();
+  const linkedRef = useRef<LinkedGame | null>(draft.current?.linked ?? null);
   const g = useGame(() => {
     if (draft.current) {
       try {
@@ -94,8 +100,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
     }
     return createGame();
-  });
+  }, { current: () => linkedRef.current, restore: (value) => setLinked((value as LinkedGame | null) ?? null) });
   const [linked, setLinked] = useState<LinkedGame | null>(draft.current?.linked ?? null);
+  linkedRef.current = linked;
+
+  /**
+   * Before the board's game is replaced. A library game edited since it was opened (the header says
+   * "unsaved changes") is asked about; an edited analysis goes, with a note that Ctrl+Z brings it
+   * back, as on Lichess; an untouched or empty board just goes.
+   */
+  const edited = () => g.dirty && (g.game.root.children.length > 0 || g.game.root.comments.length > 0);
+  const hasEdits = () => linked !== null && edited();
+  // Written as `hasEdits() && (await discardRefused())` at each call, so with nothing to ask the board
+  // changes at once, in the same tick, as it always did.
+  const discardRefused = async (): Promise<boolean> =>
+    !(await confirm({
+      title: 'Discard the changes?',
+      message: `Your changes to “${linked?.label ?? 'this game'}” are not saved in the library. Ctrl+Z brings them back afterwards.`,
+      confirm: 'Discard changes',
+      cancel: 'Keep editing',
+    }));
+  /** Call before replacing the board; returns what to say afterwards, if anything. */
+  const clearedNote = () => (linked === null && edited() ? 'The previous analysis is cleared. Ctrl+Z brings it back.' : null);
   const [orientation, setOrientation] = useState<Color>('white');
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
 
@@ -111,10 +137,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const toast = (text: string, error = false) => setMessage({ text, error });
 
-  const openGame = (detail: GameDetail, ply?: number) => {
+  const openGame = async (detail: GameDetail, ply?: number) => {
+    if (hasEdits() && (await discardRefused())) return;
+    const note = clearedNote();
     const game = parseGame(detail.pgn);
     const at = ply === undefined ? undefined : mainlineFrom(game.root).find((n) => n.ply === ply)?.id;
     g.load(game, { at, clean: true });
+    if (note) toast(note);
     setLinked({ id: detail.id, label: gameLabel(game), myColor: detail.myColor });
     setOrientation(detail.myColor === 'black' ? 'black' : 'white');
     navigate('board');
@@ -130,7 +159,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     openGame,
     openGameById: async (id, ply) => {
       try {
-        openGame(await api.game(id), ply);
+        await openGame(await api.game(id), ply);
       } catch (error) {
         toast((error as Error).message, true);
       }
@@ -138,31 +167,44 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     openText: (text) => {
       const result = loadText(text);
       if ('error' in result) return result.error;
-      g.load(result.game);
-      setLinked(null);
-      setOrientation('white');
-      if (result.note) toast(result.note);
-      navigate('board');
-      return null;
+      const open = () => {
+        const note = clearedNote();
+        g.load(result.game, { clean: true });
+        setLinked(null);
+        setOrientation('white');
+        if (result.note ?? note) toast((result.note ?? note)!);
+        navigate('board');
+        return null;
+      };
+      return hasEdits() ? discardRefused().then((refused) => (refused ? null : open())) : open();
     },
-    openFen: (fen, color) => {
-      g.load(createGame(fen));
+    openFen: async (fen, color) => {
+      if (hasEdits() && (await discardRefused())) return;
+      const note = clearedNote();
+      g.load(createGame(fen), { clean: true });
+      if (note) toast(note);
       setLinked(null);
       setOrientation(color ?? (fen.split(' ')[1] === 'b' ? 'black' : 'white'));
       navigate('board');
     },
-    openLine: (fen, sans) => {
+    openLine: async (fen, sans) => {
+      if (hasEdits() && (await discardRefused())) return;
+      const note = clearedNote();
       const game = createGame(fen);
       let node = game.root;
       for (const san of sans) node = addMove(node, san);
-      g.load(game, { at: node.id });
+      g.load(game, { at: node.id, clean: true });
+      if (note) toast(note);
       setLinked(null);
       setOrientation(fen.split(' ')[1] === 'b' ? 'black' : 'white');
       navigate('board');
     },
-    newGame: () => {
-      g.load(createGame());
+    newGame: async () => {
+      if (hasEdits() && (await discardRefused())) return;
+      const note = clearedNote();
+      g.load(createGame(), { clean: true });
       setLinked(null);
+      if (note) toast(note);
     },
     saveToLibrary: async () => {
       try {

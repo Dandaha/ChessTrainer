@@ -38,11 +38,11 @@ const SCREENS: Screen[] = [
 
 export function App() {
   return (
-    <WorkspaceProvider>
-      <AskTextProvider>
+    <AskTextProvider>
+      <WorkspaceProvider>
         <Shell />
-      </AskTextProvider>
-    </WorkspaceProvider>
+      </WorkspaceProvider>
+    </AskTextProvider>
   );
 }
 
@@ -75,8 +75,7 @@ function Shell() {
       const text = event.clipboardData?.getData('text') ?? '';
       if (!text.trim()) return;
       event.preventDefault();
-      const problem = latest.current.openText(text);
-      if (problem) latest.current.toast(problem, true);
+      void Promise.resolve(latest.current.openText(text)).then((problem) => problem && latest.current.toast(problem, true));
     };
     window.addEventListener('keydown', onKey);
     document.addEventListener('paste', onPaste);

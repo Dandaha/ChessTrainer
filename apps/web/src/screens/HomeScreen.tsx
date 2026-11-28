@@ -29,8 +29,8 @@ export function HomeScreen() {
     api.trainingSummary().then(setQueue).catch(() => {});
   }, []);
 
-  const open = () => {
-    const problem = ws.openText(text);
+  const open = async () => {
+    const problem = await ws.openText(text);
     if (problem) ws.toast(problem, true);
   };
 
