@@ -1,5 +1,6 @@
 import type { Game, Header } from '@chess/chess-core';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { setLeaveGuard } from '../router.ts';
 import { Modal } from '../Dialogs.tsx';
 import { buttonClass, inputClass, primaryClass } from './ui.tsx';
 
@@ -37,6 +38,10 @@ export function GameTagsDialog({ game, onSave, onClose }: { game: Game; onSave(h
   const [extra, setExtra] = useState<Header[]>(() => game.headers.filter((h) => !FIXED.has(h.name)).map((h) => ({ ...h })));
   const problem = tagProblem(roster, extra);
   const setUp = game.headers.filter((h) => h.name === 'FEN' || h.name === 'SetUp');
+  // Edited and not saved: leaving the screen (Back, the sidebar) asks first, as for a concept's edits.
+  const [start] = useState(() => JSON.stringify({ roster, result, extra }));
+  const dirty = JSON.stringify({ roster, result, extra }) !== start;
+  useEffect(() => (dirty ? setLeaveGuard(() => 'Your changes to the game’s tags are not saved.') : undefined), [dirty]);
 
   const save = () => {
     if (problem) return;
@@ -51,7 +56,7 @@ export function GameTagsDialog({ game, onSave, onClose }: { game: Game; onSave(h
   };
 
   return (
-    <Modal title="Game tags" onClose={onClose}>
+    <Modal title="Game tags" onClose={onClose} dirty={dirty}>
       <form
         className="space-y-3 text-sm"
         onSubmit={(e) => {
