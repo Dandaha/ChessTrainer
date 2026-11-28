@@ -14,6 +14,8 @@ import {
   importGamesInBatches,
   timeControls,
   findDuplicates,
+  fillMyColor,
+  listGameIds,
   listGames,
   saveGame,
   updateGame,
@@ -91,6 +93,8 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
   });
   app.get('/api/games', async (req) => listGames(db, gameFilters(req.query as Query)));
   app.get('/api/games/time-controls', async () => timeControls(db));
+  // Every game the filter finds, on every page: for "select all that match".
+  app.get('/api/games/ids', async (req) => ({ ids: listGameIds(db, gameFilters(req.query as Query)) }));
   app.get('/api/games/duplicates', async () => findDuplicates(db));
   // The whole filter or collection as one PGN file, or the games picked by id.
   app.get('/api/games/export', async (req) => exportGames(db, gameFilters(req.query as Query)));
@@ -192,10 +196,10 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
     softDelete(db, 'collection', [(req.params as { id: string }).id]);
     return { ok: true };
   });
-  app.post('/api/collections/:id/games', async (req) => {
-    addGamesToCollection(db, (req.params as { id: string }).id, parseBody(bodies.gameIds, req.body).gameIds);
-    return { ok: true };
-  });
+  app.post('/api/collections/:id/games', async (req) => ({
+    ok: true,
+    added: addGamesToCollection(db, (req.params as { id: string }).id, parseBody(bodies.gameIds, req.body).gameIds),
+  }));
   app.post('/api/collections/:id/games/remove', async (req) => ({
     ok: true,
     removed: removeGamesFromCollection(db, (req.params as { id: string }).id, parseBody(bodies.gameIds, req.body).gameIds),
@@ -279,7 +283,13 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
   // Tags, settings, trash -----------------------------------------------------
   app.get('/api/tags', async (req) => allTags(db, (req.query as Query).type as TagTarget | undefined));
   app.get('/api/settings', async () => getSettings(db));
-  app.put('/api/settings', async (req) => updateSettings(db, parseBody(bodies.settings, req.body)));
+  app.put('/api/settings', async (req) => {
+    const changes = parseBody(bodies.settings, req.body);
+    const settings = updateSettings(db, changes);
+    // A name of mine set now marks the games already in the library that it played.
+    if (changes.lichessUsername || changes.chesscomUsername) fillMyColor(db, myNames());
+    return settings;
+  });
   app.get('/api/trash', async () => listTrash(db));
 
   // Backups ----------------------------------------------------------------------

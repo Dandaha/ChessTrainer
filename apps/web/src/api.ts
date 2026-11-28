@@ -204,6 +204,8 @@ export const api = {
   /** `lastImport`: only the games of the last import that added any. */
   games: (filters: GameFilters & { lastImport?: 1 } = {}) => call<{ total: number; games: GameSummary[] }>('GET', `/api/games${query(filters)}`),
   game: (id: string) => call<GameDetail>('GET', `/api/games/${id}`),
+  /** Every game the filter finds, on every page: "select all that match". */
+  gameIds: (filters: GameFilters & { lastImport?: 1 } = {}) => call<{ ids: string[] }>('GET', `/api/games/ids${query(filters)}`),
   duplicates: () =>
     call<{ groups: { keep: GameSummary; copies: GameSummary[] }[]; totalGroups: number; extraCopies: number; extraIds: string[] }>('GET', '/api/games/duplicates'),
   timeControls: () => call<{ timeControl: string; speed: string | null; games: number }[]>('GET', '/api/games/time-controls'),
@@ -229,7 +231,8 @@ export const api = {
   createCollection: (name: string) => call<{ id: string }>('POST', '/api/collections', { name }),
   renameCollection: (id: string, name: string) => call('PUT', `/api/collections/${id}`, { name }),
   deleteCollection: (id: string) => call('DELETE', `/api/collections/${id}`),
-  addToCollection: (id: string, gameIds: string[]) => call('POST', `/api/collections/${id}/games`, { gameIds }),
+  /** Says how many of the games were not in the collection already. */
+  addToCollection: (id: string, gameIds: string[]) => call<{ added: number }>('POST', `/api/collections/${id}/games`, { gameIds }),
   /** Takes games out of a collection; hands back the places they had, for `restoreToCollection`. */
   removeFromCollection: (id: string, gameIds: string[]) =>
     call<{ removed: CollectionPlace[] }>('POST', `/api/collections/${id}/games/remove`, { gameIds }),

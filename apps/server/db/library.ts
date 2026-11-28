@@ -48,9 +48,12 @@ export function listCollections(db: Db): CollectionSummary[] {
     })
     .from(collections)
     .where(isNull(collections.deletedAt))
-    .orderBy(sql`fold(${collections.name})`)
-    .all();
+    .all()
+    .sort((a, b) => byName.compare(a.name, b.name));
 }
+
+/** Names in the order people expect: "Lesson 2" before "Lesson 10", "Écoles" among the E's. */
+const byName = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 /**
  * The name, tidied, if no other collection or set (whichever `table` is) out of the trash has it:
@@ -85,15 +88,24 @@ export function updateCollection(db: Db, id: string, input: { name?: string; des
     .run();
 }
 
-export function addGamesToCollection(db: Db, collectionId: string, gameIds: string[]): void {
-  const start =
-    db
-      .select({ n: sql<number>`coalesce(max(${collectionGames.sortOrder}), 0)` })
-      .from(collectionGames)
-      .where(eq(collectionGames.collectionId, collectionId))
-      .get()?.n ?? 0;
-  gameIds.forEach((gameId, i) => {
-    db.insert(collectionGames).values({ collectionId, gameId, sortOrder: start + i + 1 }).onConflictDoNothing().run();
+/** Adds games at the end of a collection; says how many were not in it already. */
+export function addGamesToCollection(db: Db, collectionId: string, gameIds: string[]): number {
+  return db.transaction((tx) => {
+    let order =
+      tx
+        .select({ n: sql<number>`coalesce(max(${collectionGames.sortOrder}), 0)` })
+        .from(collectionGames)
+        .where(eq(collectionGames.collectionId, collectionId))
+        .get()?.n ?? 0;
+    let added = 0;
+    for (const gameId of gameIds) {
+      const changes = tx.insert(collectionGames).values({ collectionId, gameId, sortOrder: order + 1 }).onConflictDoNothing().run().changes;
+      if (changes) {
+        order += 1;
+        added += 1;
+      }
+    }
+    return added;
   });
 }
 
@@ -401,8 +413,8 @@ export function listSets(db: Db): PositionSetSummary[] {
     })
     .from(positionSets)
     .where(isNull(positionSets.deletedAt))
-    .orderBy(sql`fold(${positionSets.name})`)
-    .all();
+    .all()
+    .sort((a, b) => byName.compare(a.name, b.name));
 }
 
 export function createSet(db: Db, input: { name: string; description?: string | null }): string {
@@ -519,18 +531,49 @@ export function softDelete(db: Db, kind: TrashKind, ids: string[]): void {
 export function restore(db: Db, kind: TrashKind, ids: string | string[]): void {
   const table = TRASH_TABLES[kind];
   const list = typeof ids === 'string' ? [ids] : ids;
-  if (list.length) db.update(table).set({ deletedAt: null }).where(inArray(table.id, list)).run();
+  if (!list.length) return;
+  db.transaction((tx) => {
+    const t = tx as unknown as Db;
+    t.update(table).set({ deletedAt: null }).where(inArray(table.id, list)).run();
+    if (kind === 'collection' || kind === 'position_set') keepNamesApart(t, NAMED[kind], list);
+  });
 }
 
 /** Takes everything out of the trash; says how many items came back. */
 export function restoreAll(db: Db): number {
   let restored = 0;
   db.transaction((tx) => {
-    for (const table of Object.values(TRASH_TABLES)) {
-      restored += tx.update(table).set({ deletedAt: null }).where(isNotNull(table.deletedAt)).run().changes;
+    const t = tx as unknown as Db;
+    for (const [kind, table] of Object.entries(TRASH_TABLES)) {
+      const ids = t.select({ id: table.id }).from(table).where(isNotNull(table.deletedAt)).all().map((r) => r.id);
+      if (!ids.length) continue;
+      restored += t.update(table).set({ deletedAt: null }).where(inArray(table.id, ids)).run().changes;
+      if (kind === 'collection' || kind === 'position_set') keepNamesApart(t, NAMED[kind], ids);
     }
   });
   return restored;
+}
+
+const NAMED = { collection: collections, position_set: positionSets } as const;
+
+/**
+ * A collection or set back from the trash whose name was taken in the meantime ("Alpha" deleted, a
+ * new "Alpha" made, then the old one restored) is renamed "Alpha (2)", so two never share a name.
+ */
+function keepNamesApart(db: Db, table: typeof collections | typeof positionSets, ids: string[]): void {
+  const t = table as typeof collections;
+  for (const row of db.select({ id: t.id, name: t.name }).from(t).where(inArray(t.id, ids)).all()) {
+    const taken = (name: string) =>
+      db
+        .select({ id: t.id })
+        .from(t)
+        .where(and(isNull(t.deletedAt), ne(t.id, row.id), sql`fold(${t.name}) = fold(${name})`))
+        .get();
+    if (!taken(row.name)) continue;
+    let n = 2;
+    while (taken(`${row.name} (${n})`)) n += 1;
+    db.update(t).set({ name: `${row.name} (${n})` }).where(eq(t.id, row.id)).run();
+  }
 }
 
 /** Deletes everything in the trash for good, whatever its age. */

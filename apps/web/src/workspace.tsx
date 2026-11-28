@@ -9,7 +9,7 @@ import {
   writePgn,
 } from '@chess/chess-core';
 import { type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react';
-import { type GameDetail, api } from './api.ts';
+import { ApiError, type GameDetail, api } from './api.ts';
 import { useConfirm } from './components/AskText.tsx';
 import { loadText } from './loadText.ts';
 import { navigate } from './router.ts';
@@ -252,7 +252,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       try {
         const pgn = writePgn(g.game);
         if (linked) {
-          await api.updateGame(linked.id, { pgn });
+          try {
+            await api.updateGame(linked.id, { pgn });
+          } catch (error) {
+            // The library's copy was deleted meanwhile: say so, and offer to keep this one as a new game.
+            if (!(error instanceof ApiError && error.status === 404)) throw error;
+            toast('The library’s copy of this game was deleted (it may be in Settings → Trash).', true, {
+              label: 'Save as a new game',
+              run: async () => {
+                try {
+                  const { id } = await api.createGame(pgn);
+                  setLinked({ id, label: gameLabel(g.game) });
+                  g.markClean();
+                  toast('Added to the library.');
+                } catch (again) {
+                  toast((again as Error).message, true);
+                }
+              },
+            });
+            return;
+          }
           toast('Saved to the library.');
         } else {
           const { id } = await api.createGame(pgn);

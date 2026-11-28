@@ -19,7 +19,7 @@ import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql
 import type { Db } from './client.ts';
 import { collectionGames, collections, gamePositions, games, taggings, tags } from './schema.ts';
 import { setTags, tagsFor } from './tags.ts';
-import { containsText } from './search.ts';
+import { containsWords } from './search.ts';
 
 export type GameSource = 'file' | 'lichess' | 'chesscom' | 'manual';
 
@@ -392,31 +392,25 @@ function indexHash(fen: string): bigint {
 
 function conditions(db: Db, f: GameFilters): SQL[] | null {
   const where: SQL[] = [isNull(games.deletedAt)];
-  if (f.q) {
-    const q = f.q;
-    where.push(
-      or(
-        containsText(games.white, q),
-        containsText(games.black, q),
-        containsText(games.event, q),
-        containsText(games.openingName, q),
-        containsText(games.eco, q),
-        containsText(games.notes, q),
-      )!,
-    );
-  }
-  if (f.player) where.push(or(containsText(games.white, f.player), containsText(games.black, f.player))!);
+  // Each word typed somewhere in the game; a player's words all in one player's name.
+  const text = f.q ? containsWords([games.white, games.black, games.event, games.openingName, games.eco, games.notes], f.q) : undefined;
+  if (text) where.push(text);
+  const white = f.player ? containsWords([games.white], f.player) : undefined;
+  const black = f.player ? containsWords([games.black], f.player) : undefined;
+  if (white && black) where.push(or(white, black)!);
   if (f.opening) {
     const code = f.opening.trim().toUpperCase();
     where.push(
       /^[A-E]\d{0,2}$/.test(code)
         ? like(games.eco, `${code}%`)
-        : or(containsText(games.openingName, f.opening), containsText(games.eco, f.opening))!,
+        : (containsWords([games.openingName, games.eco], f.opening) ?? sql`1`),
     );
   }
   if (f.result) where.push(eq(games.result, f.result));
-  if (f.dateFrom) where.push(sql`${games.date} >= ${f.dateFrom.replace(/-/g, '.')}`);
-  if (f.dateTo) where.push(sql`${games.date} <= ${`${f.dateTo.replace(/-/g, '.')}~`}`);
+  // A date with unknown parts ("2024.??.??") is somewhere in its year: it matches when that could
+  // fall in the range, its latest possible day on or after From, its earliest on or before To.
+  if (f.dateFrom) where.push(sql`replace(${games.date}, '??', '99') >= ${f.dateFrom.replace(/-/g, '.')}`);
+  if (f.dateTo) where.push(sql`replace(${games.date}, '??', '00') <= ${`${f.dateTo.replace(/-/g, '.')}~`}`);
   if (f.myColor) where.push(eq(games.myColor, f.myColor));
   if (f.speed) where.push(eq(games.speed, f.speed));
   if (f.importId) where.push(eq(games.importId, f.importId));
@@ -535,6 +529,39 @@ export function listGames(db: Db, f: GameFilters = {}): { total: number; games: 
     .offset(f.offset ?? 0)
     .all();
   return { total, games: withTags(db, rows) };
+}
+
+/** The ids of every game a filter finds, on every page (at most 100,000). */
+export function listGameIds(db: Db, f: GameFilters = {}): string[] {
+  const where = conditions(db, f);
+  if (!where) return [];
+  return db
+    .select({ id: games.id })
+    .from(games)
+    .where(and(...where))
+    .limit(100_000)
+    .all()
+    .map((r) => r.id);
+}
+
+/**
+ * Marks "my colour" on the games one of my names played that have none yet: a name set in Settings
+ * after the games came in counts for them too. Says how many games it marked.
+ */
+export function fillMyColor(db: Db, myNames: string[]): number {
+  const names = [...new Set(myNames.map((name) => name.trim().toLowerCase()).filter(Boolean))];
+  if (!names.length) return 0;
+  let marked = 0;
+  db.transaction((tx) => {
+    for (const [color, column] of [['white', games.white], ['black', games.black]] as const) {
+      marked += tx
+        .update(games)
+        .set({ myColor: color })
+        .where(and(isNull(games.myColor), isNull(games.deletedAt), inArray(sql`lower(trim(${column}))`, names)))
+        .run().changes;
+    }
+  });
+  return marked;
 }
 
 export function getGame(db: Db, id: string): GameDetail | undefined {

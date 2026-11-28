@@ -105,6 +105,10 @@ describe('the game library', () => {
     expect(listGames(db, { player: 'muller' }).total).toBe(1);
     expect(listGames(db, { q: '50%' }).total).toBe(1);
     expect(listGames(db, { q: '%' }).total).toBe(1);
+    // Spaces around the words are not part of them, and words come in any order.
+    expect(listGames(db, { player: '  muller ' }).total).toBe(1);
+    expect(listGames(db, { player: ' ' }).total).toBe(3);
+    expect(listGames(db, { q: 'chance 50%' }).total).toBe(1);
     createSavedPosition(db, { fen: FEN_START, title: 'pawn_storm 50% idea' });
     expect(listSavedPositions(db, { q: 'PAWN_STORM' }).total).toBe(1);
     expect(listSavedPositions(db, { q: 'pawnXstorm' }).total).toBe(0);
@@ -365,5 +369,17 @@ describe('counts in side lists', () => {
     const collectionId = createCollection(db, { name: 'C' });
     importGames(db, TWO_GAMES, { source: 'file', collectionId });
     expect(listCollections(db)[0]!.games).toBe(2);
+  });
+});
+
+describe('finding players', () => {
+  it('finds "first last" in "Last, First", and letters that are not accents', () => {
+    const { db } = openDatabase(':memory:');
+    runMigrations(db);
+    importGames(db, '[White "Carlsen, Magnus"]\n[Black "Ünal, Çağrı"]\n\n1. e4 *\n\n[White "Łódź Club"]\n[Black "X"]\n\n1. d4 *\n', { source: 'file' });
+    expect(listGames(db, { player: 'Magnus Carlsen' }).total).toBe(1);
+    expect(listGames(db, { player: 'magnus unal' }).total).toBe(0);
+    expect(listGames(db, { player: 'cagri' }).total).toBe(1);
+    expect(listGames(db, { q: 'lodz' }).total).toBe(1);
   });
 });

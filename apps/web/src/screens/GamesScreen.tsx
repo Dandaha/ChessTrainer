@@ -98,11 +98,14 @@ export function GamesScreen() {
   const [data, setData] = useState<{ total: number; games: GameSummary[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Every game the filter finds is selected, on every page, not only the ticked rows.
+  const [everyMatching, setEveryMatching] = useState(false);
   const [importing, setImporting] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [editing, setEditing] = useState<GameSummary | null>(null);
   const [findingDuplicates, setFindingDuplicates] = useState(false);
   const [controls, setControls] = useState<{ timeControl: string; speed: string | null; games: number }[]>([]);
+  const [tagOptions, setTagOptions] = useState<{ name: string; count: number }[]>([]);
   // The row the keyboard is on: arrows move it, Enter opens, Space selects, E edits, Delete deletes.
   const [focusRow, setFocusRow] = useState(0);
   const rows = useRef<(HTMLTableRowElement | null)[]>([]);
@@ -132,6 +135,7 @@ export function GamesScreen() {
       })
       .catch(() => {});
     api.timeControls().then(setControls).catch(() => {});
+    api.tags('game').then(setTagOptions).catch(() => {});
     api
       .games({ lastImport: 1, limit: 1 })
       .then((d) => setLastImportCount(d.total))
@@ -172,11 +176,12 @@ export function GamesScreen() {
   // so a bulk action can never reach games that are no longer visible.
   useEffect(() => {
     setSelected(new Set());
+    setEveryMatching(false);
   }, [filters, collectionId, offset, fen, sort]);
 
   // Games that left the list (deleted one at a time, or gone after a reload) leave the selection too.
   useEffect(() => {
-    if (!data) return;
+    if (!data || everyMatching) return;
     setSelected((s) => {
       const visible = new Set(data.games.map((g) => g.id));
       return [...s].every((id) => visible.has(id)) ? s : new Set([...s].filter((id) => visible.has(id)));
@@ -188,19 +193,39 @@ export function GamesScreen() {
     setOffset(0);
   };
 
-  const toggle = (id: string) =>
+  const clearSelection = () => {
+    setSelected(new Set());
+    setEveryMatching(false);
+  };
+
+  /** A bulk action on what is selected: the ticked rows, or every game that matches. */
+  const bulk = async (action: (ids: string[]) => Promise<void>) => {
+    try {
+      const ids = everyMatching
+        ? (await api.gameIds({ ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), ...scope })).ids
+        : [...selected];
+      if (ids.length) await action(ids);
+    } catch (error) {
+      ws.toast((error as Error).message, true);
+    }
+  };
+
+  const toggle = (id: string) => {
+    // Unticking one of "all that match" leaves the rows on this page ticked, less that one.
+    setEveryMatching(false);
     setSelected((s) => {
       const next = new Set(s);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  };
 
   const newCollection = async () => {
     let id = '';
     const name = await askText('New collection', '', 'e.g. My best games', async (text) => ({ id } = await api.createCollection(text)));
     if (!name) return;
-    if (selected.size) await api.addToCollection(id, [...selected]);
+    if (selected.size) await bulk((ids) => api.addToCollection(id, ids).then(() => undefined));
     setCollectionId(id);
     reload();
   };
@@ -257,7 +282,9 @@ export function GamesScreen() {
       Enter: () => void ws.openGameById(game.id),
       ' ': () => toggle(game.id),
       e: () => setEditing(game),
+      E: () => setEditing(game),
       Delete: () => void deleteOne(game),
+      Backspace: () => void deleteOne(game),
     };
     const action = actions[event.key];
     if (action && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -324,7 +351,7 @@ export function GamesScreen() {
         >
           Export PGN{data?.total ? ` (${count(data.total)})` : ''}
         </button>
-        <button type="button" className={buttonClass} disabled={!data?.total} onClick={() => setFindingDuplicates(true)} title="Games that are in the library more than once">
+        <button type="button" className={buttonClass} onClick={() => setFindingDuplicates(true)} title="Games that are in the whole library more than once">
           Find duplicates
         </button>
         <button type="button" className={primaryClass} onClick={() => setImporting(true)}>
@@ -361,7 +388,7 @@ export function GamesScreen() {
           <div className="flex flex-wrap gap-2">
             <input
               aria-label="Search games"
-              className={`${inputClass} w-56`}
+              className={`${inputClass} w-64`}
               placeholder="Search players, event, opening…"
               value={filters.q}
               onChange={(e) => setFilter('q', e.target.value)}
@@ -421,7 +448,20 @@ export function GamesScreen() {
             )}
             <input aria-label="From date" type="date" className={inputClass} value={filters.dateFrom} onChange={(e) => setFilter('dateFrom', e.target.value)} />
             <input aria-label="To date" type="date" className={inputClass} value={filters.dateTo} onChange={(e) => setFilter('dateTo', e.target.value)} />
-            <input aria-label="Tag" className={`${inputClass} w-28`} placeholder="Tag" value={filters.tag} onChange={(e) => setFilter('tag', e.target.value)} />
+            <input aria-label="Tag" list="game-tags" className={`${inputClass} w-28`} placeholder="Tag" value={filters.tag} onChange={(e) => setFilter('tag', e.target.value)} />
+            {/* The library's tags offered as the tag is typed: a tag is matched whole. */}
+            <datalist id="game-tags">
+              {tagOptions.map((t) => (
+                <option key={t.name} value={t.name}>
+                  {t.count}
+                </option>
+              ))}
+            </datalist>
+            {filters.dateFrom && filters.dateTo && filters.dateFrom > filters.dateTo && (
+              <span role="alert" className="self-center text-xs text-danger">
+                From is after To: no date is in between.
+              </span>
+            )}
             {Object.values(filters).some(Boolean) && (
               <button
                 type="button"
@@ -447,16 +487,26 @@ export function GamesScreen() {
 
           {selected.size > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm">
-              <span>{selected.size} selected</span>
+              <span>{everyMatching && data ? `All ${count(data.total)} games that match are selected` : `${count(selected.size)} selected`}</span>
+              {/* The whole page ticked: the rest that match can be taken in too, for one action on them all. */}
+              {!everyMatching && data && data.total > data.games.length && data.games.every((g) => selected.has(g.id)) && (
+                <button type="button" className="font-medium text-accent hover:underline" onClick={() => setEveryMatching(true)}>
+                  Select all {count(data.total)} that match
+                </button>
+              )}
               <select
                 aria-label="Add to collection"
                 className={`${inputClass} max-w-56`}
                 value=""
-                onChange={async (e) => {
-                  if (!e.target.value) return;
-                  await api.addToCollection(e.target.value, [...selected]);
-                  ws.toast(`Added ${selected.size} game${selected.size === 1 ? '' : 's'} to the collection.`);
-                  reload();
+                onChange={(e) => {
+                  const target = collections.find((c) => c.id === e.target.value);
+                  if (!target) return;
+                  void bulk(async (ids) => {
+                    const { added } = await api.addToCollection(target.id, ids);
+                    const already = ids.length - added;
+                    ws.toast(`Added ${count(added)} game${added === 1 ? '' : 's'} to “${target.name}”${already ? ` (${count(already)} ${already === 1 ? 'was' : 'were'} in it already)` : ''}.`);
+                    reload();
+                  });
                 }}
               >
                 <option value="">Add to collection…</option>
@@ -471,13 +521,14 @@ export function GamesScreen() {
                   type="button"
                   className={`${buttonClass} max-w-64 truncate`}
                   title={`Remove from “${current.name}”`}
-                  onClick={async () => {
-                    const ids = [...selected];
-                    const { removed } = await api.removeFromCollection(current.id, ids);
-                    setSelected(new Set());
-                    reload();
-                    undoToast(ws, `Took ${ids.length} game${ids.length === 1 ? '' : 's'} out of “${current.name}”.`, () => api.restoreToCollection(current.id, removed), reload);
-                  }}
+                  onClick={() =>
+                    void bulk(async (ids) => {
+                      const { removed } = await api.removeFromCollection(current.id, ids);
+                      clearSelection();
+                      reload();
+                      undoToast(ws, `Took ${count(ids.length)} game${ids.length === 1 ? '' : 's'} out of “${current.name}”.`, () => api.restoreToCollection(current.id, removed), reload);
+                    })
+                  }
                 >
                   Remove from “{current.name}”
                 </button>
@@ -485,28 +536,31 @@ export function GamesScreen() {
               <button
                 type="button"
                 className={buttonClass}
-                onClick={async () => {
-                  const { pgn, count } = await api.exportGameIds([...selected]);
-                  download(new Blob([pgn], { type: 'application/x-chess-pgn' }), `selected-games-${new Date().toISOString().slice(0, 10)}.pgn`);
-                  ws.toast(`Exported ${count} game${count === 1 ? '' : 's'}.`);
-                }}
+                onClick={() =>
+                  void bulk(async (ids) => {
+                    const { pgn, count: n } = await api.exportGameIds(ids);
+                    download(new Blob([pgn], { type: 'application/x-chess-pgn' }), `selected-games-${new Date().toISOString().slice(0, 10)}.pgn`);
+                    ws.toast(`Exported ${count(n)} game${n === 1 ? '' : 's'}.`);
+                  })
+                }
               >
                 Export selected
               </button>
               <button
                 type="button"
                 className={dangerClass}
-                onClick={async () => {
-                  const ids = [...selected];
-                  await api.deleteGames(ids);
-                  undoToast(ws, `Moved ${ids.length} game${ids.length === 1 ? '' : 's'} to the trash.`, () => api.restore('game', ids), reload);
-                  setSelected(new Set());
-                  reload();
-                }}
+                onClick={() =>
+                  void bulk(async (ids) => {
+                    await api.deleteGames(ids);
+                    undoToast(ws, `Moved ${count(ids.length)} game${ids.length === 1 ? '' : 's'} to the trash.`, () => api.restore('game', ids), reload);
+                    clearSelection();
+                    reload();
+                  })
+                }
               >
                 Delete
               </button>
-              <button type="button" className="ml-auto text-muted" onClick={() => setSelected(new Set())}>
+              <button type="button" className="ml-auto text-muted" onClick={clearSelection}>
                 Clear selection
               </button>
             </div>
@@ -515,9 +569,15 @@ export function GamesScreen() {
           {error && <Empty>{error}</Empty>}
           {data && data.total === 0 && !error && (
             <Empty>
-              {Object.values(filters).some(Boolean) || collectionId
-                ? 'No game matches.'
-                : 'No games yet. Import a PGN file, or your games from Lichess or Chess.com.'}
+              {Object.values(filters).some(Boolean)
+                ? 'No game matches these filters.'
+                : fen
+                  ? 'No game in the library reached this position.'
+                  : current
+                    ? 'This collection is empty. Select games in All games and add them to it, or import into it.'
+                    : collectionId === LAST_IMPORT
+                      ? 'The last import has no games left in the library.'
+                      : 'No games yet. Import a PGN file, or your games from Lichess or Chess.com.'}
             </Empty>
           )}
           {data && data.total > 0 && (
@@ -530,11 +590,16 @@ export function GamesScreen() {
                     <th className="w-9 px-3 py-2">
                       <input
                         type="checkbox"
-                        aria-label="Select all"
+                        aria-label="Select all on this page"
                         checked={data.games.length > 0 && data.games.every((g) => selected.has(g.id))}
-                        onChange={(e) =>
-                          setSelected(e.target.checked ? new Set(data.games.map((g) => g.id)) : new Set())
-                        }
+                        // Some of the page ticked: a dash, not an empty box.
+                        ref={(box) => {
+                          if (box) box.indeterminate = selected.size > 0 && !data.games.every((g) => selected.has(g.id));
+                        }}
+                        onChange={(e) => {
+                          setEveryMatching(false);
+                          setSelected(e.target.checked ? new Set(data.games.map((g) => g.id)) : new Set());
+                        }}
                       />
                     </th>
                     {COLUMNS.map((column) => (
@@ -744,6 +809,10 @@ function ImportGamesDialog({
     setError(null);
     setProgress(null);
     try {
+      if (source !== 'pgn' && !(Number.isInteger(max) && max >= 1 && max <= 5000)) {
+        setError('Most recent games: a whole number from 1 to 5,000.');
+        return;
+      }
       const target = collectionId || undefined;
       const report =
         source === 'pgn'
@@ -751,6 +820,17 @@ function ImportGamesDialog({
           : source === 'lichess'
             ? await api.importLichess(username, max, target, mine, setProgress)
             : await api.importChesscom(username, max, target, mine, setProgress);
+      // Nothing came in and something could not be read: the dialog stays, with the text, to fix it
+      // there, and says why in it (no toast beside it).
+      if (report.imported === 0 && report.duplicates === 0 && report.errors.length) {
+        setError(
+          report.errors
+            .slice(0, 5)
+            .map((e) => `Line ${e.line}: ${e.message}`)
+            .join('\n') + (report.errors.length > 5 ? `\n…and ${report.errors.length - 5} more.` : ''),
+        );
+        return;
+      }
       onDone(report);
       onClose();
     } catch (e) {
@@ -776,7 +856,10 @@ function ImportGamesDialog({
             type="button"
             role="tab"
             aria-selected={source === id}
-            onClick={() => setSource(id)}
+            onClick={() => {
+              setSource(id);
+              setError(null);
+            }}
             className={`rounded-md px-3 py-1.5 ${source === id ? 'bg-accent-soft font-semibold' : 'hover:bg-surface-2'}`}
           >
             {label}
@@ -789,10 +872,22 @@ function ImportGamesDialog({
           <textarea
             aria-label="PGN"
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setError(null);
+            }}
+            // A .pgn file dropped on the box is read into it.
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={async (e) => {
+              const file = e.dataTransfer.files[0];
+              if (!file) return;
+              e.preventDefault();
+              setText(await readTextFile(file));
+              setError(null);
+            }}
             rows={10}
             spellCheck={false}
-            placeholder="Paste one or many games here, or open a file."
+            placeholder="Paste one or many games here, drop a .pgn file, or open one."
             className={`${inputClass} w-full font-mono`}
           />
           <label className={`${buttonClass} inline-block cursor-pointer`}>
@@ -816,7 +911,19 @@ function ImportGamesDialog({
           </label>
           <label className="space-y-1 text-sm">
             <span className="block text-muted">Most recent games</span>
-            <input aria-label="How many games" type="number" min={1} max={5000} value={max} onChange={(e) => setMax(Number(e.target.value))} className={`${inputClass} w-28`} />
+            <input
+              aria-label="How many games"
+              type="number"
+              min={1}
+              max={5000}
+              step={1}
+              value={Number.isNaN(max) ? '' : max}
+              onChange={(e) => {
+                setMax(e.target.value === '' ? Number.NaN : Number(e.target.value));
+                setError(null);
+              }}
+              className={`${inputClass} w-28`}
+            />
           </label>
           <label className="flex w-full items-center gap-2 text-sm">
             <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />
@@ -850,7 +957,7 @@ function ImportGamesDialog({
       </div>
       {busy && <ImportProgressLine progress={progress} />}
       {error && (
-        <p role="alert" className="mt-2 text-sm text-danger">
+        <p role="alert" className="mt-2 whitespace-pre-line text-sm text-danger">
           {error}
         </p>
       )}
@@ -878,7 +985,7 @@ function SortHeader({
   sort: { key: GameSort; dir: 'asc' | 'desc' } | null;
   /** A collection in its own order: no column is the sort until one is chosen. */
   ownOrder?: boolean;
-  onSort(next: { key: GameSort; dir: 'asc' | 'desc' }): void;
+  onSort(next: { key: GameSort; dir: 'asc' | 'desc' } | null): void;
 }) {
   const newestFirst = !sort && !ownOrder && column.key === 'date';
   const active = sort?.key === column.key || newestFirst;
@@ -888,7 +995,11 @@ function SortHeader({
       <button
         type="button"
         className={`inline-flex items-center gap-1 hover:text-text ${active ? 'text-text' : ''}`}
-        onClick={() => onSort({ key: column.key, dir: dir ? (dir === 'asc' ? 'desc' : 'asc') : column.first })}
+        // First click: the column's natural order; second: the other way round; third: back to the list's
+        // own order (newest first, or a collection's own).
+        onClick={() =>
+          onSort(sort?.key === column.key && dir !== column.first ? null : { key: column.key, dir: dir ? (dir === 'asc' ? 'desc' : 'asc') : column.first })
+        }
       >
         {column.label}
         <span aria-hidden className="w-2 text-[10px]">
@@ -927,10 +1038,15 @@ function GameDetailsDialog({ game, onClose, onSaved }: { game: GameSummary; onCl
   const [myColor, setMyColor] = useState<string>(game.myColor ?? '');
   const [error, setError] = useState<string | null>(null);
 
+  const notesBox = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     api
       .game(game.id)
-      .then((detail) => setNotes(detail.notes ?? ''))
+      .then((detail) => {
+        setNotes(detail.notes ?? '');
+        // Loaded: the notes take the keyboard (E opens the dialog to write in them).
+        requestAnimationFrame(() => notesBox.current?.focus());
+      })
       .catch((e: Error) => setError(e.message));
   }, [game.id]);
 
@@ -957,9 +1073,13 @@ function GameDetailsDialog({ game, onClose, onSaved }: { game: GameSummary; onCl
           void save();
         }}
       >
+        {(game.date || game.event) && (
+          <p className="text-xs text-muted [overflow-wrap:anywhere]">{[formatPgnDate(game.date), game.event].filter(Boolean).join(' · ')}</p>
+        )}
         <label className="block space-y-1">
-          <span className="text-xs text-muted">Notes</span>
+          <span className="block text-xs text-muted">Notes</span>
           <textarea
+            ref={notesBox}
             aria-label="Notes"
             rows={5}
             className={`${inputClass} w-full`}
@@ -970,11 +1090,11 @@ function GameDetailsDialog({ game, onClose, onSaved }: { game: GameSummary; onCl
           />
         </label>
         <label className="block space-y-1">
-          <span className="text-xs text-muted">Tags (commas)</span>
+          <span className="block text-xs text-muted">Tags (commas)</span>
           <input aria-label="Tags" className={`${inputClass} w-full`} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="e.g. endgame, blunder" />
         </label>
         <label className="block space-y-1">
-          <span className="text-xs text-muted">I played</span>
+          <span className="block text-xs text-muted">I played</span>
           <select aria-label="I played" className={inputClass} value={myColor} onChange={(e) => setMyColor(e.target.value)}>
             <option value="">Neither (not my game)</option>
             <option value="white">White</option>

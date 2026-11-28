@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { SERVER_DOWN, api, useServerOnline } from './api.ts';
 import { CommandPalette } from './components/CommandPalette.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { dialogOpen } from './Dialogs.tsx';
 import { setLeaveQuestion, useRoute } from './router.ts';
 import { BoardScreen, isTyping } from './screens/BoardScreen.tsx';
 import { GamesScreen } from './screens/GamesScreen.tsx';
@@ -73,6 +74,15 @@ function Shell() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setPalette((open) => !open);
+      }
+      // Ctrl+Z undoes what the toast offers to undo (a delete), on every screen but the board, where
+      // it takes back a move; never in a text field, where it undoes typing.
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z') {
+        const action = latest.current.message?.action;
+        if (action?.label !== 'Undo' || isTyping(event.target) || dialogOpen() || window.location.hash.startsWith('#/board')) return;
+        event.preventDefault();
+        latest.current.dismissMessage();
+        void action.run();
       }
     };
     // A button clicked with the mouse lets go of the keyboard focus, so Space or Enter afterwards
