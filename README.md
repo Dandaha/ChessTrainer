@@ -94,8 +94,11 @@ database path.
   explorer marks them **⇄ transposes** and jumps to where the line continues.
 - Build it by playing moves on the repertoire's board, by pressing **R** on the analysis
   board (adds the line from the start to the current move), or by importing a PGN with
-  variations. Each move has my-move / expected-reply, main line / sideline, must-know /
-  nice-to-know and a comment. Export writes one PGN with variations.
+  variations. Each move is mine or an expected reply, must-know or nice-to-know, with a
+  comment. A move of mine is the main one (what I play) or a side move (an alternative I
+  know); the opponent's replies are all prepared alike, and **Move to top** only sets which
+  is listed first, which the PGN export writes as the main line. Drills bring must-know
+  replies up three times as often as nice-to-know ones.
 - Switches above the repertoire's board: **Engine lines** (**E**: Stockfish's lines, with
   the eval bar, depth, strength and threat mode **T**), **Best-move arrow** (**A**, purple)
   and **Variation arrows** (**V**, the prepared moves). **Space** adds the engine's best

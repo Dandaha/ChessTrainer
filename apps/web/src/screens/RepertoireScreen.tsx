@@ -494,7 +494,8 @@ export function RepertoireScreen() {
                         {node.edge.nags.some((n) => n > 6) && (
                           <span className={isSel ? '' : 'text-muted'}>{node.edge.nags.filter((n) => n > 6).map(nagGlyph).join(' ')}</span>
                         )}
-                        {!node.edge.isMain && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>side</span>}
+                        {/* Side: an alternative of mine. The opponent's replies are all prepared alike. */}
+                        {node.edge.isMyMove && !node.edge.isMain && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>side</span>}
                         {node.edge.priority === 'nice' && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>nice</span>}
                         {node.edge.comment && <span title={displayComment(node.edge.comment)}>✎</span>}
                         {node.transposition && (
@@ -716,11 +717,21 @@ function MoveEditor({
           <option value="must">Must know</option>
           <option value="nice">Nice to know</option>
         </select>
-        {!e.isMain && (
-          <button type="button" className={buttonClass} onClick={() => void update({ isMain: true })}>
-            Make main line
-          </button>
-        )}
+        {!e.isMain &&
+          (e.isMyMove ? (
+            <button type="button" className={buttonClass} onClick={() => void update({ isMain: true })} title="The move you play here; the other becomes your side move">
+              Make main line
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => void update({ isMain: true })}
+              title="List this reply first here; the PGN export writes it as the main line. Replies are trained alike either way."
+            >
+              Move to top
+            </button>
+          ))}
       </div>
       <NagButtons nags={e.nags} onToggle={(nag) => void update({ nags: toggledNags(e.nags, nag) })} />
       <textarea

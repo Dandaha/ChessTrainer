@@ -104,7 +104,7 @@ export function RepertoireTab({
                   </button>{' '}
                   <span className="text-xs text-muted">
                     {m.isMyMove ? 'your move' : 'expected'}
-                    {m.isMain ? '' : ' · side line'}
+                    {m.isMyMove && !m.isMain ? ' · side line' : ''}
                     {m.priority === 'nice' ? ' · nice to know' : ''}
                   </span>
                   {m.comment && <span className="block text-xs">{displayComment(m.comment)}</span>}

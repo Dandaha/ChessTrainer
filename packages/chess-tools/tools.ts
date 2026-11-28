@@ -233,7 +233,8 @@ export const searchConceptsTool = tool({
 
 export const getRepertoireTool = tool({
   name: 'get_repertoire',
-  description: 'The user’s repertoire at a position: their prepared moves here, sidelines, expected opponent replies and their own comments.',
+  description:
+    'The user’s repertoire at a position: their prepared moves here (isMain: the move they play; others are alternatives they know), the opponent replies they expect (all prepared alike; isMain only says which is listed first; priority must/nice says how important) and their own comments.',
   shape: { fen: fen() },
   async run({ fen: f }, ctx) {
     return needsData(ctx).repertoireAt(f);

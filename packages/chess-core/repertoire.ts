@@ -259,16 +259,19 @@ export function unreachableEdges(edges: RepEdge[], startFen: string = START_FEN)
   return edges.filter((e) => !reachable.has(e.id));
 }
 
-/** How often a reply comes up in a line drill: the main reply 3× a side line, a must-know 3× a nice-to-know. */
-export function replyWeight(edge: Pick<RepEdge, 'isMain' | 'priority'>): number {
-  return (edge.isMain ? 3 : 1) * (edge.priority === 'nice' ? 1 : 3);
+/**
+ * How often a reply comes up in a line drill: a must-know reply 3× a nice-to-know one. The opponent's
+ * replies are equals otherwise; which one is listed first (its main flag) only orders them.
+ */
+export function replyWeight(edge: Pick<RepEdge, 'priority'>): number {
+  return edge.priority === 'nice' ? 1 : 3;
 }
 
 /**
  * The opponent's reply in a line drill: chosen at random, but weighted by replyWeight, so the
  * moves that matter most come up most, as in Chessable's drills.
  */
-export function pickReply<E extends Pick<RepEdge, 'isMain' | 'priority'>>(replies: readonly E[], random: () => number = Math.random): E | undefined {
+export function pickReply<E extends Pick<RepEdge, 'priority'>>(replies: readonly E[], random: () => number = Math.random): E | undefined {
   const total = replies.reduce((sum, e) => sum + replyWeight(e), 0);
   let left = random() * total;
   for (const reply of replies) {

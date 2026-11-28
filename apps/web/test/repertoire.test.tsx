@@ -59,7 +59,29 @@ describe('the repertoire', () => {
     expect(rows.map((row) => [row.textContent, row.style.paddingLeft])).toEqual([
       ['▾1.d4Nf62.c4', '0px'],
       ['▾2...e6', '14px'],
-      ['▾2...g6side', '14px'],
+      ['▾2...g6', '14px'],
     ]);
+  });
+
+  it('marks side moves of mine only: the opponent’s replies are all prepared alike, one listed first', async () => {
+    const { app } = startServer();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'Main', color: 'white' } })).json();
+    const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    for (const sans of [['e4', 'e5'], ['e4', 'c5'], ['d4']]) {
+      await app.inject({ method: 'POST', url: `/api/repertoires/${id}/line`, payload: { fen: start, sans } });
+    }
+    go(`#/repertoire/${id}`);
+    render(<App />);
+    const tree = await screen.findByLabelText('Repertoire tree');
+    const rows = () => [...tree.querySelectorAll('[data-line]')].map((l) => l.textContent);
+    await waitFor(() => expect(rows()).toEqual(['▾1.e4', '▾1...e5', '▾1...c5', '▾1.d4side']));
+
+    // A reply listed second can be moved to the top; my side move can be made the main one.
+    fireEvent.click(screen.getByRole('button', { name: '1...c5' }));
+    expect(screen.queryByRole('button', { name: 'Make main line' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Move to top' }));
+    await waitFor(() => expect(rows()).toEqual(['▾1.e4', '▾1...c5', '▾1...e5', '▾1.d4side']));
+    fireEvent.click(screen.getByRole('button', { name: '1.d4side' }));
+    expect(await screen.findByRole('button', { name: 'Make main line' })).toBeTruthy();
   });
 });

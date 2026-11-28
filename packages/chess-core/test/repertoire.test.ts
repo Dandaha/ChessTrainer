@@ -156,8 +156,8 @@ describe('a repertoire through PGN and back', () => {
 describe('replies in a line drill', () => {
   const reply = (san: string, isMain: boolean, priority: 'must' | 'nice') => ({ san, isMain, priority });
 
-  it('weighs the main reply and must-know lines above side lines and nice-to-know ones', () => {
-    expect(replyWeight(reply('e5', true, 'must'))).toBe(9);
+  it('weighs must-know replies above nice-to-know ones, whichever is listed first', () => {
+    expect(replyWeight(reply('e5', true, 'must'))).toBe(3);
     expect(replyWeight(reply('c5', false, 'must'))).toBe(3);
     expect(replyWeight(reply('b6', false, 'nice'))).toBe(1);
   });
@@ -165,13 +165,13 @@ describe('replies in a line drill', () => {
   it('picks in proportion to the weights', () => {
     const replies = [reply('e5', true, 'must'), reply('c5', false, 'must'), reply('b6', false, 'nice')];
     const counts = new Map<string, number>();
-    for (let i = 0; i < 1300; i += 1) {
-      const pick = pickReply(replies, () => (i + 0.5) / 1300)!;
+    for (let i = 0; i < 1400; i += 1) {
+      const pick = pickReply(replies, () => (i + 0.5) / 1400)!;
       counts.set(pick.san, (counts.get(pick.san) ?? 0) + 1);
     }
-    expect(counts.get('e5')).toBe(900);
-    expect(counts.get('c5')).toBe(300);
-    expect(counts.get('b6')).toBe(100);
+    expect(counts.get('e5')).toBe(600);
+    expect(counts.get('c5')).toBe(600);
+    expect(counts.get('b6')).toBe(200);
     expect(pickReply([])).toBeUndefined();
   });
 });
