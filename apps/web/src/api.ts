@@ -94,6 +94,7 @@ async function streamPost(path: string, body: unknown, onEvent: (event: CoachEve
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let finished = false;
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -102,10 +103,16 @@ async function streamPost(path: string, body: unknown, onEvent: (event: CoachEve
     while (end >= 0) {
       const chunk = buffer.slice(0, end);
       buffer = buffer.slice(end + 2);
-      if (chunk.startsWith('data: ')) onEvent(JSON.parse(chunk.slice(6)) as CoachEvent);
+      if (chunk.startsWith('data: ')) {
+        const event = JSON.parse(chunk.slice(6)) as CoachEvent;
+        if (event.type === 'done' || event.type === 'error') finished = true;
+        onEvent(event);
+      }
       end = buffer.indexOf('\n\n');
     }
   }
+  // A stream that stops without an answer or an error must not leave the panel "thinking" forever.
+  if (!finished) onEvent({ type: 'error', error: 'The answer stopped before it was complete. Try again.' });
 }
 
 function query(params: object): string {

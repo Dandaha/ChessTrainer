@@ -21,20 +21,24 @@ import { chessData } from '../toolData.ts';
 
 export const NOT_CONNECTED = 'Coach not connected - add an API key in Settings';
 
-/** Streams coach events to the browser as server-sent events over the POST response. */
-async function sse(req: FastifyRequest, reply: FastifyReply, run: (emit: (e: CoachEvent) => void) => Promise<void>) {
+/**
+ * Streams coach events to the browser as server-sent events over the POST response.
+ * The response's own "close" tells when the browser has gone (the request's fires as soon as the
+ * body is read); the model call is then aborted so no tokens are spent on an answer nobody sees.
+ */
+async function sse(reply: FastifyReply, run: (emit: (e: CoachEvent) => void, signal: AbortSignal) => Promise<void>) {
   reply.hijack();
   const res = reply.raw;
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-  let open = true;
-  req.raw.on('close', () => {
-    open = false;
+  const left = new AbortController();
+  res.on('close', () => {
+    if (!res.writableFinished) left.abort();
   });
   const emit = (event: CoachEvent) => {
-    if (open) res.write(`data: ${JSON.stringify(event)}\n\n`);
+    if (!left.signal.aborted && !res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
   try {
-    await run(emit);
+    await run(emit, left.signal);
   } catch (error) {
     emit({ type: 'error', error: error instanceof Error ? error.message : String(error) });
   }
@@ -103,13 +107,13 @@ export function coachRoutes(
     const body = req.body as CoachRequest;
     const d = deps();
     if (!d) return reply.code(409).send({ error: NOT_CONNECTED });
-    await sse(req, reply, (emit) => runCoach(d, body, emit));
+    await sse(reply, (emit, signal) => runCoach({ ...d, signal }, body, emit));
   });
 
   app.post('/api/coach/review', async (req, reply) => {
     const body = req.body as { startFen: string; moves: string[]; myColor?: 'white' | 'black' };
     const d = deps();
     if (!d) return reply.code(409).send({ error: NOT_CONNECTED });
-    await sse(req, reply, (emit) => reviewGame(d, body, emit));
+    await sse(reply, (emit, signal) => reviewGame({ ...d, signal }, body, emit));
   });
 }

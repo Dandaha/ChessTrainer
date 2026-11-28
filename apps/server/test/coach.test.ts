@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Analysis } from '@chess/chess-tools';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type CoachEvent, type StreamingClient, SYSTEM_PROMPT, reviewGame, runCoach } from '../coach/coach.ts';
 import { openDatabase, runMigrations } from '../db/client.ts';
 import { coachMessages } from '../db/schema.ts';
@@ -221,6 +221,64 @@ describe('the coach API', () => {
     await app.inject({ method: 'DELETE', url: '/api/coach/key' });
     expect(readFileSync(envFile, 'utf8')).toBe('\n');
     expect((await app.inject({ method: 'GET', url: '/api/coach/status' })).json().connected).toBe(false);
+    await app.close();
+  });
+
+  // app.inject never opens a socket, which is how a bug that dropped every event on a real
+  // connection went unnoticed: these two go through a real HTTP connection.
+  it('streams the answer over a real connection', async () => {
+    const { client } = scripted([{ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Develop your pieces.' }] }]);
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789';
+    const app = buildApp(freshDb(), undefined, () => client);
+    const url = await app.listen({ host: '127.0.0.1', port: 0 });
+    const response = await fetch(`${url}/api/coach/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'ask', fen: START, startFen: START, moves: [], question: 'Plan?' }),
+    });
+    const events = (await response.text())
+      .split('\n\n')
+      .filter(Boolean)
+      .map((chunk) => JSON.parse(chunk.replace(/^data: /, '')) as CoachEvent);
+    expect(events.map((e) => e.type)).toEqual(['text', 'done']);
+    expect(events[0]).toMatchObject({ text: 'Develop your pieces.' });
+    await app.close();
+  });
+
+  it('stops the model call when the browser goes away', async () => {
+    let signal: AbortSignal | undefined;
+    const client: StreamingClient = {
+      stream(_params, options) {
+        signal = options?.signal;
+        const listeners: ((d: string) => void)[] = [];
+        return {
+          on(_event, listener) {
+            listeners.push(listener);
+            return this;
+          },
+          finalMessage: () =>
+            new Promise((_, reject) => {
+              for (const l of listeners) l('Thinking about it');
+              signal?.addEventListener('abort', () => reject(new Error('aborted')));
+            }),
+        };
+      },
+    };
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789';
+    const app = buildApp(freshDb(), undefined, () => client);
+    const url = await app.listen({ host: '127.0.0.1', port: 0 });
+    const leave = new AbortController();
+    const response = await fetch(`${url}/api/coach/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'ask', fen: START, startFen: START, moves: [], question: 'Plan?' }),
+      signal: leave.signal,
+    });
+    const reader = response.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain('Thinking about it');
+    expect(signal?.aborted).toBe(false);
+    leave.abort();
+    await vi.waitFor(() => expect(signal?.aborted).toBe(true));
     await app.close();
   });
 });

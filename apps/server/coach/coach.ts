@@ -96,18 +96,23 @@ type Message = Anthropic.Beta.BetaMessage;
 
 /** The part of the SDK client the coach uses, so tests can stand in for it. */
 export interface StreamingClient {
-  stream(params: StreamParams): { on(event: 'text', listener: (delta: string) => void): unknown; finalMessage(): Promise<Message> };
+  stream(
+    params: StreamParams,
+    options?: { signal?: AbortSignal },
+  ): { on(event: 'text', listener: (delta: string) => void): unknown; finalMessage(): Promise<Message> };
 }
 
 export function sdkClient(apiKey: string): StreamingClient {
   const client = new Anthropic({ apiKey });
-  return { stream: (params) => client.beta.messages.stream(params) };
+  return { stream: (params, options) => client.beta.messages.stream(params, options) };
 }
 
 export interface CoachDeps {
   db: Db;
   client: StreamingClient;
   tools: ToolContext;
+  /** Aborted when the person closes the panel or leaves: stop calling the model. */
+  signal?: AbortSignal;
 }
 
 // --- Prices, for the spending note (USD per million tokens, Nov 2026; an estimate) ---
@@ -306,6 +311,7 @@ export async function runCoach(
   const perCall: Usage[] = [];
 
   for (let turn = 0; turn < MAX_TURNS; turn += 1) {
+    if (deps.signal?.aborted) return;
     const params: StreamParams = {
       model,
       max_tokens: 64000,
@@ -318,7 +324,7 @@ export async function runCoach(
       // Haiku 5.5 has no server-side fallback; Sonnet and Opus fall back on a refusal.
       ...(model === 'claude-haiku-5-5' ? {} : { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const }),
     };
-    const stream = deps.client.stream(params);
+    const stream = deps.client.stream(params, { signal: deps.signal });
     stream.on('text', (delta) => {
       answer += delta;
       emit({ type: 'text', text: delta });
@@ -450,6 +456,7 @@ export async function reviewGame(
   const scores: number[] = [];
   const best: string[] = [];
   for (let i = 0; i < nodes.length; i += 1) {
+    if (deps.signal?.aborted) return;
     if (i % 4 === 0) emit({ type: 'status', text: `Checking the game with Stockfish: move ${Math.ceil(Math.max(i, 1) / 2)} of ${Math.ceil(req.moves.length / 2)}…` });
     const analysis = await deps.tools.analyse(nodes[i]!.fen, { depth: 12, multipv: 1 });
     const line = analysis.lines[0];
