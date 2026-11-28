@@ -60,30 +60,24 @@ All ten fixed on 28 November 2026 (coach stream, local-API lock-down, secrets ke
 ## Missing compared with standard chess software
 
 - **Board:**
-  - The result when the game ends (mate, stalemate, repetition, 50 moves, material), and setting the Result.
-  - Arrow keys into side lines.
   - Engine settings: lines, depth, strength. Threat mode and a key to play the best move.
   - A FEN field and copy FEN, a board editor, and a header-tag editor.
   - Promotion on the target square, castling by dragging the king onto the rook, and Chess960/null moves.
 - **Games:**
-  - Sortable columns (rating, result, player, ECO), with UTCTime as the tie-break.
   - Time-control and speed filters.
-  - Export of a collection, a selection or everything.
   - Duplicate detection by content, and ECO classification of untagged games.
   - "Since last import", and the full list behind "Reached in N games".
   - Positions inside variations indexed.
   - Editing a game's tags, notes and "my colour".
   - A keyboard-usable list; restore all / empty trash / undo.
 - **Training:**
-  - Retry and "show solution", and multi-move solutions.
-  - A learn pass before review, and drilling a whole line.
+  - Multi-move solutions, and drilling a whole line.
   - Opponent moves by priority, and "nice to know" respected.
   - Streaks, a session summary, and solving a set on demand.
 - **Repertoire:** confirm or undo a subtree delete; NAGs shown and editable; a move box; expand and collapse all.
 - **General:**
   - Confirm or undo for destructive actions.
   - Validation and "Saved" feedback in Settings.
-  - **A Lichess token field in Settings**, without which Find gaps and the opening explorer can't work in the installed app.
   - Layouts for narrow windows, and input borders at 3:1 contrast.
 
 ## What works well
