@@ -32,26 +32,17 @@ All fixed on 28 November 2026:
 
 ## Missing compared with standard chess software
 
-- **Board:**
-  - Engine settings: lines, depth, strength. Threat mode and a key to play the best move.
-  - A FEN field and copy FEN, a board editor, and a header-tag editor.
-  - Promotion on the target square, castling by dragging the king onto the rook, and Chess960/null moves.
-- **Games:**
-  - Time-control and speed filters.
-  - Duplicate detection by content, and ECO classification of untagged games.
-  - "Since last import", and the full list behind "Reached in N games".
-  - Positions inside variations indexed.
-  - Editing a game's tags, notes and "my colour".
-  - A keyboard-usable list; restore all / empty trash / undo.
-- **Training:**
-  - Multi-move solutions, and drilling a whole line.
-  - Opponent moves by priority, and "nice to know" respected.
-  - Streaks, a session summary, and solving a set on demand.
-- **Repertoire:** confirm or undo a subtree delete; NAGs shown and editable; a move box; expand and collapse all.
-- **General:**
-  - Confirm or undo for destructive actions.
-  - Validation and "Saved" feedback in Settings.
-  - Layouts for narrow windows, and input borders at 3:1 contrast.
+Built on 28 November 2026:
+- **Board:** engine settings (lines, depth, strength), threat mode (T) and Space for the best move; a FEN field, a board editor and a tag editor; promotion on the target square and castling by putting the king on its rook.
+- **Games:** time-control and speed filters; duplicates found by content; openings filled in from Lichess's open table; the last import; the full list behind "Reached in N games"; editing tags, notes and colour from the library; a keyboard-usable list; Restore all and Empty trash.
+- **Training:** solutions of several moves; line drills from the first move; replies weighted by main line and priority; nice-to-know moves introduced last and scheduled less often.
+- **Repertoire:** confirmation before a subtree delete; NAGs shown and editable; a move box; Expand all and Collapse all.
+- **General:** Undo for every delete that goes to the trash, confirmation for the rest; Settings checked, with "Saved"; layouts down to the 960-pixel window, and field edges at 3:1 contrast.
+
+Still open (not chosen for now):
+- Chess960 and null moves.
+- Positions inside variations indexed (only the main line is).
+- Training streaks, a session summary, and solving a set of positions on demand.
 
 ## What works well
 
