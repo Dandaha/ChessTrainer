@@ -56,10 +56,21 @@ export function TrainingScreen() {
   const [session, setSession] = useState<CardDetail[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // With a repertoire chosen, the counts are that repertoire's, as its session will show them.
+  const [scopeName, setScopeName] = useState<string | null>(null);
   const refresh = useCallback(() => {
-    api.trainingSummary().then(setSummary).catch((e: Error) => setError(e.message));
+    api.trainingSummary(repertoireId).then(setSummary).catch((e: Error) => setError(e.message));
     api.trainingStats().then(setStats).catch(() => {});
-  }, []);
+    if (repertoireId)
+      api
+        .repertoires()
+        .then((list) => {
+          const r = list.find((x) => x.id === repertoireId);
+          setScopeName(r ? `${r.color === 'white' ? '♔' : '♚'} ${r.name}` : null);
+        })
+        .catch(() => {});
+    else setScopeName(null);
+  }, [repertoireId]);
   useEffect(refresh, [refresh]);
 
   const start = async (type?: 'repertoire_move' | 'saved_position') => {
@@ -76,7 +87,8 @@ export function TrainingScreen() {
         key={`${drill}|${route.params.get('line') ?? ''}`}
         repertoireId={drill}
         guide={route.params.get('line')?.split(',').filter(Boolean) ?? []}
-        onEnd={() => navigate(`repertoire/${drill}`)}
+        // Back where the drill was started from.
+        onEnd={() => navigate(route.params.get('from') === 'training' ? `training?repertoire=${drill}` : `repertoire/${drill}`)}
       />
     );
   }
@@ -100,7 +112,7 @@ export function TrainingScreen() {
         {error && <Empty>{error}</Empty>}
         {summary && (
           <section className="space-y-3 rounded-xl border border-line bg-surface p-5">
-            <h2 className="text-lg font-semibold">Today</h2>
+            <h2 className="text-lg font-semibold">Today{scopeName ? ` in ${scopeName}` : ''}</h2>
             <QueueLine summary={summary} />
             {summary.total === 0 ? (
               <p className="text-sm text-muted">
@@ -113,7 +125,7 @@ export function TrainingScreen() {
                   {repertoireId ? 'Train this repertoire' : 'Train everything due'}
                 </button>
                 {repertoireId && (
-                  <button type="button" className={buttonClass} onClick={() => navigate(`training?drill=${repertoireId}`)} title="Whole lines from the first move, as practice">
+                  <button type="button" className={buttonClass} onClick={() => navigate(`training?drill=${repertoireId}&from=training`)} title="Whole lines from the first move, as practice">
                     Drill lines
                   </button>
                 )}
@@ -167,7 +179,7 @@ function Stats({ stats }: { stats: TrainingStats }) {
       <table className="w-full text-sm">
         <thead className="text-left text-xs text-muted">
           <tr>
-            <th className="py-1">Accuracy</th>
+            <th className="py-1">Trained</th>
             <th className="text-right">Cards</th>
             <th className="text-right">Reviews</th>
             <th className="text-right">Right</th>

@@ -137,5 +137,6 @@ kbd {
   #root {
     height: auto;
     overflow: visible;
+    background: #fff;
   }
 }

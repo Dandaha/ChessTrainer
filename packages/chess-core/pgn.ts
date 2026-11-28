@@ -496,6 +496,25 @@ function wrap(text: string, lineLength: number): string {
  * "Rd8+ Kh7". Move numbers, dots, results and !? marks are not moves; reading stops at the first
  * word that is not a legal move there ("Bxh7+ wins" is one move).
  */
+/**
+ * What is wrong with a written answer, for the person writing it: the first word that is not a legal
+ * move where it stands ("Qh5" when the queen cannot get there), or null when every move plays (or the
+ * answer is empty). Words after the moves ("Bxh7+ wins") are fine once at least one move played.
+ */
+export function answerProblem(fen: string, text: string | null | undefined): string | null {
+  const words = (text ?? '').replace(/\{[^}]*\}/g, ' ').split(/\s+/).map((w) => w.replace(/^\d+\.+/, '').replace(/^\.+/, '').replace(/[!?]+$/, ''));
+  const moves = words.filter((w) => w && !/^(1-0|0-1|1\/2-1\/2|\*)$/.test(w));
+  if (!moves.length) return null;
+  const played = answerLine(fen, text);
+  if (played.length === moves.length) return null;
+  const stuck = moves[played.length]!;
+  // Prose after a line that played ("Bxh7+ wins a pawn") is commentary, not a broken move.
+  if (played.length > 0 && !/^([KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?|O-O(-O)?)[+#]?$/.test(stuck)) return null;
+  return played.length === 0
+    ? `${stuck} is not a legal move in this position, so training will let Stockfish judge instead.`
+    : `The line stops at ${stuck}: it is not legal after ${played.map((n) => n.san).join(' ')}, so training drills only the moves before it.`;
+}
+
 export function answerLine(fen: string, text: string | null | undefined): MoveNode[] {
   const out: MoveNode[] = [];
   let node = createGame(fen).root;

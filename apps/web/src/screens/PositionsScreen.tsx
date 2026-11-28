@@ -1,3 +1,4 @@
+import { answerProblem } from '@chess/chess-core';
 import { useCallback, useEffect, useState } from 'react';
 import { type PositionCategory, type PositionSetSummary, type SavedPosition, api } from '../api.ts';
 import { MiniBoard } from '../components/MiniBoard.tsx';
@@ -364,8 +365,8 @@ function PositionDetail({
           )}
         </div>
         <label className="col-span-2 space-y-1">
-          <span className="text-xs text-muted">Answer (SAN, checked in solve mode)</span>
-          <input aria-label="Answer" className={field} placeholder="A move, or a line drilled move by move" defaultValue={saved.answer ?? ''} onBlur={(e) => void update({ answer: e.target.value || null })} />
+          <span className="text-xs text-muted">Answer: a move, or a line drilled move by move</span>
+          <AnswerInput fen={saved.fen} initial={saved.answer ?? ''} className={field} onSave={(answer) => void update({ answer: answer || null })} />
         </label>
         <div className="col-span-2 space-y-1">
           <div className="flex items-center justify-between">
@@ -516,5 +517,25 @@ function CategoriesList({
         </div>
       )}
     </div>
+  );
+}
+
+/** The answer field, with a word when a move in it does not play from the position. */
+function AnswerInput({ fen, initial, className, onSave }: { fen: string; initial: string; className: string; onSave(answer: string): void }) {
+  const [text, setText] = useState(initial);
+  const problem = answerProblem(fen, text);
+  return (
+    <>
+      <input
+        aria-label="Answer"
+        className={className}
+        placeholder="e.g. Bxh7+ Kxh7 Ng5+ (empty: Stockfish judges)"
+        value={text}
+        aria-invalid={problem !== null}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => onSave(text.trim())}
+      />
+      {problem && <span className="block text-xs text-danger">{problem}</span>}
+    </>
   );
 }

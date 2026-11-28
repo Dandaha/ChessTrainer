@@ -268,3 +268,17 @@ describe('nice to know', () => {
     expect(dueNice).toBeGreaterThan(dueMust * 1 + 3 * 86_400_000);
   });
 });
+
+describe('the day\'s counts for one repertoire', () => {
+  it('count only that repertoire, as its session shows', () => {
+    const db = freshDb();
+    const white = createRepertoire(db, { name: 'White', color: 'white' });
+    const black = createRepertoire(db, { name: 'Black', color: 'black' });
+    addLine(db, white, START, ['e4', 'e5', 'Nf3']);
+    addLine(db, black, START, ['e4', 'c5', 'Nf3', 'd6']);
+    createSavedPosition(db, { fen: START, title: 'Start', inTraining: true });
+    expect(summary(db).total).toBe(5);
+    expect(summary(db, new Date(), 20, black)).toMatchObject({ total: 2, newToday: 2, positionsDue: 0 });
+    expect(queue(db, { repertoireId: black }).length).toBe(2);
+  });
+});

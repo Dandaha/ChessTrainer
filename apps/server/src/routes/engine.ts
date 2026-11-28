@@ -70,7 +70,7 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
   // Training ---------------------------------------------------------------------
   const newPerDay = () => 20;
 
-  app.get('/api/training/summary', async () => summary(db, new Date(), newPerDay()));
+  app.get('/api/training/summary', async (req) => summary(db, new Date(), newPerDay(), (req.query as { repertoireId?: string }).repertoireId || undefined));
 
   app.get('/api/training/queue', async (req) => {
     const q = req.query as { repertoireId?: string; type?: 'repertoire_move' | 'saved_position' };

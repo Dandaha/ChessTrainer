@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type Game, type MoveNode, addMove, getHeader, mainlineFrom } from '../tree.ts';
-import { PgnParseError, answerLine, parseGame, parsePgn, writePgn } from '../pgn.ts';
+import { PgnParseError, answerLine, answerProblem, parseGame, parsePgn, writePgn } from '../pgn.ts';
 
 /** The tree without node ids, for comparing two parses. */
 function shape(node: MoveNode): unknown {
@@ -268,5 +268,20 @@ describe('answerLine', () => {
     expect(answerLine(GREEK_GIFT, 'Bxh7+ wins a pawn').map((n) => n.san)).toEqual(['Bxh7+']);
     expect(answerLine(GREEK_GIFT, 'the bishop sacrifice')).toEqual([]);
     expect(answerLine(GREEK_GIFT, null)).toEqual([]);
+  });
+});
+
+describe('answerProblem', () => {
+  const GREEK_GIFT = 'r1bq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R2QK2R w KQ - 0 8';
+
+  it('says nothing about an empty answer, a line that plays, or words after the moves', () => {
+    expect(answerProblem(GREEK_GIFT, '')).toBeNull();
+    expect(answerProblem(GREEK_GIFT, '8. Bxh7+ Kxh7 9. Ng5+')).toBeNull();
+    expect(answerProblem(GREEK_GIFT, 'Bxh7+ wins a pawn')).toBeNull();
+  });
+
+  it('names the first move that does not play', () => {
+    expect(answerProblem(GREEK_GIFT, 'Qh5 Nf6 Qxf7#')).toMatch(/^Qh5 is not a legal move in this position/);
+    expect(answerProblem(GREEK_GIFT, 'Bxh7+ Kxh7 Qh5')).toMatch(/^The line stops at Qh5: it is not legal after Bxh7\+ Kxh7/);
   });
 });

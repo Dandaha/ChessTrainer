@@ -288,7 +288,7 @@ export const api = {
   engineStreamUrl: (fen: string, multipv = 3, history?: { startFen: string; moves: string[] }, settings: { depth?: number; elo?: number | null } = {}) =>
     `/api/engine/stream${query({ fen, multipv, start: history?.startFen, moves: history?.moves.join(','), depth: settings.depth, elo: settings.elo ?? undefined })}`,
 
-  trainingSummary: () => call<QueueSummary>('GET', '/api/training/summary'),
+  trainingSummary: (repertoireId?: string) => call<QueueSummary>('GET', `/api/training/summary${query({ repertoireId })}`),
   trainingQueue: (filter: { repertoireId?: string; type?: 'repertoire_move' | 'saved_position' } = {}) =>
     call<CardDetail[]>('GET', `/api/training/queue${query(filter)}`),
   review: (cardId: string, rating: 1 | 2 | 3 | 4, correct: boolean) => call('POST', '/api/training/review', { cardId, rating, correct }),

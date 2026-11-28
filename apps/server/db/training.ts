@@ -304,9 +304,10 @@ function isDue(card: CardRow, now: Date): boolean {
   return card.state === State.Review ? card.due <= endOfDay(now) : card.due <= now.toISOString();
 }
 
-export function summary(db: Db, now = new Date(), newPerDay = 20): QueueSummary {
+/** The day's counts: of everything, or (`repertoireId`) of one repertoire, as its session will show. */
+export function summary(db: Db, now = new Date(), newPerDay = 20, repertoireId?: string): QueueSummary {
   syncCards(db, now);
-  const cards = activeCards(db);
+  const cards = activeCards(db, { repertoireId });
   const seen = cards.filter((c) => isDue(c, now));
   const fresh = cards.filter((c) => c.state === 0).length;
   return {

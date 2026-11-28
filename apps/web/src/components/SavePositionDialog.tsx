@@ -1,3 +1,4 @@
+import { answerProblem } from '@chess/chess-core';
 import { useEffect, useRef, useState } from 'react';
 import { type ConceptSummary, type PositionSetSummary, type SavedPositionInput, api } from '../api.ts';
 import { CategorySelect } from './CategorySelect.tsx';
@@ -161,7 +162,9 @@ export function SavePositionDialog({
                 onChange={(e) => setAnswer(e.target.value)}
                 placeholder="e.g. Bxh7+ Kxh7 Ng5+ (empty: Stockfish judges)"
                 className={field}
+                aria-invalid={answerProblem(fen, answer) !== null}
               />
+              {answerProblem(fen, answer) && <span className="block text-xs text-danger">{answerProblem(fen, answer)}</span>}
             </label>
             <label className="space-y-1">
               <span className="text-muted">Add to set</span>
