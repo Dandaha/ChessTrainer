@@ -250,8 +250,16 @@ const BATCH_MS = 100;
  * a library of thousands of games comes in without freezing the app, and the games stay findable as
  * they arrive. A batch that fails leaves the batches before it imported.
  */
-export async function importGamesInBatches(db: Db, text: string, options: ImportOptions): Promise<ImportReport> {
+export async function importGamesInBatches(
+  db: Db,
+  text: string,
+  options: ImportOptions,
+  onProgress?: (progress: ImportProgress) => void,
+): Promise<ImportReport> {
   const report: ImportReport = { imported: 0, duplicates: 0, variants: 0, errors: [], gameIds: [] };
+  const expected = countGameStarts(text) || undefined;
+  const tell = () =>
+    onProgress?.({ phase: 'importing', games: report.imported + report.duplicates + report.variants + report.errors.length, expected });
   let batch: Game[] = [];
   let started = performance.now();
   for (const item of readPgnGames(text)) {
@@ -260,12 +268,30 @@ export async function importGamesInBatches(db: Db, text: string, options: Import
     if (performance.now() - started >= BATCH_MS) {
       writeGames(db, batch, options, report);
       batch = [];
+      tell();
       await new Promise((resolve) => setImmediate(resolve));
       started = performance.now();
     }
   }
   writeGames(db, batch, options, report);
+  tell();
   return report;
+}
+
+/** How far an import has come: games downloaded so far, or games read (and how many the text holds). */
+export interface ImportProgress {
+  phase: 'downloading' | 'importing';
+  games: number;
+  /** About how many games the text holds (its Event tags); unknown when the games have none. */
+  expected?: number;
+}
+
+/** What an import streams to the browser that asked for events. */
+export type ImportEvent = ({ type: 'progress' } & ImportProgress) | { type: 'done'; report: ImportReport } | { type: 'error'; error: string };
+
+/** Games in a PGN text, counted by their Event tags (every exported game has one). */
+export function countGameStarts(text: string): number {
+  return text.match(/^\s*\[Event\s/gm)?.length ?? 0;
 }
 
 /**

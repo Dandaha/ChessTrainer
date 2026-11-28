@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openDatabase, runMigrations } from '../db/client.ts';
-import { importGamesInBatches, listGames } from '../db/games.ts';
+import { type ImportEvent, importGamesInBatches, listGames } from '../db/games.ts';
+import { fetchLichessGames } from '../src/importers.ts';
 import { buildApp } from '../src/app.ts';
 
 /** A large import comes in batches and leaves the app answering in the meantime. */
@@ -47,4 +48,50 @@ describe('a large import', () => {
     expect((await importing).imported).toBe(1500);
     await app.close();
   }, 120_000);
+
+  it('streams its progress to a browser that asks for events, then the report', async () => {
+    const app = buildApp(freshDb());
+    const url = await app.listen({ host: '127.0.0.1', port: 0 });
+    const response = await fetch(`${url}/api/games/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify({ pgn: manyGames(400) }),
+    });
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+    const events = (await response.text())
+      .split('\n\n')
+      .filter(Boolean)
+      .map((chunk) => JSON.parse(chunk.replace(/^data: /, '')) as ImportEvent);
+    const progress = events.filter((e) => e.type === 'progress');
+    expect(progress.length).toBeGreaterThan(1);
+    expect(progress.every((e) => e.phase === 'importing' && e.expected === 400)).toBe(true);
+    const counts = progress.map((e) => e.games);
+    expect(counts).toEqual([...counts].sort((a, b) => a - b));
+    expect(counts.at(-1)).toBe(400);
+    expect(events.at(-1)).toMatchObject({ type: 'done', report: { imported: 400 } });
+    await app.close();
+  }, 120_000);
+});
+
+describe('downloading from Lichess', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('counts the games as they arrive, even when a tag is split between two pieces', async () => {
+    const text = manyGames(3);
+    const cut = text.indexOf('[Event', 10) + 3;
+    const pieces = [text.slice(0, cut), text.slice(cut)];
+    vi.stubGlobal('fetch', async () => {
+      const body = new ReadableStream({
+        start(controller) {
+          for (const piece of pieces) controller.enqueue(new TextEncoder().encode(piece));
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 200 });
+    });
+    const seen: number[] = [];
+    const pgn = await fetchLichessGames('someone', 3, undefined, (n) => seen.push(n));
+    expect(pgn).toBe(text);
+    expect(seen).toEqual([1, 3]);
+  });
 });

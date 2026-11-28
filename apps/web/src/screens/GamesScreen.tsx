@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { type CollectionSummary, type GameSort, type GameSummary, type ImportReport, api } from '../api.ts';
+import { type CollectionSummary, type GameSort, type GameSummary, type ImportProgress, type ImportReport, api } from '../api.ts';
 import { Modal } from '../Dialogs.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { useWorkspace } from '../workspace.tsx';
@@ -382,6 +382,7 @@ function ImportGamesDialog({
   const [max, setMax] = useState(500);
   const [collectionId, setCollectionId] = useState(defaultCollection);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -405,20 +406,22 @@ function ImportGamesDialog({
   const run = async () => {
     setBusy(true);
     setError(null);
+    setProgress(null);
     try {
       const target = collectionId || undefined;
       const report =
         source === 'pgn'
-          ? await api.importPgn(text, target)
+          ? await api.importPgn(text, target, setProgress)
           : source === 'lichess'
-            ? await api.importLichess(username, max, target, mine)
-            : await api.importChesscom(username, max, target, mine);
+            ? await api.importLichess(username, max, target, mine, setProgress)
+            : await api.importChesscom(username, max, target, mine, setProgress);
       onDone(report);
       onClose();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -509,6 +512,7 @@ function ImportGamesDialog({
           {busy ? 'Importing…' : 'Import'}
         </button>
       </div>
+      {busy && <ImportProgressLine progress={progress} />}
       {error && (
         <p role="alert" className="mt-2 text-sm text-danger">
           {error}
@@ -552,5 +556,25 @@ function SortHeader({
         </span>
       </button>
     </th>
+  );
+}
+
+/** "Downloading… 120 of 500 games", then "Importing… 1,234 of 5,000 games", with a bar when the end is known. */
+function ImportProgressLine({ progress }: { progress: ImportProgress | null }) {
+  const n = (x: number) => x.toLocaleString('en');
+  const { phase = 'importing', games = 0, expected } = progress ?? {};
+  const total = expected && expected >= games ? expected : undefined;
+  const label = !progress
+    ? 'Starting…'
+    : `${phase === 'downloading' ? 'Downloading' : 'Importing'}… ${n(games)}${total ? ` of ${phase === 'downloading' ? 'up to ' : ''}${n(total)}` : ''} games`;
+  return (
+    <div className="mt-3 space-y-1 text-xs text-muted" aria-live="polite">
+      {total ? (
+        <div role="progressbar" aria-label="Import progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={games} className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+          <div className="h-full bg-accent transition-[width]" style={{ width: `${Math.round((games / total) * 100)}%` }} />
+        </div>
+      ) : null}
+      <p>{label}</p>
+    </div>
   );
 }

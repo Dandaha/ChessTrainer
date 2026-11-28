@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { GameDetail, GameFilters, GameSort, GameSummary, ImportReport, MoveStat } from '@chess/server/db/games.ts';
+import type { GameDetail, GameFilters, GameSort, GameSummary, ImportEvent, ImportProgress, ImportReport, MoveStat } from '@chess/server/db/games.ts';
 import type { Color, Priority, RepEdge, RepertoireCheck } from '@chess/chess-core';
 import type { RepertoireSummary } from '@chess/server/db/repertoire.ts';
 import type { CardDetail, QueueSummary, TrainingStats } from '@chess/server/db/training.ts';
@@ -50,6 +50,7 @@ export type {
   CollectionSummary,
   GameDetail,
   GameSummary,
+  ImportProgress,
   ImportReport,
   MoveStat,
   PositionSetSummary,
@@ -134,9 +135,16 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T;
 }
 
-/** POSTs and reads the server-sent events the coach streams back. */
-async function streamPost(path: string, body: unknown, onEvent: (event: CoachEvent) => void): Promise<void> {
-  const response = await send(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+/**
+ * POSTs and reads the server-sent events streamed back (the coach's answer, an import's progress).
+ * Says whether the stream ended properly, with a "done" or "error" event.
+ */
+async function readEvents<E extends { type: string }>(path: string, body: unknown, onEvent: (event: E) => void): Promise<boolean> {
+  const response = await send(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify(body),
+  });
   if (!response.ok || !response.body) {
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     throw new ApiError(data.error ?? `The server answered ${response.status}.`, response.status);
@@ -154,15 +162,32 @@ async function streamPost(path: string, body: unknown, onEvent: (event: CoachEve
       const chunk = buffer.slice(0, end);
       buffer = buffer.slice(end + 2);
       if (chunk.startsWith('data: ')) {
-        const event = JSON.parse(chunk.slice(6)) as CoachEvent;
+        const event = JSON.parse(chunk.slice(6)) as E;
         if (event.type === 'done' || event.type === 'error') finished = true;
         onEvent(event);
       }
       end = buffer.indexOf('\n\n');
     }
   }
+  return finished;
+}
+
+async function streamPost(path: string, body: unknown, onEvent: (event: CoachEvent) => void): Promise<void> {
   // A stream that stops without an answer or an error must not leave the panel "thinking" forever.
-  if (!finished) onEvent({ type: 'error', error: 'The answer stopped before it was complete. Try again.' });
+  if (!(await readEvents(path, body, onEvent))) onEvent({ type: 'error', error: 'The answer stopped before it was complete. Try again.' });
+}
+
+/** An import, telling how far it has come as it goes. */
+async function importing(path: string, body: unknown, onProgress?: (progress: ImportProgress) => void): Promise<ImportReport> {
+  let report: ImportReport | undefined;
+  let error: string | undefined;
+  await readEvents<ImportEvent>(path, body, (event) => {
+    if (event.type === 'progress') onProgress?.(event);
+    else if (event.type === 'done') report = event.report;
+    else error = event.error;
+  });
+  if (report) return report;
+  throw new ApiError(error ?? 'The import stopped before the end. The games read until then are in the library.', 500);
 }
 
 function query(params: object): string {
@@ -181,11 +206,12 @@ export const api = {
   updateGame: (id: string, changes: { pgn?: string; notes?: string | null; tags?: string[] }) =>
     call<GameDetail>('PUT', `/api/games/${id}`, changes),
   deleteGames: (ids: string[]) => call('POST', '/api/games/delete', { ids }),
-  importPgn: (pgn: string, collectionId?: string) => call<ImportReport>('POST', '/api/games/import', { pgn, collectionId }),
-  importLichess: (username: string, max: number, collectionId?: string, mine = false) =>
-    call<ImportReport>('POST', '/api/games/import/lichess', { username, max, collectionId, mine }),
-  importChesscom: (username: string, max: number, collectionId?: string, mine = false) =>
-    call<ImportReport>('POST', '/api/games/import/chesscom', { username, max, collectionId, mine }),
+  importPgn: (pgn: string, collectionId?: string, onProgress?: (p: ImportProgress) => void) =>
+    importing('/api/games/import', { pgn, collectionId }, onProgress),
+  importLichess: (username: string, max: number, collectionId?: string, mine = false, onProgress?: (p: ImportProgress) => void) =>
+    importing('/api/games/import/lichess', { username, max, collectionId, mine }, onProgress),
+  importChesscom: (username: string, max: number, collectionId?: string, mine = false, onProgress?: (p: ImportProgress) => void) =>
+    importing('/api/games/import/chesscom', { username, max, collectionId, mine }, onProgress),
   gamesAt: (fen: string, limit = 30) =>
     call<{ total: number; moves: MoveStat[]; games: (GameSummary & { ply: number; nextSan: string | null })[] }>(
       'GET',

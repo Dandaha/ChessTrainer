@@ -35,7 +35,7 @@ async function get(url: string, headers: Record<string, string> = {}): Promise<R
 }
 
 /** The most recent games of a Lichess player, newest first, as one PGN text. */
-export async function fetchLichessGames(username: string, max = 500, token?: string): Promise<string> {
+export async function fetchLichessGames(username: string, max = 500, token?: string, onGames?: (count: number) => void): Promise<string> {
   const name = checkUsername(username);
   const params = new URLSearchParams({
     max: String(Math.min(Math.max(max, 1), 5000)),
@@ -49,7 +49,26 @@ export async function fetchLichessGames(username: string, max = 500, token?: str
     Accept: 'application/x-chess-pgn',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   });
-  return response.text();
+  if (!onGames || !response.body) return response.text();
+  // Lichess sends the games one by one as it finds them: count them as they come.
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value, { stream: true });
+    let at = text.indexOf('[Event ', from);
+    while (at >= 0) {
+      count += 1;
+      from = at + 7;
+      at = text.indexOf('[Event ', from);
+    }
+    onGames(count);
+  }
+  return text + decoder.decode();
 }
 
 interface ChesscomArchive {
@@ -57,7 +76,7 @@ interface ChesscomArchive {
 }
 
 /** The most recent standard-chess games of a Chess.com player, newest months first, up to max. */
-export async function fetchChesscomGames(username: string, max = 500): Promise<string> {
+export async function fetchChesscomGames(username: string, max = 500, onGames?: (count: number) => void): Promise<string> {
   const name = checkUsername(username).toLowerCase();
   const archives = (await (await get(`https://api.chess.com/pub/player/${name}/games/archives`)).json()) as {
     archives?: string[];
@@ -72,6 +91,7 @@ export async function fetchChesscomGames(username: string, max = 500): Promise<s
       .map((g) => g.pgn!)
       .reverse();
     pgns.push(...monthGames.slice(0, max - pgns.length));
+    onGames?.(pgns.length);
   }
   return pgns.join('\n\n');
 }

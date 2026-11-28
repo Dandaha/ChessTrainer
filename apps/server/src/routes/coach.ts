@@ -19,32 +19,12 @@ import type { EngineService } from '../engineService.ts';
 import { writeEnvValue } from '../env.ts';
 import { chessData } from '../toolData.ts';
 import { bodies, parseBody } from '../validate.ts';
+import { streamEvents } from '../events.ts';
 
 export const NOT_CONNECTED = 'Coach not connected - add an API key in Settings';
 
-/**
- * Streams coach events to the browser as server-sent events over the POST response.
- * The response's own "close" tells when the browser has gone (the request's fires as soon as the
- * body is read); the model call is then aborted so no tokens are spent on an answer nobody sees.
- */
-async function sse(reply: FastifyReply, run: (emit: (e: CoachEvent) => void, signal: AbortSignal) => Promise<void>) {
-  reply.hijack();
-  const res = reply.raw;
-  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-  const left = new AbortController();
-  res.on('close', () => {
-    if (!res.writableFinished) left.abort();
-  });
-  const emit = (event: CoachEvent) => {
-    if (!left.signal.aborted && !res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
-  try {
-    await run(emit, left.signal);
-  } catch (error) {
-    emit({ type: 'error', error: error instanceof Error ? error.message : String(error) });
-  }
-  res.end();
-}
+const sse = (reply: FastifyReply, run: (emit: (e: CoachEvent) => void, signal: AbortSignal) => Promise<void>) =>
+  streamEvents<CoachEvent>(reply, run);
 
 /**
  * Phase 6: the in-app coach. It is off unless ANTHROPIC_API_KEY is set; the

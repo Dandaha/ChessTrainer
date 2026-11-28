@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createPositionCategory, deletePositionCategory, listPositionCategories, renamePositionCategory } from '../../db/categories.ts';
 import type { Db } from '../../db/client.ts';
 import {
@@ -7,6 +7,9 @@ import {
   getGame,
   GAME_SORTS,
   exportGames,
+  type ImportEvent,
+  type ImportProgress,
+  type ImportReport,
   importGamesInBatches,
   listGames,
   saveGame,
@@ -41,6 +44,7 @@ import {
 import { type TagTarget, allTags } from '../../db/tags.ts';
 import { fetchChesscomGames, fetchLichessGames } from '../importers.ts';
 import { bodies, parseBody } from '../validate.ts';
+import { streamEvents, wantsEvents } from '../events.ts';
 import { backupDatabase, listBackups } from '../../db/backup.ts';
 
 type Query = Record<string, string | undefined>;
@@ -103,23 +107,48 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
     return [settings.lichessUsername, settings.chesscomUsername].filter((name): name is string => typeof name === 'string' && name.trim() !== '');
   };
 
-  app.post('/api/games/import', async (req) => {
+  // An import answers with its report, or, to a browser that asks for events, streams its progress
+  // first (downloading, then importing) and ends with the report.
+  const importing = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+    work: (onProgress: (progress: ImportProgress) => void) => Promise<ImportReport>,
+  ) => {
+    if (!wantsEvents(req)) return work(() => {});
+    await streamEvents<ImportEvent>(reply, async (emit) => {
+      const report = await work((progress) => emit({ type: 'progress', ...progress }));
+      emit({ type: 'done', report });
+    });
+    return reply;
+  };
+
+  app.post('/api/games/import', async (req, reply) => {
     const body = parseBody(bodies.pgnImport, req.body);
-    return importGamesInBatches(db, body.pgn, { source: 'file', myNames: myNames(), collectionId: body.collectionId });
+    return importing(req, reply, (onProgress) =>
+      importGamesInBatches(db, body.pgn, { source: 'file', myNames: myNames(), collectionId: body.collectionId }, onProgress),
+    );
   });
 
-  app.post('/api/games/import/lichess', async (req) => {
+  app.post('/api/games/import/lichess', async (req, reply) => {
     const body = parseBody(bodies.accountImport, req.body);
-    const pgn = await fetchLichessGames(body.username, body.max ?? 500, process.env.LICHESS_TOKEN || undefined);
-    if (body.mine) updateSettings(db, { lichessUsername: body.username.trim() });
-    return importGamesInBatches(db, pgn, { source: 'lichess', myNames: myNames(), collectionId: body.collectionId });
+    return importing(req, reply, async (onProgress) => {
+      const pgn = await fetchLichessGames(body.username, body.max ?? 500, process.env.LICHESS_TOKEN || undefined, (games) =>
+        onProgress({ phase: 'downloading', games, expected: body.max ?? 500 }),
+      );
+      if (body.mine) updateSettings(db, { lichessUsername: body.username.trim() });
+      return importGamesInBatches(db, pgn, { source: 'lichess', myNames: myNames(), collectionId: body.collectionId }, onProgress);
+    });
   });
 
-  app.post('/api/games/import/chesscom', async (req) => {
+  app.post('/api/games/import/chesscom', async (req, reply) => {
     const body = parseBody(bodies.accountImport, req.body);
-    const pgn = await fetchChesscomGames(body.username, body.max ?? 500);
-    if (body.mine) updateSettings(db, { chesscomUsername: body.username.trim() });
-    return importGamesInBatches(db, pgn, { source: 'chesscom', myNames: myNames(), collectionId: body.collectionId });
+    return importing(req, reply, async (onProgress) => {
+      const pgn = await fetchChesscomGames(body.username, body.max ?? 500, (games) =>
+        onProgress({ phase: 'downloading', games, expected: body.max ?? 500 }),
+      );
+      if (body.mine) updateSettings(db, { chesscomUsername: body.username.trim() });
+      return importGamesInBatches(db, pgn, { source: 'chesscom', myNames: myNames(), collectionId: body.collectionId }, onProgress);
+    });
   });
 
   app.get('/api/positions/games', async (req) => {
