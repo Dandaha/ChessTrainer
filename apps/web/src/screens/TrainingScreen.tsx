@@ -1,10 +1,11 @@
-import { type Color, type MoveNode, createGame, displayComment, moveLabel, playMove } from '@chess/chess-core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type Color, type MoveNode, answerLine, createGame, displayComment, lineLabel, moveLabel, playMove } from '@chess/chess-core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type CardDetail, type QueueSummary, type TrainingStats, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
 import { Markdown } from '../components/Markdown.tsx';
 import { Empty, PageHeader, buttonClass, primaryClass } from '../components/ui.tsx';
-import { useRoute } from '../router.ts';
+import { navigate, useRoute } from '../router.ts';
+import { LineDrill } from '../components/LineDrill.tsx';
 import { useWorkspace } from '../workspace.tsx';
 
 type Grade = 1 | 2 | 3 | 4;
@@ -49,6 +50,7 @@ function uciOf(fen: string, san: string | undefined): string | undefined {
 export function TrainingScreen() {
   const route = useRoute();
   const repertoireId = route.params.get('repertoire') ?? undefined;
+  const drill = route.params.get('drill');
   const [summary, setSummary] = useState<QueueSummary | null>(null);
   const [stats, setStats] = useState<TrainingStats | null>(null);
   const [session, setSession] = useState<CardDetail[] | null>(null);
@@ -67,6 +69,17 @@ export function TrainingScreen() {
       setError((e as Error).message);
     }
   };
+
+  if (drill) {
+    return (
+      <LineDrill
+        key={`${drill}|${route.params.get('line') ?? ''}`}
+        repertoireId={drill}
+        guide={route.params.get('line')?.split(',').filter(Boolean) ?? []}
+        onEnd={() => navigate(`repertoire/${drill}`)}
+      />
+    );
+  }
 
   if (session) {
     return (
@@ -99,6 +112,11 @@ export function TrainingScreen() {
                 <button type="button" className={primaryClass} onClick={() => void start()}>
                   {repertoireId ? 'Train this repertoire' : 'Train everything due'}
                 </button>
+                {repertoireId && (
+                  <button type="button" className={buttonClass} onClick={() => navigate(`training?drill=${repertoireId}`)} title="Whole lines from the first move, as practice">
+                    Drill lines
+                  </button>
+                )}
                 {!repertoireId && (
                   <>
                     <button type="button" className={buttonClass} onClick={() => void start('repertoire_move')}>
@@ -211,8 +229,16 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
   // A card answered wrong stays wrong for scheduling, even when "Try again" then finds the move.
   const [failed, setFailed] = useState(false);
   const [showSolution, setShowSolution] = useState(false);
+  // A position whose answer is a line: how many of its moves are played, and the opponent's reply
+  // on its way to the board.
+  const [progress, setProgress] = useState(0);
+  const [replying, setReplying] = useState(false);
   const timers = useRef<number[]>([]);
   const card = cards[index];
+  const solution = useMemo(() => (card?.kind === 'saved_position' ? answerLine(card.saved.fen, card.saved.answer) : []), [card]);
+  const multi = solution.length > 1;
+  /** The position before the solution's move number `p` (0: the saved position itself). */
+  const positionBefore = (p: number) => (p === 0 ? at(card!.kind === 'saved_position' ? card!.saved.fen : card!.fen) : solution[p - 1]!);
 
   // Show the card: for a repertoire card, play the line up to my move, a move at a time.
   useEffect(() => {
@@ -221,6 +247,8 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
     setOutcome(null);
     setFailed(false);
     setShowSolution(false);
+    setProgress(0);
+    setReplying(false);
     if (!card) return;
     if (card.kind === 'saved_position') {
       setNode(at(card.saved.fen));
@@ -267,8 +295,9 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
     setFailed(true);
     setShowSolution(false);
     setOutcome(null);
-    setNode(at(card.kind === 'saved_position' ? card.saved.fen : card.fen));
-  }, [card]);
+    // A line goes on from the move that was missed, not from the beginning.
+    setNode(card.kind === 'saved_position' && multi ? positionBefore(progress) : at(card.kind === 'saved_position' ? card.saved.fen : card.fen));
+  }, [card, multi, progress]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -289,7 +318,7 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
 
   const onMove = async (from: string, to: string, promotion?: string) => {
     // While Stockfish checks the answer, the board waits: a second move would land on the card.
-    if (!card || !node || outcome || !ready || checking) return;
+    if (!card || !node || outcome || !ready || checking || replying) return;
     let played: MoveNode;
     try {
       played = playMove(node, promotion ? { from, to, promotion } : { from, to });
@@ -346,6 +375,10 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
       }
       return;
     }
+    if (multi) {
+      await playSolutionMove(played);
+      return;
+    }
     setChecking(true);
     try {
       const result = await api.checkMove(card.saved.fen, played.uci, card.saved.answer);
@@ -379,6 +412,63 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
       setChecking(false);
     }
   };
+
+  /** A move in a position whose answer is a line: the line's move goes on (the reply plays itself). */
+  async function playSolutionMove(played: MoveNode) {
+    if (!card || card.kind !== 'saved_position' || !node) return;
+    const expected = solution[progress]!;
+    const whole = lineLabel(solution);
+    const finish = () =>
+      setOutcome({
+        correct: true,
+        suggested: failed ? 1 : 3,
+        message: failed ? 'Solved this time.' : `Solved: the whole line, ${Math.ceil(solution.length / 2)} moves.`,
+        detail: whole,
+      });
+    if (played.uci === expected.uci) {
+      const reply = solution[progress + 1];
+      if (!reply) return finish();
+      setReplying(true);
+      timers.current.push(
+        window.setTimeout(() => {
+          setNode(reply);
+          setReplying(false);
+          if (progress + 2 >= solution.length) finish();
+          else setProgress(progress + 2);
+        }, 450),
+      );
+      return;
+    }
+    // Another move: as good as the line's, by Stockfish, still counts (the drill ends there, since the
+    // written line no longer applies).
+    setChecking(true);
+    try {
+      const result = await api.checkMove(node.fen, played.uci, expected.san);
+      const rest = solution.slice(progress);
+      const solutionShown = { text: `The line: ${lineLabel(rest)}`, uci: expected.uci };
+      setOutcome(
+        result.engine?.good
+          ? {
+              correct: true,
+              suggested: failed ? 1 : 2,
+              message: `${result.san} works too; the line goes ${expected.san}.`,
+              detail: engineVerdict(result, node.fen),
+              solution: solutionShown,
+            }
+          : {
+              correct: false,
+              suggested: 1,
+              message: progress === 0 ? `The answer starts ${expected.san}, not ${result.san}.` : `The line goes on ${expected.san}, not ${result.san}.`,
+              detail: engineVerdict(result, node.fen),
+              solution: solutionShown,
+            },
+      );
+    } catch (e) {
+      ws.toast((e as Error).message, true);
+    } finally {
+      setChecking(false);
+    }
+  }
 
   if (!card || !node) {
     return (
@@ -421,6 +511,7 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
               <p className="text-sm text-muted">
                 {card.repertoire.color === 'white' ? '♔' : '♚'} {card.repertoire.name}
                 {card.card.state === 0 && ' · new'}
+                {card.nice && ' · nice to know'}
               </p>
               <p className="text-sm">{card.line.map((san, i) => moveLabel(i + 1, san)).join(' ') || 'Starting position'}</p>
               <h2 className="text-xl font-semibold">
@@ -432,7 +523,13 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
             <>
               <p className="text-sm text-muted">Saved position{card.card.state === 0 && ' · new'}</p>
               <h2 className="text-xl font-semibold">{card.saved.title}</h2>
-              <p>{card.saved.sideToSolve === 'white' ? 'White' : 'Black'} to play. Find the move.</p>
+              <p>
+                {card.saved.sideToSolve === 'white' ? 'White' : 'Black'} to play.{' '}
+                {multi
+                  ? `Find the line: move ${Math.floor(progress / 2) + 1} of ${Math.ceil(solution.length / 2)}.`
+                  : 'Find the move.'}
+              </p>
+              {multi && progress > 0 && <p className="text-sm text-muted">{lineLabel(solution.slice(0, progress))}</p>}
             </>
           )}
           {ready && !outcome && (

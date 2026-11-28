@@ -16,6 +16,8 @@ import {
   emptyNode,
   isWhiteMove,
   moveNumber,
+  createGame,
+  playMove,
   plyFromFen,
 } from './tree.ts';
 
@@ -487,4 +489,25 @@ function wrap(text: string, lineLength: number): string {
   }
   if (current) lines.push(current);
   return lines.join('\n');
+}
+
+/**
+ * The moves a written answer gives from a position: "1. Bxh7+ Kxh7 2. Ng5+", "2... Qh4#!" or
+ * "Rd8+ Kh7". Move numbers, dots, results and !? marks are not moves; reading stops at the first
+ * word that is not a legal move there ("Bxh7+ wins" is one move).
+ */
+export function answerLine(fen: string, text: string | null | undefined): MoveNode[] {
+  const out: MoveNode[] = [];
+  let node = createGame(fen).root;
+  for (const word of (text ?? '').replace(/\{[^}]*\}/g, ' ').split(/\s+/)) {
+    const token = word.replace(/^\d+\.+/, '').replace(/^\.+/, '').replace(/[!?]+$/, '');
+    if (!token || /^(1-0|0-1|1\/2-1\/2|\*)$/.test(token)) continue;
+    try {
+      node = playMove(node, token);
+    } catch {
+      break;
+    }
+    out.push(node);
+  }
+  return out;
 }

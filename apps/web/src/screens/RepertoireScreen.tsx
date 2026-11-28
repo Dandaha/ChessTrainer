@@ -65,6 +65,17 @@ function findNode(nodes: RepTreeNode[], test: (n: RepTreeNode) => boolean): RepT
   return undefined;
 }
 
+/** The moves from the start to a move of the tree. */
+function lineTo(nodes: RepTreeNode[], edgeId: string, trail: string[] = []): string[] {
+  for (const n of nodes) {
+    const here = [...trail, n.edge.san];
+    if (n.edge.id === edgeId) return here;
+    const deeper = lineTo(n.children, edgeId, here);
+    if (deeper.length) return deeper;
+  }
+  return [];
+}
+
 /** A board node for a position in the repertoire. */
 function boardNode(fen: string, uci: string, ply: number): MoveNode {
   return { ...createGame(fen).root, id: `${fen}|${uci}`, fen, uci, ply };
@@ -261,6 +272,18 @@ export function RepertoireScreen() {
         </button>
         <button type="button" className={buttonClass} onClick={() => setDialog('gaps')} disabled={!edges.length}>
           Find gaps
+        </button>
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={!edges.length}
+          title={selected ? 'Play the line to the selected move, then on from there' : 'Whole lines from the first move, as practice'}
+          onClick={() => {
+            const line = selected ? lineTo(tree, selected) : [];
+            navigate(`training?drill=${id}${line.length ? `&line=${encodeURIComponent(line.join(','))}` : ''}`);
+          }}
+        >
+          Drill line
         </button>
         <button type="button" className={primaryClass} onClick={() => navigate(`training?repertoire=${id}`)} disabled={!edges.length}>
           Train

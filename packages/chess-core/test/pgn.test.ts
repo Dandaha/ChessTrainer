@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type Game, type MoveNode, addMove, getHeader, mainlineFrom } from '../tree.ts';
-import { PgnParseError, parseGame, parsePgn, writePgn } from '../pgn.ts';
+import { PgnParseError, answerLine, parseGame, parsePgn, writePgn } from '../pgn.ts';
 
 /** The tree without node ids, for comparing two parses. */
 function shape(node: MoveNode): unknown {
@@ -252,5 +252,21 @@ describe('a broken game in a file', () => {
     const { games, errors } = parsePgn(text);
     expect(errors).toHaveLength(1);
     expect(games.map((g) => g.headers.find((h) => h.name === 'Event')?.value)).toEqual(['Two']);
+  });
+});
+
+describe('answerLine', () => {
+  const GREEK_GIFT = 'r1bq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R2QK2R w KQ - 0 8';
+
+  it('reads the moves of a written answer, whatever the numbering', () => {
+    expect(answerLine(GREEK_GIFT, '8. Bxh7+ Kxh7 9. Ng5+ Kg8 10. Qh5').map((n) => n.san)).toEqual(['Bxh7+', 'Kxh7', 'Ng5+', 'Kg8', 'Qh5']);
+    expect(answerLine(GREEK_GIFT, 'Bxh7+! Kxh7').map((n) => n.san)).toEqual(['Bxh7+', 'Kxh7']);
+    expect(answerLine('3r2k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1', '1... Rd1# 0-1').map((n) => n.san)).toEqual(['Rd1#']);
+  });
+
+  it('stops at the first word that is not a move there', () => {
+    expect(answerLine(GREEK_GIFT, 'Bxh7+ wins a pawn').map((n) => n.san)).toEqual(['Bxh7+']);
+    expect(answerLine(GREEK_GIFT, 'the bishop sacrifice')).toEqual([]);
+    expect(answerLine(GREEK_GIFT, null)).toEqual([]);
   });
 });

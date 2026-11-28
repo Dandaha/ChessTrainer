@@ -199,6 +199,11 @@ export function moveLabel(ply: number, san: string): string {
   return ply % 2 === 1 ? `${number}.${san}` : `${number}...${san}`;
 }
 
+/** Moves as a line is written: "1.e4 e5 2.Nf3", or "3...Nf6 4.Bg5" when it starts with Black. */
+export function lineLabel(moves: readonly { ply: number; san: string }[]): string {
+  return moves.map((m, i) => (m.ply % 2 === 1 || i === 0 ? moveLabel(m.ply, m.san) : m.san)).join(' ');
+}
+
 /** A sentence for a check result, e.g. "You left your preparation on move 9 with ...Nd7; your line is ...Bd6". */
 export function describeCheck(result: RepertoireCheck): string {
   switch (result.kind) {
@@ -252,4 +257,23 @@ export function unreachableEdges(edges: RepEdge[], startFen: string = START_FEN)
     }
   }
   return edges.filter((e) => !reachable.has(e.id));
+}
+
+/** How often a reply comes up in a line drill: the main reply 3× a side line, a must-know 3× a nice-to-know. */
+export function replyWeight(edge: Pick<RepEdge, 'isMain' | 'priority'>): number {
+  return (edge.isMain ? 3 : 1) * (edge.priority === 'nice' ? 1 : 3);
+}
+
+/**
+ * The opponent's reply in a line drill: chosen at random, but weighted by replyWeight, so the
+ * moves that matter most come up most, as in Chessable's drills.
+ */
+export function pickReply<E extends Pick<RepEdge, 'isMain' | 'priority'>>(replies: readonly E[], random: () => number = Math.random): E | undefined {
+  const total = replies.reduce((sum, e) => sum + replyWeight(e), 0);
+  let left = random() * total;
+  for (const reply of replies) {
+    left -= replyWeight(reply);
+    if (left < 0) return reply;
+  }
+  return replies.at(-1);
 }

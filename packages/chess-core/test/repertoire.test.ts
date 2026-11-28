@@ -8,6 +8,9 @@ import {
   describeCheck,
   edgesFromGame,
   opponentPositions,
+  lineLabel,
+  pickReply,
+  replyWeight,
   repertoireToGame,
   repertoireTree,
   unreachableEdges,
@@ -147,5 +150,36 @@ describe('a repertoire through PGN and back', () => {
     const edges = store('{ My Sicilian } 1. e4 c5 ({ Not this: } 1... e5 { [%cal Gg1f3] }) 2. Nf3 *', 'black');
     expect(edges.find((e) => e.san === 'e4')?.comment).toBe('My Sicilian');
     expect(edges.find((e) => e.san === 'e5')?.comment).toBe('Not this: [%cal Gg1f3]');
+  });
+});
+
+describe('replies in a line drill', () => {
+  const reply = (san: string, isMain: boolean, priority: 'must' | 'nice') => ({ san, isMain, priority });
+
+  it('weighs the main reply and must-know lines above side lines and nice-to-know ones', () => {
+    expect(replyWeight(reply('e5', true, 'must'))).toBe(9);
+    expect(replyWeight(reply('c5', false, 'must'))).toBe(3);
+    expect(replyWeight(reply('b6', false, 'nice'))).toBe(1);
+  });
+
+  it('picks in proportion to the weights', () => {
+    const replies = [reply('e5', true, 'must'), reply('c5', false, 'must'), reply('b6', false, 'nice')];
+    const counts = new Map<string, number>();
+    for (let i = 0; i < 1300; i += 1) {
+      const pick = pickReply(replies, () => (i + 0.5) / 1300)!;
+      counts.set(pick.san, (counts.get(pick.san) ?? 0) + 1);
+    }
+    expect(counts.get('e5')).toBe(900);
+    expect(counts.get('c5')).toBe(300);
+    expect(counts.get('b6')).toBe(100);
+    expect(pickReply([])).toBeUndefined();
+  });
+});
+
+describe('lineLabel', () => {
+  it('numbers White moves, and a first move by Black', () => {
+    expect(lineLabel([{ ply: 1, san: 'e4' }, { ply: 2, san: 'e5' }, { ply: 3, san: 'Nf3' }])).toBe('1.e4 e5 2.Nf3');
+    expect(lineLabel([{ ply: 6, san: 'Nf6' }, { ply: 7, san: 'Bg5' }])).toBe('3...Nf6 4.Bg5');
+    expect(lineLabel([])).toBe('');
   });
 });

@@ -145,12 +145,12 @@ export function SavePositionDialog({
               <input aria-label="Key idea" value={keyIdea} onChange={(e) => setKeyIdea(e.target.value)} className={field} />
             </label>
             <label className="space-y-1">
-              <span className="text-muted">Answer (SAN)</span>
+              <span className="text-muted">Answer: a move or a whole line</span>
               <input
                 aria-label="Answer"
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
-                placeholder="e.g. Bxh7+ (empty: Stockfish judges)"
+                placeholder="e.g. Bxh7+ Kxh7 Ng5+ (empty: Stockfish judges)"
                 className={field}
               />
             </label>

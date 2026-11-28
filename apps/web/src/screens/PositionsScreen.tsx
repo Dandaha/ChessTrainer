@@ -365,7 +365,7 @@ function PositionDetail({
         </div>
         <label className="col-span-2 space-y-1">
           <span className="text-xs text-muted">Answer (SAN, checked in solve mode)</span>
-          <input aria-label="Answer" className={field} defaultValue={saved.answer ?? ''} onBlur={(e) => void update({ answer: e.target.value || null })} />
+          <input aria-label="Answer" className={field} placeholder="A move, or a line drilled move by move" defaultValue={saved.answer ?? ''} onBlur={(e) => void update({ answer: e.target.value || null })} />
         </label>
         <div className="col-span-2 space-y-1">
           <div className="flex items-center justify-between">
