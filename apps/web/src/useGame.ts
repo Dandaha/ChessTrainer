@@ -1,6 +1,7 @@
 import {
   type Arrow,
   type Game,
+  type Header,
   type Highlight,
   type MoveInput,
   type MoveNode,
@@ -58,6 +59,8 @@ export interface GameApi {
   toggleNag(nag: number): void;
   /** The game's result (1-0, 0-1, 1/2-1/2 or *), as written in the PGN. */
   setResult(result: string): void;
+  /** Replaces the game's header tags. */
+  setHeaders(headers: Header[]): void;
   setShapes(arrows: Arrow[], highlights: Highlight[]): void;
   /** Loads a game; `at` picks the node to show, `clean` marks it as saved. */
   load(game: Game, options?: { at?: string; clean?: boolean }): void;
@@ -149,6 +152,10 @@ export function useGame(
     },
     setResult: (result) => {
       game.result = result;
+      bump();
+    },
+    setHeaders: (headers) => {
+      game.headers = headers;
       bump();
     },
     deleteFrom: (id) => {

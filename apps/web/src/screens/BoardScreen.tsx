@@ -1,4 +1,4 @@
-import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, normalizeFen, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
@@ -13,9 +13,11 @@ import type { DrawShape } from '../Board.tsx';
 import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
 import { ExportDialog, ImportDialog, ShortcutsDialog } from '../Dialogs.tsx';
 import { MoveList } from '../MoveList.tsx';
+import { BoardEditor } from '../components/BoardEditor.tsx';
+import { GameTagsDialog } from '../components/GameTagsDialog.tsx';
 import { useWorkspace } from '../workspace.tsx';
 
-type Dialog = 'import' | 'export' | 'shortcuts' | 'save' | 'repertoire' | null;
+type Dialog = 'import' | 'export' | 'shortcuts' | 'save' | 'repertoire' | 'editor' | 'tags' | null;
 export type BoardTab = 'notes' | 'games' | 'saved';
 
 export function isTyping(target: EventTarget | null): boolean {
@@ -60,6 +62,8 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const [engineOn, setEngineOn] = useState(false);
   const [engineSettings, setEngineSettings] = useState<EngineSettings>(readEngineSettings);
   const [threat, setThreat] = useState(false);
+  // The FEN field: what is typed there, until Enter opens it (null shows the board's own FEN).
+  const [fenText, setFenText] = useState<string | null>(null);
   const [coachMarks, setCoachMarks] = useState<Annotations | null>(null);
   const coach = useRef<CoachPanelHandle>(null);
   const moveInput = useRef<HTMLInputElement>(null);
@@ -100,6 +104,24 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   };
   const isRoot = current === game.root;
   const onMainline = isOnMainline(game.root, current.id);
+
+  const openTypedFen = async () => {
+    if (fenText === null || fenText.trim() === current.fen) return setFenText(null);
+    try {
+      await ws.openFen(normalizeFen(fenText));
+      setFenText(null);
+    } catch (error) {
+      ws.toast((error as Error).message, true);
+    }
+  };
+  const copyFen = async () => {
+    try {
+      await navigator.clipboard.writeText(current.fen);
+      ws.toast('FEN copied.');
+    } catch {
+      ws.toast('Could not reach the clipboard: select the FEN and copy it.', true);
+    }
+  };
 
   const playTyped = () => {
     if (!typed.trim()) return;
@@ -237,7 +259,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 lg:flex-row lg:items-start lg:justify-center">
-        <section className="flex min-w-0 flex-col items-center gap-3 lg:flex-1 lg:items-end">
+        <section className="analysis-board flex min-w-0 flex-col items-center gap-3 lg:flex-1 lg:items-end">
           <div className="flex w-full justify-center gap-2 lg:justify-end">
             {engineOn && (
               <EvalBar
@@ -256,7 +278,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               onShapes={g.setShapes}
             />
           </div>
-          <div className="flex w-full max-w-[calc(100dvh-10.5rem)] items-center gap-2">
+          <div className="flex w-full max-w-[calc(100dvh-13rem)] items-center gap-2">
             <div className="flex gap-1">
               {(
                 [
@@ -292,6 +314,35 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               autoComplete="off"
               className="min-w-0 flex-1 rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent"
             />
+          </div>
+          <div className="flex w-full max-w-[calc(100dvh-13rem)] items-center gap-2 text-xs">
+            <input
+              aria-label="FEN"
+              value={fenText ?? current.fen}
+              onChange={(e) => setFenText(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              onBlur={() => setFenText(null)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void openTypedFen();
+                if (e.key === 'Escape') {
+                  setFenText(null);
+                  e.currentTarget.blur();
+                }
+              }}
+              title="The position as FEN: type or paste one and press Enter to open it"
+              spellCheck={false}
+              autoComplete="off"
+              className="min-w-0 flex-1 rounded-md border border-line bg-surface px-2 py-1 font-mono text-muted outline-none focus:border-accent focus:text-text"
+            />
+            <button type="button" className="rounded-md border border-line px-2 py-1 hover:bg-surface-2" onClick={() => void copyFen()}>
+              Copy FEN
+            </button>
+            <button type="button" className="rounded-md border border-line px-2 py-1 hover:bg-surface-2" onClick={() => setDialog('editor')} title="Set up a position by placing pieces">
+              Set up…
+            </button>
+            <button type="button" className="rounded-md border border-line px-2 py-1 hover:bg-surface-2" onClick={() => setDialog('tags')} title="Players, event, date and the other tags">
+              Tags…
+            </button>
           </div>
         </section>
 
@@ -424,6 +475,26 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
         />
       )}
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'editor' && (
+        <BoardEditor
+          fen={current.fen}
+          onClose={() => setDialog(null)}
+          onUse={(fen) => {
+            setDialog(null);
+            void ws.openFen(fen);
+          }}
+        />
+      )}
+      {dialog === 'tags' && (
+        <GameTagsDialog
+          game={game}
+          onClose={() => setDialog(null)}
+          onSave={(headers, result) => {
+            g.setHeaders(headers);
+            if (result !== game.result) g.setResult(result);
+          }}
+        />
+      )}
       {dialog === 'repertoire' && (
         <AddToRepertoireDialog
           rootFen={game.root.fen}
