@@ -2,6 +2,7 @@ import { backupFolderFor, backupIfDue } from '../db/backup.ts';
 import { databasePath, openDatabase, runMigrations } from '../db/client.ts';
 import { purgeTrash } from '../db/library.ts';
 import { buildApp } from './app.ts';
+import { deriveMissingInBackground } from '../db/games.ts';
 import { loadEnv } from './env.ts';
 
 loadEnv();
@@ -23,6 +24,8 @@ app.addHook('onClose', async () => close());
 try {
   await app.listen({ host: HOST, port: PORT });
   console.log(`Chess server on http://${HOST}:${PORT} · database ${databasePath()}`);
+  // Games from an older version get their opening and content key, a batch at a time.
+  void deriveMissingInBackground(db);
 } catch (error) {
   console.error(error);
   process.exit(1);

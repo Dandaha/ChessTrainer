@@ -14,6 +14,7 @@ import {
   speedOf,
   writePgn,
 } from '@chess/chess-core';
+import { classifyOpening } from '@chess/chess-core/openings';
 import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { collectionGames, collections, gamePositions, games, taggings, tags } from './schema.ts';
@@ -150,8 +151,29 @@ function isStandardChess(game: Game): boolean {
   return !variant || STANDARD_VARIANTS.has(variant.trim().toLowerCase());
 }
 
+/** The same game wherever it came from: players, year, result and moves, without notes or other tags. */
+function contentKeyFor(game: Game): string {
+  const name = (tag: string) => (header(game, tag) ?? '?').toLowerCase().replace(/\s+/g, ' ');
+  const year = (header(game, 'Date') ?? header(game, 'UTCDate') ?? '????').slice(0, 4);
+  const moves = mainlineFrom(game.root)
+    .slice(1)
+    .map((n) => n.san)
+    .join(' ');
+  return `sha1:${createHash('sha1').update([name('White'), name('Black'), year, game.result, game.root.fen, moves].join('|')).digest('hex')}`;
+}
+
+/** The ECO code and opening name: the game's own tags, else what its moves reach in the opening table. */
+function openingFor(game: Game): { eco: string | null; openingName: string | null } {
+  const eco = header(game, 'ECO');
+  const openingName = header(game, 'Opening');
+  if (eco && openingName) return { eco, openingName };
+  const named = classifyOpening(mainlineFrom(game.root).map((n) => n.fen));
+  return { eco: eco ?? named?.eco ?? null, openingName: openingName ?? named?.name ?? null };
+}
+
 function columnsFor(game: Game) {
   return {
+    contentKey: contentKeyFor(game),
     white: header(game, 'White'),
     black: header(game, 'Black'),
     whiteElo: elo(game, 'WhiteElo'),
@@ -162,8 +184,7 @@ function columnsFor(game: Game) {
     timeControl: header(game, 'TimeControl'),
     speed: speedOf(header(game, 'TimeControl'), header(game, 'Event')),
     event: header(game, 'Event'),
-    eco: header(game, 'ECO'),
-    openingName: header(game, 'Opening'),
+    ...openingFor(game),
   };
 }
 
@@ -587,4 +608,73 @@ export function timeControls(db: Db): { timeControl: string; speed: Speed | null
     .orderBy(sql`count(*) desc`)
     .limit(40)
     .all() as { timeControl: string; speed: Speed | null; games: number }[];
+}
+
+/**
+ * Fills in what games imported by an older version lack: their content key, and an opening for
+ * games without one. Does up to `limit` games and says how many it did; run it until that is 0.
+ */
+export function deriveMissing(db: Db, limit = 200): number {
+  const rows = db
+    .select({ id: games.id, pgn: games.pgn, eco: games.eco, openingName: games.openingName })
+    .from(games)
+    .where(isNull(games.contentKey))
+    .limit(limit)
+    .all();
+  db.transaction((tx) => {
+    for (const row of rows) {
+      let set: Partial<typeof games.$inferInsert>;
+      try {
+        const game = parseGame(row.pgn);
+        const opening = openingFor(game);
+        set = { contentKey: contentKeyFor(game), eco: row.eco ?? opening.eco, openingName: row.openingName ?? opening.openingName };
+      } catch {
+        set = { contentKey: `unreadable:${row.id}` };
+      }
+      tx.update(games).set(set).where(eq(games.id, row.id)).run();
+    }
+  });
+  return rows.length;
+}
+
+/** deriveMissing in the background, a batch at a time, leaving the server free in between. */
+export async function deriveMissingInBackground(db: Db): Promise<void> {
+  try {
+    while (db.$client.open && deriveMissing(db, 50) > 0) await new Promise((resolve) => setImmediate(resolve));
+  } catch {
+    // The database closed while it ran (the app quit): the rest waits for the next start.
+  }
+}
+
+/** A game found more than once: the copy with the most in it (notes, comments), and the others. */
+export interface DuplicateGroup {
+  keep: GameSummary;
+  copies: GameSummary[];
+}
+
+/** Games that are in the library more than once, whatever their notes or tags. */
+export function findDuplicates(db: Db, limit = 200): { groups: DuplicateGroup[]; extraCopies: number } {
+  while (deriveMissing(db, 500) > 0);
+  const keys = db
+    .select({ key: games.contentKey })
+    .from(games)
+    .where(and(isNull(games.deletedAt), isNotNull(games.contentKey), sql`${games.contentKey} not like 'unreadable:%'`))
+    .groupBy(games.contentKey)
+    .having(sql`count(*) > 1`)
+    .limit(limit)
+    .all()
+    .map((r) => r.key!);
+  const groups = keys.map((key) => {
+    const rows = withTags(
+      db,
+      db
+        .select(summaryColumns)
+        .from(games)
+        .where(and(eq(games.contentKey, key), isNull(games.deletedAt)))
+        .orderBy(sql`length(${games.pgn}) + coalesce(length(${games.notes}), 0) desc`, asc(games.createdAt))
+        .all(),
+    );
+    return { keep: rows[0]!, copies: rows.slice(1) };
+  });
+  return { groups, extraCopies: groups.reduce((n, g) => n + g.copies.length, 0) };
 }

@@ -5,6 +5,7 @@ import { backupFolderFor, backupIfDue } from '@chess/server/db/backup.ts';
 import { databasePath, openDatabase, runMigrations } from '@chess/server/db/client.ts';
 import { purgeTrash } from '@chess/server/db/library.ts';
 import { buildApp } from '@chess/server/src/app.ts';
+import { deriveMissingInBackground } from '@chess/server/db/games.ts';
 import { EngineService } from '@chess/server/src/engineService.ts';
 import { envFilePath, loadEnv } from '@chess/server/src/env.ts';
 import { serveWeb } from '@chess/server/src/staticWeb.ts';
@@ -125,6 +126,9 @@ export async function startLocalServer(options: LocalServerOptions): Promise<{ u
     const address = app.server.address();
     port = typeof address === 'object' && address ? address.port : 0;
   }
+
+  // Games from an older version get their opening and content key, a batch at a time.
+  void deriveMissingInBackground(db);
 
   return {
     url: `http://127.0.0.1:${port}/`,

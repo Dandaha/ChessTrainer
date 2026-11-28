@@ -200,6 +200,7 @@ export const api = {
 
   games: (filters: GameFilters = {}) => call<{ total: number; games: GameSummary[] }>('GET', `/api/games${query(filters)}`),
   game: (id: string) => call<GameDetail>('GET', `/api/games/${id}`),
+  duplicates: () => call<{ groups: { keep: GameSummary; copies: GameSummary[] }[]; extraCopies: number }>('GET', '/api/games/duplicates'),
   timeControls: () => call<{ timeControl: string; speed: string | null; games: number }[]>('GET', '/api/games/time-controls'),
   exportGames: (filters: GameFilters) => call<{ pgn: string; count: number }>('GET', `/api/games/export${query(filters)}`),
   exportGameIds: (ids: string[]) => call<{ pgn: string; count: number }>('POST', '/api/games/export', { ids }),

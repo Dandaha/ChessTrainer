@@ -44,6 +44,11 @@ export const games = sqliteTable('games', {
   timeControl: text('time_control'),
   /** Bullet, blitz… worked out from the time control (chess-core's speedOf); null when it can't be told. */
   speed: text('speed', { enum: SPEEDS }),
+  /**
+   * The same game wherever it came from: a hash of the players, year, result and moves, for finding
+   * copies with different notes or tags. Null for games not looked at yet (filled in the background).
+   */
+  contentKey: text('content_key'),
   event: text('event'),
   eco: text('eco'),
   openingName: text('opening_name'),
@@ -58,7 +63,7 @@ export const games = sqliteTable('games', {
   updatedAt: text('updated_at').notNull().$defaultFn(now),
   /** Set when deleted; the row stays in the trash for 30 days. */
   deletedAt: text('deleted_at'),
-}, (t) => [index('games_source_ref_idx').on(t.sourceRef), index('games_date_idx').on(t.date), index('games_speed_idx').on(t.speed)]);
+}, (t) => [index('games_source_ref_idx').on(t.sourceRef), index('games_date_idx').on(t.date), index('games_speed_idx').on(t.speed), index('games_content_key_idx').on(t.contentKey)]);
 
 // ---------------------------------------------------------------------------
 // Phase 2: the game library, saved positions, sets, tags, settings.

@@ -12,6 +12,7 @@ import {
   type ImportReport,
   importGamesInBatches,
   timeControls,
+  findDuplicates,
   listGames,
   saveGame,
   updateGame,
@@ -78,6 +79,7 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
   });
   app.get('/api/games', async (req) => listGames(db, gameFilters(req.query as Query)));
   app.get('/api/games/time-controls', async () => timeControls(db));
+  app.get('/api/games/duplicates', async () => findDuplicates(db));
   // The whole filter or collection as one PGN file, or the games picked by id.
   app.get('/api/games/export', async (req) => exportGames(db, gameFilters(req.query as Query)));
   app.post('/api/games/export', async (req) => exportGames(db, { ids: parseBody(bodies.ids, req.body).ids }));

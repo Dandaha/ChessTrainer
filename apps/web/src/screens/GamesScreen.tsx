@@ -48,6 +48,7 @@ export function GamesScreen() {
   const [importing, setImporting] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [editing, setEditing] = useState<GameSummary | null>(null);
+  const [findingDuplicates, setFindingDuplicates] = useState(false);
   const [controls, setControls] = useState<{ timeControl: string; speed: string | null; games: number }[]>([]);
   // The row the keyboard is on: arrows move it, Enter opens, Space selects, E edits, Delete deletes.
   const [focusRow, setFocusRow] = useState(0);
@@ -172,6 +173,9 @@ export function GamesScreen() {
           }}
         >
           Export PGN{data?.total ? ` (${data.total})` : ''}
+        </button>
+        <button type="button" className={buttonClass} disabled={!data?.total} onClick={() => setFindingDuplicates(true)} title="Games that are in the library more than once">
+          Find duplicates
         </button>
         <button type="button" className={primaryClass} onClick={() => setImporting(true)}>
           Import games
@@ -446,6 +450,15 @@ export function GamesScreen() {
         </section>
       </div>
 
+      {findingDuplicates && (
+        <DuplicatesDialog
+          onClose={() => setFindingDuplicates(false)}
+          onRemoved={(count) => {
+            ws.toast(`Moved ${count} extra cop${count === 1 ? 'y' : 'ies'} to the trash (Settings → Trash to restore).`);
+            reload();
+          }}
+        />
+      )}
       {editing && (
         <GameDetailsDialog
           game={editing}
@@ -782,6 +795,76 @@ function GameDetailsDialog({ game, onClose, onSaved }: { game: GameSummary; onCl
           </div>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** Games in the library more than once: each kept once, the copy with the most notes and comments. */
+function DuplicatesDialog({ onClose, onRemoved }: { onClose(): void; onRemoved(count: number): void }) {
+  const [found, setFound] = useState<Awaited<ReturnType<typeof api.duplicates>> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.duplicates().then(setFound).catch((e: Error) => setError(e.message));
+  }, []);
+
+  const label = (g: GameSummary) =>
+    `${g.white ?? '?'} – ${g.black ?? '?'}, ${g.result === '1/2-1/2' ? '½-½' : g.result}${g.date ? `, ${g.date.replace(/\.\?\?/g, '')}` : ''}`;
+
+  const remove = async () => {
+    if (!found) return;
+    setBusy(true);
+    try {
+      const ids = found.groups.flatMap((g) => g.copies.map((c) => c.id));
+      await api.deleteGames(ids);
+      onRemoved(ids.length);
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Duplicate games" onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        {!found && !error && <p className="text-muted">Looking through the library…</p>}
+        {error && (
+          <p role="alert" className="text-danger">
+            {error}
+          </p>
+        )}
+        {found && found.groups.length === 0 && <p>No game is in the library twice.</p>}
+        {found && found.groups.length > 0 && (
+          <>
+            <p>
+              {found.groups.length} game{found.groups.length === 1 ? ' is' : 's are'} in the library more than once ({found.extraCopies} extra cop
+              {found.extraCopies === 1 ? 'y' : 'ies'}): same players, year, result and moves. Each keeps the copy with the most notes and comments.
+            </p>
+            <ul className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
+              {found.groups.map((g) => (
+                <li key={g.keep.id} className="flex justify-between gap-3">
+                  <span className="truncate">{label(g.keep)}</span>
+                  <span className="shrink-0 text-xs text-muted">
+                    {g.copies.length + 1} copies{g.keep.event ? ` · keeps “${g.keep.event}”` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" className={buttonClass} onClick={onClose}>
+            Close
+          </button>
+          {found && found.extraCopies > 0 && (
+            <button type="button" className={dangerClass} disabled={busy} onClick={() => void remove()}>
+              Move {found.extraCopies} extra cop{found.extraCopies === 1 ? 'y' : 'ies'} to the trash
+            </button>
+          )}
+        </div>
+      </div>
     </Modal>
   );
 }
