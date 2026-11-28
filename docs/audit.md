@@ -1,6 +1,6 @@
 # Audit, 28 November 2026
 
-Six agents each used one part of the built app (version 0.1.6, commit af43f80) the way a user would, driving it with Playwright and comparing it with Lichess, ChessBase, SCID, Chessable and ChessTempo and with general software standards. A seventh pass reviewed the engineering. Every finding below was reproduced in the running app or traced to the code; the three marked ✔ were rechecked by hand.
+Six agents each used one part of the built app (version 0.1.6, commit af43f80) the way a user would, driving it with Playwright and comparing it with Lichess, ChessBase, SCID, Chessable and ChessTempo and with general software standards. A seventh pass reviewed the engineering. Every finding below was reproduced in the running app or traced to the code.
 
 Not tested: a real Claude key, a Lichess token, the Windows window and installer themselves, a screen reader, and spaced repetition over several days.
 
@@ -8,16 +8,7 @@ Work through it top to bottom; delete a line when it is fixed.
 
 ## Critical
 
-1. ✔ **Coach answers never reach the screen.** `routes/coach.ts:30` listens for `req.raw` "close", which Node fires as soon as the request body is read, so every event after that is dropped: the panel says "Thinking…" forever while the answer is saved and billed. The tests miss it because `app.inject` opens no socket. Listen on `reply.raw`, abort the model call when the client leaves, and add a real-socket test.
-2. **Any website can make the app run a program (DNS rebinding).** No route checks the Host or Origin header; a rebound page can `PUT /api/settings` an `enginePath` and then `GET /api/engine/status` runs it. Accept only `127.0.0.1:<port>`/`localhost`, reject foreign origins, and set the engine path only from a file picker.
-3. ✔ **The Claude API key is handed to Stockfish and to the MCP server.** `engine.ts:66` spawns with the whole environment, which holds `ANTHROPIC_API_KEY`; the MCP config passes `CHESS_ENV_FILE`. Spawn with an environment without the key; drop the env file from the MCP config.
-4. ✔ **Clicking a piece erases saved arrows and circles.** Chessground's `drawable.eraseOnMovablePieceClick` defaults to true (`Board.tsx:87`); the `[%cal]`/`[%csl]` are lost from the PGN with no undo.
-5. **An illegal FEN blanks the whole app.** A position where the side not to move is in check is accepted; capturing the king throws and there is no error boundary. Reject such FENs (`positionKey.ts`) and add an error boundary.
-6. **Repertoire moves from a set-up position are invisible, never trained, and deleted silently** with an unrelated move (`repertoireTree`, `linesTo`, `deleteMove` → `unreachableEdges` all start from the initial position).
-7. **Different games that share a Site URL are dropped as duplicates** (`games.ts:104`: any http Site is used as the game's id).
-8. **Bulk delete removes games you can't see**: the selection survives a filter change, and Delete trashes it without asking (`GamesScreen.tsx:65`).
-9. **Unsaved board work is replaced without asking** when opening another game, New, Open or paste; undo after New loses the library link, so Ctrl+S then saves a duplicate (`workspace.tsx:113-166`, `useGame.ts:163`).
-10. **Every push to main installs itself on the next close**, gated only by `pnpm test`: no typecheck in CI, Stockfish downloaded unpinned, `npm install --no-package-lock`. Add typecheck and the real-socket coach test to CI, pin Stockfish by tag and SHA-256.
+All ten fixed on 28 November 2026 (coach stream, local-API lock-down, secrets kept from child processes, drawings kept on click, impossible positions refused plus an error boundary, set-up-position repertoire lines, Site-URL duplicates, hidden bulk delete, unsaved-work prompt with undo keeping the library link, CI typecheck and a pinned Stockfish). What remains of the last one is under *Data and engineering*.
 
 ## Bugs
 
@@ -47,7 +38,7 @@ Work through it top to bottom; delete a line when it is fixed.
 
 ### Repertoire
 - Export then import loses "nice to know", and the transposition note doubles on every round (`repertoire.ts:128` writes them as comment text).
-- A bad import fails silently ("Added 0 moves from 0 games"; the errors are never shown), and comments before a move, the intro comment and arrows are dropped (`repertoire.ts:67`).
+- An import drops comments placed before a move, the intro comment and arrows (`repertoire.ts:67`).
 - "Whose move" can be set to the wrong side, which breaks training (`RepertoireScreen.tsx:455`, `repertoire.ts:180`).
 - The board's Repertoire tab reports on every repertoire, including the other colour's.
 - Repertoires can't be renamed or deleted in the app (the API exists).
@@ -63,8 +54,7 @@ Work through it top to bottom; delete a line when it is fixed.
 ### General
 - Keys leak through the Ctrl+K palette to the board (Delete deletes a move behind it); dialogs don't trap focus, lack `aria-modal`, and don't return focus.
 - The concept picker's Enter creates a duplicate ("minor") instead of picking "Minority attack"; an alias isn't a match.
-- "Save and test" saves a broken engine path before testing it, and the MCP server then ignores its own Stockfish.
-- The MCP server accepts illegal positions; `compare_moves` compares depth 18 with depth 16 and calls the best move a loss.
+- `compare_moves` compares depth 18 with depth 16 and calls the best move a loss.
 - A concept can have a blank title.
 - Choosing a theme in Settings leaves the sidebar's theme button out of step.
 - The offline banner tells the installed app's user to run "pnpm dev" and never clears.
@@ -80,6 +70,7 @@ Work through it top to bottom; delete a line when it is fixed.
 - No backup, and copying `chess.db` alone while the app runs misses the WAL.
 - Server errors leave no log in the installed app.
 - A FEN game without `SetUp "1"` is written without it; NAGs above 255 are accepted.
+- The installer's database driver is installed with `npm install --no-package-lock`, so its own dependencies float between builds.
 
 ## Missing compared with standard chess software
 

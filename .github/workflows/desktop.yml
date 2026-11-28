@@ -26,6 +26,11 @@ jobs:
     timeout-minutes: 45
     env:
       APP_VERSION: 0.1.${{ github.run_number }}
+      # The Stockfish build that ships with the app: a fixed release, checked by its SHA-256 (the digest
+      # GitHub lists for the asset). To move to a newer Stockfish, change both together.
+      STOCKFISH_TAG: sf_19
+      STOCKFISH_ZIP: stockfish-windows-x86-64-universal.zip
+      STOCKFISH_SHA256: 3c8bf1f9ea66a09350a40df4f632288285ac206d99f33ab5842c408fc30b48a7
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +43,9 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm typecheck
 
       - name: Test
         run: pnpm test
@@ -52,13 +60,13 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path sf, apps/desktop/stockfish | Out-Null
-          # Stockfish 19 ships one universal Windows build; older releases had one per CPU (avx2, plain...).
-          gh release download --repo official-stockfish/Stockfish --pattern "stockfish-windows-x86-64*.zip" --dir sf
-          if ($LASTEXITCODE -ne 0) { throw "Could not download Stockfish" }
-          Get-ChildItem sf | Format-Table Name, Length
-          $rank = { param($n) if ($n -match 'universal') { 0 } elseif ($n -match 'avx2') { 1 } elseif ($n -match 'x86-64\.zip$') { 2 } else { 3 } }
-          $zip = Get-ChildItem sf -Filter "*.zip" | Sort-Object { & $rank $_.Name } | Select-Object -First 1
-          Write-Host "Using $($zip.Name)"
+          gh release download $env:STOCKFISH_TAG --repo official-stockfish/Stockfish --pattern $env:STOCKFISH_ZIP --dir sf
+          if ($LASTEXITCODE -ne 0) { throw "Could not download $env:STOCKFISH_ZIP from Stockfish $env:STOCKFISH_TAG" }
+          $zip = Get-Item "sf/$env:STOCKFISH_ZIP"
+          $hash = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "$($zip.Name): $($zip.Length) bytes, sha256 $hash"
+          if ($hash -ne $env:STOCKFISH_SHA256) { throw "The Stockfish download does not match the pinned SHA-256 ($env:STOCKFISH_SHA256)" }
+          $rank = { param($n) if ($n -match 'universal') { 0 } elseif ($n -match 'avx2') { 1 } else { 2 } }
           Expand-Archive $zip.FullName -DestinationPath sf/x
           # The zip holds one folder with the program, its licence and its source: keep all of it.
           $root = Get-Item sf/x
