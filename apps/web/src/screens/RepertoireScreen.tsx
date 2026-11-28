@@ -21,7 +21,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type RepertoireSummary, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
-import { Modal } from '../Dialogs.tsx';
+import { Modal, dialogOpen } from '../Dialogs.tsx';
 import { LinkedConcepts } from '../components/ConceptPicker.tsx';
 import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { readTextFile } from '../files.ts';
@@ -277,7 +277,8 @@ export function RepertoireScreen() {
 
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   keys.current = (event) => {
-    if (dialog || isTyping(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+    // Not behind a dialog (a confirm, the rename box): its keys are its own.
+    if (dialog || dialogOpen() || isTyping(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
     const lineIndex = place?.line ?? -1;
     const moves: Record<string, () => void> = {
       // Left and right: the move before and after. Up and down: the line above and below.
@@ -352,7 +353,7 @@ export function RepertoireScreen() {
       <PageHeader title="Repertoire">
         <select
           aria-label="Repertoire"
-          className={inputClass}
+          className={`${inputClass} max-w-64`}
           value={id}
           onChange={(e) => {
             select(null);
@@ -560,25 +561,28 @@ export function RepertoireScreen() {
         </div>
 
         <div className="repertoire-board flex min-w-0 flex-1 flex-col items-center gap-3 md:h-full md:overflow-y-auto">
-          <div role="group" aria-label="Board display" className="flex w-full max-w-[calc(100dvh-13.5rem)] flex-wrap items-center gap-2 text-sm">
+          <div role="group" aria-label="Board display" className="flex w-full shrink-0 flex-wrap items-center gap-2 text-sm">
             <Switch on={showLines} onToggle={switchLines} label="Engine lines" shortcut="E" />
             <Switch on={showBest} onToggle={switchBest} label="Best-move arrow" shortcut="A" swatch="#68217a" />
             <Switch on={showMoves} onToggle={switchMoves} label="Variation arrows" shortcut="V" swatch="#15781B" />
             {engineOn && !showLines && engine.error && <span className="text-xs text-danger">{engine.error}</span>}
             <OpeningLabel opening={selected ? openingOf.get(selected) : null} className="ml-auto min-w-0 truncate text-xs" />
           </div>
-          <div className="flex w-full justify-center gap-2">
-            {engineOn && <EvalBar line={best} flipped={color === 'black'} />}
-            <Board
-              node={boardNode(fen, current?.edge.uci ?? '', ply)}
-              orientation={color}
-              autoShapes={shapes}
-              onMove={(from, to, promotion) => void addMove(from, to, promotion)}
-              onShapes={() => {}}
-              onWheelStep={(direction) => (direction < 0 ? stepBack() : stepForward())}
-            />
+          <div className="board-fit flex w-full justify-center md:min-h-[16rem] md:flex-1">
+            {/* As tall as the board, so the eval bar beside it is too. */}
+            <div className="flex h-fit w-full justify-center gap-2 md:w-auto">
+              {engineOn && <EvalBar line={best} flipped={color === 'black'} />}
+              <Board
+                node={boardNode(fen, current?.edge.uci ?? '', ply)}
+                orientation={color}
+                autoShapes={shapes}
+                onMove={(from, to, promotion) => void addMove(from, to, promotion)}
+                onShapes={() => {}}
+                onWheelStep={(direction) => (direction < 0 ? stepBack() : stepForward())}
+              />
+            </div>
           </div>
-          <div className="w-full max-w-[calc(100dvh-13.5rem)] space-y-3 text-sm">
+          <div className="w-full max-w-xl shrink-0 space-y-3 text-sm">
             <input
               aria-label="Type a move to add"
               value={typed}
@@ -725,6 +729,20 @@ function MoveEditor({
     await api.updateRepertoireMove(e.id, changes);
     onChanged();
   };
+  // The comment as typed, saved when the box loses focus, and also when the editor goes while the box
+  // still has it (the wheel stepped to another move, Back left the screen): typed words are never lost.
+  const typed = useRef<string | null>(null);
+  const saveComment = () => {
+    if (typed.current === null) return;
+    // The words are edited; drawing commands ([%cal] …) stay attached, out of sight.
+    const commands = (e.comment ?? '').match(/\[%[^\]]*\]/g) ?? [];
+    const next = [...commands, typed.current.trim()].join(' ').trim();
+    typed.current = null;
+    if (next !== (e.comment ?? '').trim()) void update({ comment: next || null });
+  };
+  const saveOnLeave = useRef(saveComment);
+  saveOnLeave.current = saveComment;
+  useEffect(() => () => saveOnLeave.current(), []);
   return (
     <div className="space-y-2 rounded-xl border border-line bg-surface p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -756,12 +774,10 @@ function MoveEditor({
         aria-label="Comment"
         rows={2}
         defaultValue={displayComment(e.comment ?? '')}
-        onBlur={(ev) => {
-          // The words are edited; drawing commands ([%cal] …) stay attached, out of sight.
-          const commands = (e.comment ?? '').match(/\[%[^\]]*\]/g) ?? [];
-          const next = [...commands, ev.target.value.trim()].join(' ').trim();
-          if (next !== (e.comment ?? '').trim()) void update({ comment: next || null });
+        onChange={(ev) => {
+          typed.current = ev.target.value;
         }}
+        onBlur={saveComment}
         placeholder="Why this move, what to remember…"
         className={`${inputClass} w-full`}
       />

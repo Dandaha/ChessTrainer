@@ -1,5 +1,6 @@
 import { type Color, type MoveNode, answerLine, createGame, describeGameEnd, displayComment, gameEnd, lineLabel, moveLabel, moveSpellings, playMove } from '@chess/chess-core';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { dialogOpen } from '../Dialogs.tsx';
 import { type CardDetail, type QueueSummary, type SavedPosition, type TrainingStats, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
 import { Markdown } from '../components/Markdown.tsx';
@@ -206,27 +207,27 @@ function Stats({ stats }: { stats: TrainingStats }) {
         <thead className="text-left text-xs text-muted">
           <tr>
             <th className="py-1">Trained</th>
-            <th className="text-right">Cards</th>
-            <th className="text-right">Reviews</th>
-            <th className="text-right">Right</th>
+            <th className="w-20 pl-4 text-right">Cards</th>
+            <th className="w-20 pl-4 text-right">Reviews</th>
+            <th className="w-20 pl-4 text-right">Right</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
           {stats.byRepertoire.map((r) => (
             <tr key={r.id}>
-              <td className="py-1.5">
+              <td className="py-1.5 [overflow-wrap:anywhere]">
                 {r.color === 'white' ? '♔' : '♚'} {r.name}
               </td>
-              <td className="text-right tabular-nums">{r.cards}</td>
-              <td className="text-right tabular-nums">{r.reviews}</td>
-              <td className="text-right tabular-nums">{pct(r.accuracy)}</td>
+              <td className="pl-4 text-right tabular-nums">{r.cards}</td>
+              <td className="pl-4 text-right tabular-nums">{r.reviews}</td>
+              <td className="pl-4 text-right tabular-nums">{pct(r.accuracy)}</td>
             </tr>
           ))}
           <tr>
             <td className="py-1.5">Saved positions</td>
-            <td className="text-right tabular-nums">{stats.positions.cards}</td>
-            <td className="text-right tabular-nums">{stats.positions.reviews}</td>
-            <td className="text-right tabular-nums">{pct(stats.positions.accuracy)}</td>
+            <td className="pl-4 text-right tabular-nums">{stats.positions.cards}</td>
+            <td className="pl-4 text-right tabular-nums">{stats.positions.reviews}</td>
+            <td className="pl-4 text-right tabular-nums">{pct(stats.positions.accuracy)}</td>
           </tr>
         </tbody>
       </table>
@@ -283,6 +284,8 @@ function Session({
   const [progress, setProgress] = useState(0);
   const [replying, setReplying] = useState(false);
   const timers = useRef<number[]>([]);
+  // The card on screen, once graded: a double click or a key pressed twice records one review, not two.
+  const graded = useRef<number | null>(null);
   const card = cards[index];
   const solution = useMemo(() => (card?.kind === 'saved_position' ? answerLine(card.saved.fen, card.saved.answer) : []), [card]);
   const multi = solution.length > 1;
@@ -298,6 +301,7 @@ function Session({
     setShowSolution(false);
     setProgress(0);
     setReplying(false);
+    graded.current = null;
     if (!card) return;
     if (card.kind === 'saved_position') {
       const start = at(card.saved.fen);
@@ -331,7 +335,8 @@ function Session({
 
   const grade = useCallback(
     async (g: Grade) => {
-      if (!card || !outcome || card.card === null) return;
+      if (!card || !outcome || card.card === null || graded.current === index) return;
+      graded.current = index;
       const correct = outcome.correct && !failed;
       await api.review(card.card.id, g, correct).catch((e: Error) => ws.toast(e.message, true));
       if (correct) setRight((r) => r + 1);
@@ -371,6 +376,7 @@ function Session({
   // the moment a result appears reaches it, not the listener of the state before.
   useLayoutEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (dialogOpen()) return;
       if (event.key === 'Escape') onEnd(results);
       if (!outcome) return;
       const key = event.key.toLowerCase();

@@ -4,6 +4,11 @@ import { readTextFile } from './files.ts';
 /** Open dialogs, newest last: only the top one answers Escape, so closing a question keeps its parent. */
 const openDialogs: symbol[] = [];
 
+/** Whether a dialog is open: a screen's own keys (arrows, letters) stay out of the way while one is. */
+export function dialogOpen(): boolean {
+  return openDialogs.length > 0;
+}
+
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**

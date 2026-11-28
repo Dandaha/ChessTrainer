@@ -96,3 +96,22 @@ describe('training', () => {
     expect(await screen.findByText('Answer: 1. Rd8#')).toBeTruthy();
   });
 });
+
+describe('grading', () => {
+  it('records one review for a card however many times the grade is pressed', async () => {
+    const { app } = startServer();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'Sicilian', color: 'black' } })).json();
+    await app.inject({ method: 'POST', url: `/api/repertoires/${id}/line`, payload: { sans: ['e4', 'c5', 'Nf3', 'd6'] } });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Start training' }));
+    await screen.findByText('New move: play c5', {}, { timeout: 3000 });
+    type('c5');
+    await screen.findByText('Learned: c5. It comes back for review soon.');
+    // Pressed twice before the next card shows.
+    fireEvent.keyDown(window, { key: 'Enter' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(await screen.findByText('2 / 2 · 1 right')).toBeTruthy();
+    const stats = (await app.inject({ method: 'GET', url: '/api/training/stats' })).json();
+    expect(stats.byRepertoire[0]).toMatchObject({ reviews: 1 });
+  });
+});

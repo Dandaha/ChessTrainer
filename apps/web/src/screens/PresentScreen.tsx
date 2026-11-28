@@ -4,6 +4,7 @@ import { type SavedPosition, api } from '../api.ts';
 import { Board } from '../Board.tsx';
 import { Markdown } from '../components/Markdown.tsx';
 import { navigate } from '../router.ts';
+import { dialogOpen } from '../Dialogs.tsx';
 
 /**
  * Present mode: a set full screen, one position at a time. The idea stays
@@ -35,7 +36,7 @@ export function PresentScreen({ setId }: { setId: string }) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!items) return;
+      if (!items || dialogOpen()) return;
       if (event.key === 'Escape') navigate(`positions?set=${setId}`);
       else if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'PageDown') {
         event.preventDefault();

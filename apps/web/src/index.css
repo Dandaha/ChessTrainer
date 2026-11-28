@@ -118,6 +118,17 @@ kbd {
 .repertoire-board .board-frame {
   width: min(100%, calc(100dvh - 13.5rem));
 }
+/* Beside the tree it fills the space its column leaves, whatever wraps above it (the header buttons,
+   the switches) or sits under it (the move box): the board's square is the smaller of that space's
+   width (less the eval bar) and height. */
+@media (min-width: 768px) {
+  .repertoire-board .board-fit {
+    container-type: size;
+  }
+  .repertoire-board .board-frame {
+    width: min(calc(100cqw - 1.5rem), 100cqh);
+  }
+}
 
 .board-frame .cg-wrap {
   width: 100%;

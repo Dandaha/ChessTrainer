@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
 import { buttonClass, primaryClass } from './ui.tsx';
+import { dialogOpen } from '../Dialogs.tsx';
 
 /**
  * A repertoire line from the first move: I play my moves, the opponent answers from the repertoire
@@ -110,6 +111,7 @@ export function LineDrill({ repertoireId, guide = [], onEnd }: { repertoireId: s
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (dialogOpen()) return;
       if (event.key === 'Escape') onEnd();
       if (done && event.key.toLowerCase() === 'n') restart([]);
     };
