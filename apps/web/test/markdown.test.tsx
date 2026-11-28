@@ -38,4 +38,16 @@ describe('notes in markdown', () => {
     show('1K1k4/1P6/8/8/8/8/r7/2R5 w - - 0 1\n\nAfter 1. Rd1+ Ke7 2. Rd4 the rook blocks the checks.');
     expect(screen.getByRole('button', { name: '1. Rd1+ Ke7 2. Rd4' })).toBeTruthy();
   });
+
+  it('shows a line block after an unrelated board from the starting position', () => {
+    show('1K1k4/1P6/8/8/8/8/r7/2R5 w - - 0 1\n\n```line\n1. e4 e5 2. Nf3\n```');
+    expect(screen.getByTitle('Open the line on the board')).toBeTruthy();
+    expect(document.querySelector('pre')).toBeNull();
+  });
+
+  it('keeps a numbered list and the bullets after it apart', () => {
+    show('1. Develop\n2. Castle\n- then attack\n- or not');
+    expect(document.querySelectorAll('ol li')).toHaveLength(2);
+    expect(document.querySelectorAll('ul li')).toHaveLength(2);
+  });
 });

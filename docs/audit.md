@@ -12,45 +12,16 @@ All ten fixed on 28 November 2026 (coach stream, local-API lock-down, secrets ke
 
 ## Bugs
 
-### Board and engine
-- Clicking a later move in an engine line plays only the first (`BoardScreen.tsx:316`: stale `current`; use `playLineFrom`).
-- The engine panel freezes at depth 1 when there are fewer legal moves than lines (`engine.ts:146` waits for line 3).
-- The engine can't see repetitions: it is sent only `position fen` (`engine.ts:176`), so a threefold shows +0.31.
-- Live analysis ends after 2 minutes with the panel open (idle timer not touched while streaming); closing the panel while the engine starts leaves it searching; two evaluations at once cut each other short and the shallow result is cached.
-- A binary that exits at once takes the full 10 s to fail (`Engine.start` ignores "exit").
-- Buttons keep focus, so Space or Enter repeats "Delete from here" or "New".
-- Ctrl+S inside the comment box opens the browser's Save Page dialog (`BoardScreen.tsx:92`).
-- Replaying a move that already exists marks the game unsaved (`useGame.ts:110`).
+All fixed on 28 November 2026:
+- the engine panel (clicked lines, few legal moves, repetitions, the 2-minute cut, races, binaries that exit at once);
+- the board's keys and buttons;
+- print, present mode and set order;
+- the training queue;
+- the repertoire's PGN round trip, its sides, renaming and deleting;
+- broken and Latin-1 PGN files;
+- dialogs, the concept picker, `compare_moves`, concept titles, the theme button, the offline notice and Markdown.
 
-### Positions and training
-- The worksheet prints only its first page: the app shell scrolls inside a 100%-height box and there is no print stylesheet.
-- Present mode cuts the top of the board off in windows narrower than 1024 px (`PresentScreen.tsx:71`).
-- The summary counts cards due by end of day, the queue only those due now; a card graded Again is never asked again in the session.
-- New saved positions never reach the mixed queue: repertoire cards fill all the new slots (`training.ts:252`).
-- Reordering a filtered set scrambles the full order (`PositionsScreen.tsx:90`, `library.ts:352`).
-- A move that transposes into the repertoire is marked wrong in training.
-
-### Repertoire
-- Export then import loses "nice to know", and the transposition note doubles on every round (`repertoire.ts:128` writes them as comment text).
-- An import drops comments placed before a move, the intro comment and arrows (`repertoire.ts:67`).
-- "Whose move" can be set to the wrong side, which breaks training (`RepertoireScreen.tsx:455`, `repertoire.ts:180`).
-- The board's Repertoire tab reports on every repertoire, including the other colour's.
-- Repertoires can't be renamed or deleted in the app (the API exists).
-
-### Games and imports
-- A broken header tag produces an extra headless game (`pgn.ts:132`).
-- Latin-1 PGN files turn to mojibake (`GamesScreen.tsx:402` always reads UTF-8).
-
-### General
-- Keys leak through the Ctrl+K palette to the board (Delete deletes a move behind it); dialogs don't trap focus, lack `aria-modal`, and don't return focus.
-- The concept picker's Enter creates a duplicate ("minor") instead of picking "Minority attack"; an alias isn't a match.
-- `compare_moves` compares depth 18 with depth 16 and calls the best move a loss.
-- A concept can have a blank title.
-- Choosing a theme in Settings leaves the sidebar's theme button out of step.
-- The offline banner tells the installed app's user to run "pnpm dev" and never clears.
-- Markdown: a line block after a board reads from that board; a numbered list followed by bullets merges.
-
-### Data and engineering
+## Data and engineering
 - Imports are slow: about 5 ms a game (5,000 games ≈ 35 s), most of it chess.js building a full move object for every move; the app stays usable meanwhile, but the dialog shows no progress.
 - The database grows ≈ 40 KB per game, mostly the position index (≈ 3 GB at the spec's 100k games).
 - The training queue takes ≈ 2.7 s on a 5,000-move repertoire (details built for every new card before keeping 20).

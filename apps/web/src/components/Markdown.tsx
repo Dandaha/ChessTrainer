@@ -36,6 +36,13 @@ type Block =
   | { kind: 'line'; moves: string }
   | { kind: 'code'; text: string };
 
+const BULLET = /^([-*]|\d+[.)])\s+/;
+
+/** "- point", "* point", "1. point" or "1) point", but not "1. e4 e5", which is a line of moves. */
+function listItem(line: string): boolean {
+  return BULLET.test(line) && !/^\d+\.\s*[KQRBNOa-h]/.test(line);
+}
+
 function parseBlocks(text: string): Block[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const blocks: Block[] = [];
@@ -71,12 +78,12 @@ function parseBlocks(text: string): Block[] {
       i += 1;
       continue;
     }
-    const bullet = /^([-*]|\d+[.)])\s+/;
-    if (bullet.test(trimmed) && !/^\d+\.\s*[KQRBNOa-h]/.test(trimmed)) {
+    if (listItem(trimmed)) {
       const ordered = /^\d/.test(trimmed);
       const items: string[] = [];
-      while (i < lines.length && bullet.test(lines[i]!.trim())) {
-        items.push(lines[i]!.trim().replace(bullet, ''));
+      // A numbered list ends where bullets start, and the other way round.
+      while (i < lines.length && listItem(lines[i]!.trim()) && /^\d/.test(lines[i]!.trim()) === ordered) {
+        items.push(lines[i]!.trim().replace(BULLET, ''));
         i += 1;
       }
       blocks.push({ kind: 'list', ordered, items });
@@ -170,11 +177,13 @@ export function playLine(fen: string, moves: string): { fen: string; sans: strin
 
 function EmbeddedLine({ moves, fen }: { moves: string; fen: string }) {
   const ws = useWorkspace();
-  const played = playLine(fen, moves);
+  // From the board above it, or, when the moves don't fit there, from the starting position.
+  const base = playLine(fen, moves) ? fen : START_FEN;
+  const played = playLine(base, moves);
   if (!played) return <pre className="rounded-md bg-surface-2 p-2 text-xs">{moves}</pre>;
   return (
     <div className="space-y-1">
-      <button type="button" onClick={() => ws.openLine(fen, played.sans)} className="block w-56 max-w-full" title="Open the line on the board">
+      <button type="button" onClick={() => ws.openLine(base, played.sans)} className="block w-56 max-w-full" title="Open the line on the board">
         <MiniBoard fen={played.fen} coordinates />
       </button>
       <p className="text-xs text-muted">{moves}</p>

@@ -291,9 +291,10 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
   const [related, setRelated] = useState<ConceptSummary[]>(page.related);
 
   const save = async () => {
+    if (!title.trim()) return ws.toast('A concept needs a title.', true);
     try {
       const next = await api.updateConcept(page.id, {
-        title,
+        title: title.trim(),
         aliases: aliases.split(','),
         category: (category || null) as ConceptCategory | null,
         tags: tags.split(','),
@@ -315,7 +316,7 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
         void save();
       }}
     >
-      <input aria-label="Title" className={`${field} text-lg font-semibold`} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <input aria-label="Title" required className={`${field} text-lg font-semibold`} value={title} onChange={(e) => setTitle(e.target.value)} />
       <div className="grid grid-cols-2 gap-3 text-sm">
         <label className="space-y-1">
           <span className="text-muted">Also known as (commas)</span>

@@ -32,6 +32,16 @@ describe('request bodies', () => {
     expect((await server.inject({ method: 'GET', url: '/api/settings' })).json()).toEqual({ rating: 1500 });
   });
 
+  it('keeps a concept from losing its title', async () => {
+    const server = app();
+    expect((await server.inject({ method: 'POST', url: '/api/concepts', payload: { title: '   ' } })).statusCode).toBe(400);
+    const concept = (await server.inject({ method: 'POST', url: '/api/concepts', payload: { title: 'Minority attack' } })).json();
+    const blank = await server.inject({ method: 'PUT', url: `/api/concepts/${concept.id}`, payload: { title: ' ' } });
+    expect(blank.statusCode).toBe(400);
+    expect(blank.json().error).toBe('title: A concept needs a title.');
+    expect((await server.inject({ method: 'GET', url: `/api/concepts/${concept.id}` })).json().title).toBe('Minority attack');
+  });
+
   it('answers 400, not a server error, for a missing or malformed body', async () => {
     const server = app();
     expect((await server.inject({ method: 'POST', url: '/api/games' })).statusCode).toBe(400);

@@ -37,6 +37,23 @@ describe('tool definitions', () => {
     expect(facts.checksAvailable).toEqual(['Rd8#']);
   });
 
+  it('compare_moves scores the best move the way it scores the others', async () => {
+    // A root search at depth 18 says +0.50; one at depth 17 after the move says +0.20. Set against
+    // each other, the best move would be "0.3 worse than best".
+    const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const line = (cp: number, san: string[]) => ({ multipv: 1, depth: 17, cp, pv: [], san });
+    const ctx: ToolContext = {
+      analyse: async (f) => {
+        if (f === START) return { fen: f, engine: 'fake', depth: 18, lines: [line(50, ['e4', 'e5'])] };
+        const pawnOnD4 = f.startsWith('rnbqkbnr/pppppppp/8/8/3P4');
+        return { fen: f, engine: 'fake', depth: 17, lines: [line(pawnOnD4 ? 10 : 20, ['e5'])] };
+      },
+    };
+    const r = (await runTool('compare_moves', { fen: START, moves: ['e4', 'd4'] }, ctx)) as { candidates: Record<string, unknown>[] };
+    expect(r.candidates[0]).toMatchObject({ move: 'e4', isBest: true, lossVsBestInPawns: 0 });
+    expect(r.candidates[1]).toMatchObject({ move: 'd4', isBest: false, lossVsBestInPawns: 0.1 });
+  });
+
   it('passes database questions to the data source', async () => {
     const ctx: ToolContext = {
       analyse: async () => ({ fen: '', engine: '', depth: 0, lines: [] }),

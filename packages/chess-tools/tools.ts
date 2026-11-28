@@ -98,7 +98,24 @@ export const compareMovesTool = tool({
     const base = await ctx.analyse(f, { depth: 18, multipv: 3 });
     const best = base.lines[0];
     if (!best) return { fen: f, note: 'No legal moves: checkmate or stalemate.' };
-    const bestValue = scoreValue(best) * sign;
+    // Every move, the best one included, is scored the same way: a search of the position after it at
+    // one depth. Set against the root search, which looks a move deeper, the best move itself could
+    // come out a few tenths "worse than best".
+    const scored = new Map<string, { line: EngineLine | undefined; value: number }>();
+    const score = async (move: string, after: string) => {
+      let result = scored.get(move);
+      if (!result) {
+        const line = (await ctx.analyse(after, { depth: 17, multipv: 1 })).lines[0];
+        // No reply: the move mated (its SAN ends in #) or stalemated.
+        const value = line ? scoreValue(line) * sign : move.endsWith('#') ? 100 : 0;
+        result = { line, value };
+        scored.set(move, result);
+      }
+      return result;
+    };
+    const bestMove = best.san[0]!;
+    const bestAfter = play(f, [bestMove]);
+    const bestValue = bestAfter.illegal ? scoreValue(best) * sign : (await score(bestMove, bestAfter.fen)).value;
     const results = [];
     for (const candidate of candidates) {
       const after = play(f, [candidate]);
@@ -106,15 +123,14 @@ export const compareMovesTool = tool({
         results.push({ move: candidate, error: 'Not a legal move in this position.' });
         continue;
       }
-      const reply = await ctx.analyse(after.fen, { depth: 16, multipv: 1 });
-      const line = reply.lines[0];
-      const value = line ? scoreValue(line) * sign : bestValue;
+      const move = after.played[0]!;
+      const { line, value } = await score(move, after.fen);
       const loss = Math.max(0, Math.round((bestValue - value) * 100) / 100);
       results.push({
-        move: after.played[0],
-        score: line ? formatScore(line) : 'game over',
+        move,
+        score: line ? formatScore(line) : move.endsWith('#') ? 'checkmate' : 'stalemate',
         lossVsBestInPawns: loss >= 50 ? 'loses a forced mate or allows one' : loss,
-        isBest: after.played[0] === best.san[0],
+        isBest: move === bestMove,
         ...(loss > 0.3 && line ? { refutation: line.san.slice(0, 8).join(' ') } : {}),
       });
     }
@@ -123,7 +139,7 @@ export const compareMovesTool = tool({
       sideToMove: sideOf(f),
       depth: base.depth,
       pointOfView: POV,
-      best: { move: best.san[0], score: formatScore(best), line: best.san.slice(0, 10).join(' ') },
+      best: { move: bestMove, score: formatScore(best), line: best.san.slice(0, 10).join(' ') },
       candidates: results,
     };
   },
