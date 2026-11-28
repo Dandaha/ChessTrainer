@@ -18,14 +18,26 @@ import { fold } from './search.ts';
 const VERSION = 1;
 const SETTING = 'starterConcepts';
 
+/** Every name the library's concepts go by (titles and other names), folded, with the concept's id. */
+function knownNames(db: Db): Map<string, string> {
+  const known = new Map<string, string>();
+  for (const row of db.select({ id: concepts.id, title: concepts.title, aliases: concepts.aliases }).from(concepts).where(isNull(concepts.deletedAt)).all()) {
+    for (const name of [row.title, ...(JSON.parse(row.aliases) as string[])]) known.set(fold(name.trim()), row.id);
+  }
+  return known;
+}
+
+/** How many starter concepts the library does not have (by title or another name). */
+export function missingStarterConcepts(db: Db): number {
+  const known = knownNames(db);
+  return STARTER_CONCEPTS.filter((concept) => ![concept.title, ...(concept.aliases ?? [])].some((name) => known.has(fold(name)))).length;
+}
+
 /** Adds the starter concepts the library does not have; says how many were added. */
 export function addStarterConcepts(db: Db): number {
   return db.transaction((tx) => {
     const t = tx as unknown as Db;
-    const known = new Map<string, string>();
-    for (const row of t.select({ id: concepts.id, title: concepts.title, aliases: concepts.aliases }).from(concepts).where(isNull(concepts.deletedAt)).all()) {
-      for (const name of [row.title, ...(JSON.parse(row.aliases) as string[])]) known.set(fold(name.trim()), row.id);
-    }
+    const known = knownNames(t);
     const ids = new Map<string, string>();
     const fresh = new Set<string>();
     for (const concept of STARTER_CONCEPTS) {

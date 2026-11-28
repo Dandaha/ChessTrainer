@@ -15,12 +15,13 @@ import {
 } from '../../db/concepts.ts';
 import { softDelete } from '../../db/library.ts';
 import { createCategory, deleteCategory, listCategories, renameCategory } from '../../db/categories.ts';
-import { addStarterConcepts } from '../../db/starterLibrary.ts';
+import { addStarterConcepts, missingStarterConcepts } from '../../db/starterLibrary.ts';
 import { bodies, parseBody } from '../validate.ts';
 
 /** Phase 5: the concepts library and its links both ways. */
 export function conceptRoutes(app: FastifyInstance, db: Db): void {
   // The built-in concepts, for any the library is missing (they are added once at start-up anyway).
+  app.get('/api/concepts/starter', async () => ({ missing: missingStarterConcepts(db) }));
   app.post('/api/concepts/starter', async () => ({ added: addStarterConcepts(db) }));
 
   // Concept categories: the person's own list, as for saved positions.

@@ -83,7 +83,7 @@ describe('concepts', () => {
     render(<App />);
     go('#/concepts');
     expect(await screen.findByText(/Your chess wiki is empty/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Add missing starter concepts' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Add \d+ missing starter concepts$/ }));
     expect(await screen.findByText(/^Added \d+ starter concepts\.$/)).toBeTruthy();
     expect(await screen.findByText('Checkmate patterns', { selector: 'div' })).toBeTruthy();
 
@@ -94,8 +94,8 @@ describe('concepts', () => {
     // In the list at the side, and among the page's related concepts.
     expect(screen.getAllByRole('link', { name: 'Double attack' })).toHaveLength(2);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add missing starter concepts' }));
-    expect(await screen.findByText('Your library already has every starter concept.')).toBeTruthy();
+    // With every one there, the button goes.
+    await waitFor(() => expect(screen.queryByRole('button', { name: /missing starter concept/ })).toBeNull());
   });
 });
 

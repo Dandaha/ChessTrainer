@@ -35,8 +35,13 @@ export function ConceptsScreen() {
   // The person's own categories, in their order; one chosen filters the list ('' shows them all).
   const [categories, setCategories] = useState<PositionCategory[]>([]);
   const [category, setCategory] = useState('');
+  const [missingStarters, setMissingStarters] = useState(0);
   useEffect(() => {
     api.conceptCategories().then(setCategories).catch(() => {});
+    api
+      .missingStarterConcepts()
+      .then((r) => setMissingStarters(r.missing))
+      .catch(() => {});
   }, [refresh]);
 
   useEffect(() => {
@@ -87,14 +92,18 @@ export function ConceptsScreen() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Concepts">
-        <button
-          type="button"
-          className={buttonClass}
-          title="The chess concepts that come with the app, from forks to the Lucena position: adds any your library does not have. Your own concepts are left as they are."
-          onClick={() => void addStarters()}
-        >
-          Add missing starter concepts
-        </button>
+        {/* Only while some of the concepts that come with the app are not in the library (deleted, or an
+            older library). */}
+        {missingStarters > 0 && (
+          <button
+            type="button"
+            className={buttonClass}
+            title="The chess concepts that come with the app, from forks to the Lucena position: adds any your library does not have. Your own concepts are left as they are."
+            onClick={() => void addStarters()}
+          >
+            Add {missingStarters} missing starter concept{missingStarters === 1 ? '' : 's'}
+          </button>
+        )}
         <button type="button" className={primaryClass} onClick={() => void create()}>
           New concept
         </button>
@@ -106,7 +115,7 @@ export function ConceptsScreen() {
           {/* The categories first, as a filter: under 120 concepts they would be out of sight. */}
           <CategoryList kind="concept" categories={categories} active={category} onSelect={setCategory} onChanged={reload} />
           {list && list.length === 0 && (
-            <p className="px-1 text-sm text-muted">{q ? 'Nothing found.' : 'Your chess wiki is empty. “Add missing starter concepts” above fills it with the classics.'}</p>
+            <p className="px-1 text-sm text-muted">{q ? 'Nothing found.' : 'Your chess wiki is empty. “Add missing starter concepts” above brings back the classics.'}</p>
           )}
           {list && list.length > 0 && category && !groups.some((g) => g.items.length) && (
             <p className="px-1 text-sm text-muted">{q ? `Nothing found in “${category}”.` : `No concept in “${category}” yet.`}</p>

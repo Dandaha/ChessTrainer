@@ -255,6 +255,7 @@ export const api = {
     call<{ removed: boolean; uncategorized: number }>('DELETE', `/api/position-categories/${id}`),
   /** Adds the built-in concepts the library is missing; says how many. */
   addStarterConcepts: () => call<{ added: number }>('POST', '/api/concepts/starter'),
+  missingStarterConcepts: () => call<{ missing: number }>('GET', '/api/concepts/starter'),
   conceptCategories: () => call<PositionCategory[]>('GET', '/api/concept-categories'),
   createConceptCategory: (name: string) => call<PositionCategory>('POST', '/api/concept-categories', { name }),
   renameConceptCategory: (id: string, name: string) => call<PositionCategory>('PUT', `/api/concept-categories/${id}`, { name }),

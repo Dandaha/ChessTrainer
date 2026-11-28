@@ -5,7 +5,7 @@ import { openDatabase, runMigrations } from '../db/client.ts';
 import { createConcept, getConcept, listConcepts } from '../db/concepts.ts';
 import { softDelete } from '../db/library.ts';
 import { STARTER_CONCEPTS } from '../db/starterConcepts.ts';
-import { addStarterConcepts, addStarterConceptsOnce } from '../db/starterLibrary.ts';
+import { addStarterConcepts, addStarterConceptsOnce, missingStarterConcepts } from '../db/starterLibrary.ts';
 
 function freshDb() {
   const { db } = openDatabase(':memory:');
@@ -104,5 +104,16 @@ describe('the starter concepts', () => {
     expect(getConcept(db, mine.id)!.bodyMd).toBe('My own notes');
     expect(listConcepts(db).filter((c) => c.title === 'Zwischenzug')).toHaveLength(1);
     expect(listConcepts(db)).toHaveLength(STARTER_CONCEPTS.length);
+  });
+});
+
+describe('missing starter concepts', () => {
+  it('counts what a library lacks, by title or another name', () => {
+    const db = freshDb();
+    expect(missingStarterConcepts(db)).toBe(STARTER_CONCEPTS.length);
+    addStarterConcepts(db);
+    expect(missingStarterConcepts(db)).toBe(0);
+    softDelete(db, 'concept', [listConcepts(db, { q: 'Fork' }).find((c) => c.title === 'Fork')!.id]);
+    expect(missingStarterConcepts(db)).toBe(1);
   });
 });
