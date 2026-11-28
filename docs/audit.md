@@ -54,6 +54,22 @@ Four testers used the built app (as the installer runs it) area by area, and an 
 - The games screen keeps its collection, filters, sort and page while the app is open.
 - At a drawn game end the engine panel shows 0.00 with the reason, and the engine's lines under "If the game goes on".
 
+## QA and design review, 28 November 2026
+
+Five testers went through every screen of the built app with large and odd libraries (19,000 games, a 1,593-move repertoire, long, Hebrew and emoji names, windows from 960 to 1440 pixels, both themes), and a designer reviewed the look. About 140 findings came back; all the bugs and most of the design points were fixed the same day. Two decisions taken along the way:
+- "Find duplicates" keeps the copy with the most of your own work in it (notes, tags, your colour, collections), then the one with the most comments, then the oldest.
+- "Last import" is the games that import brought in or back, by an id stored on each game (migration 0012).
+
+Design points left for later, each a larger change to a screen's layout:
+- Board: the move buttons under the move list, the FEN row folded away, and the side panel as tall as the board, so the board can grow (about 740 pixels at 1440×900); player strips with names, ratings and material beside the board; the engine as a compact block above the notes instead of a tab.
+- Repertoire: the board on the left as on the Board screen, with the engine block, the tree and a folding move editor on the right; the toolbar as a repertoire switcher, Train, Drill line and Find gaps, the rest in a "⋯" menu.
+- Games: Player, Opening, Time control, Dates and Tag in a "Filters" popover, with the active filters as removable chips.
+- A mark on the first move of a game that leaves the repertoire, in the move list and beside the opening name.
+- The command palette with actions (Import games, New position, Start training, Flip, Theme) and recent items; "?" on every screen.
+- Concepts: a landing page of category tiles and recently viewed concepts; "Link a position" and "Find in my games" on a concept page.
+- A two-column move list for games without comments.
+- Settings: a status per section (engine, token, coach) and Copy / Open folder beside the paths.
+
 ## What works well
 
 - The PGN round trip on the board is exact, including comments, NAGs, nested variations, arrows, clocks and escaped tags.
