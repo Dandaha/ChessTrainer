@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { type Backup, type EngineStatus, type Settings, type SettingsUpdate, type TrashItem, api } from '../api.ts';
 import { Empty, PageHeader, buttonClass, dangerClass, inputClass } from '../components/ui.tsx';
 import { useConfirm } from '../components/AskText.tsx';
@@ -7,6 +7,101 @@ import { useWorkspace } from '../workspace.tsx';
 
 /** Sections later phases add (engine, coach). */
 export const settingsSections: (() => ReactNode)[] = [];
+
+type SaveStatus = { kind: 'saved' } | { kind: 'error'; text: string } | null;
+
+/** Runs a save and says how it went: "Saved" for a moment, or what was wrong, until the next try. */
+function useSaveStatus(): [SaveStatus, (save: () => Promise<unknown>) => Promise<void>] {
+  const [status, setStatus] = useState<SaveStatus>(null);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const run = async (save: () => Promise<unknown>) => {
+    window.clearTimeout(timer.current);
+    try {
+      await save();
+      setStatus({ kind: 'saved' });
+      timer.current = window.setTimeout(() => setStatus(null), 2500);
+    } catch (error) {
+      setStatus({ kind: 'error', text: (error as Error).message });
+    }
+  };
+  return [status, run];
+}
+
+function SaveNote({ status, id }: { status: SaveStatus; id?: string }) {
+  if (!status) return null;
+  return status.kind === 'saved' ? (
+    <span id={id} role="status" className="text-xs text-accent">
+      Saved
+    </span>
+  ) : (
+    <span id={id} role="alert" className="text-xs text-danger">
+      {status.text}
+    </span>
+  );
+}
+
+/**
+ * A setting typed in a box: checked, then saved when it loses focus or on Enter, only if it changed,
+ * with "Saved" or what is wrong beside it.
+ */
+function SettingInput({
+  label,
+  initial,
+  width,
+  type = 'text',
+  check,
+  save,
+}: {
+  label: string;
+  initial: string;
+  width: string;
+  type?: 'text' | 'number';
+  /** What is wrong with a value, or null. */
+  check(value: string): string | null;
+  save(value: string): Promise<unknown>;
+}) {
+  const [value, setValue] = useState(initial);
+  const [status, run] = useSaveStatus();
+  const saved = useRef(initial);
+  const id = useId();
+  const commit = () => {
+    if (value.trim() === saved.current.trim()) return;
+    const problem = check(value.trim());
+    if (problem) return void run(() => Promise.reject(new Error(problem)));
+    void run(async () => {
+      await save(value.trim());
+      saved.current = value;
+    });
+  };
+  return (
+    <label className="grid grid-cols-[12rem_1fr] items-center gap-3 text-sm">
+      <span className="text-muted">{label}</span>
+      <span className="flex flex-wrap items-center gap-2">
+        <input
+          aria-label={label}
+          type={type}
+          className={`${inputClass} ${width} ${status?.kind === 'error' ? 'border-danger' : ''}`}
+          value={value}
+          aria-invalid={status?.kind === 'error'}
+          aria-describedby={status ? id : undefined}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+          }}
+        />
+        <SaveNote status={status} id={id} />
+      </span>
+    </label>
+  );
+}
+
+/** Lichess names: 2–30 letters, digits, _ or -; Chess.com's: 3–25 of the same. */
+const usernameCheck = (site: string, min: number, max: number) => (value: string) =>
+  !value || new RegExp(`^[A-Za-z0-9_-]{${min},${max}}$`).test(value)
+    ? null
+    : `A ${site} username is ${min} to ${max} letters, digits, _ or -.`;
 
 export function SettingsScreen() {
   const ws = useWorkspace();
@@ -29,6 +124,8 @@ export function SettingsScreen() {
       ws.toast((e as Error).message, true);
     }
   };
+  /** A save whose failure the caller shows (beside the field). */
+  const saveStrict = async (values: SettingsUpdate) => setSettings(await api.updateSettings(values));
 
   const row = 'grid grid-cols-[12rem_1fr] items-center gap-3 text-sm';
 
@@ -52,26 +149,28 @@ export function SettingsScreen() {
           </label>
           {settings && (
             <>
-              <label className={row}>
-                <span className="text-muted">Lichess username</span>
-                <input aria-label="Lichess username" className={`${inputClass} w-56`} defaultValue={settings.lichessUsername ?? ''} onBlur={(e) => void save({ lichessUsername: e.target.value.trim() })} />
-              </label>
-              <label className={row}>
-                <span className="text-muted">Chess.com username</span>
-                <input aria-label="Chess.com username" className={`${inputClass} w-56`} defaultValue={settings.chesscomUsername ?? ''} onBlur={(e) => void save({ chesscomUsername: e.target.value.trim() })} />
-              </label>
-              <label className={row}>
-                <span className="text-muted">My rating (approximate)</span>
-                <input
-                  aria-label="My rating"
-                  type="number"
-                  min={100}
-                  max={3500}
-                  className={`${inputClass} w-28`}
-                  defaultValue={settings.rating ?? ''}
-                  onBlur={(e) => void save({ rating: e.target.value ? Math.round(Number(e.target.value)) : null })}
-                />
-              </label>
+              <SettingInput
+                label="Lichess username"
+                width="w-56"
+                initial={typeof settings.lichessUsername === 'string' ? settings.lichessUsername : ''}
+                check={usernameCheck('Lichess', 2, 30)}
+                save={(value) => saveStrict({ lichessUsername: value })}
+              />
+              <SettingInput
+                label="Chess.com username"
+                width="w-56"
+                initial={typeof settings.chesscomUsername === 'string' ? settings.chesscomUsername : ''}
+                check={usernameCheck('Chess.com', 3, 25)}
+                save={(value) => saveStrict({ chesscomUsername: value })}
+              />
+              <SettingInput
+                label="My rating"
+                type="number"
+                width="w-28"
+                initial={typeof settings.rating === 'number' ? String(settings.rating) : ''}
+                check={(value) => (!value || (/^\d+$/.test(value) && Number(value) >= 100 && Number(value) <= 3500) ? null : 'A rating from 100 to 3500.')}
+                save={(value) => saveStrict({ rating: value ? Number(value) : null })}
+              />
             </>
           )}
         </section>
@@ -248,6 +347,7 @@ function EngineSettings({ settings, onSave }: { settings: Settings | null; onSav
 }
 
 function CoachSettings({ onSave, keyLocation }: { onSave(values: SettingsUpdate): Promise<void>; keyLocation: string }) {
+  const [modelStatus, runModel] = useSaveStatus();
   const ws = useWorkspace();
   const [status, setStatus] = useState<Awaited<ReturnType<typeof api.coachStatus>> | null>(null);
   const [key, setKey] = useState('');
@@ -316,7 +416,7 @@ function CoachSettings({ onSave, keyLocation }: { onSave(values: SettingsUpdate)
           aria-label="Model for quick questions"
           className={`${inputClass} w-72`}
           defaultValue={status.quickModel}
-          onChange={(e) => void onSave({ coachQuickModel: e.target.value })}
+          onChange={(e) => void runModel(() => onSave({ coachQuickModel: e.target.value }))}
         >
           {status.models.map((m) => (
             <option key={m} value={m}>
@@ -329,7 +429,7 @@ function CoachSettings({ onSave, keyLocation }: { onSave(values: SettingsUpdate)
           aria-label="Model for deeper answers"
           className={`${inputClass} w-72`}
           defaultValue={status.deepModel}
-          onChange={(e) => void onSave({ coachDeepModel: e.target.value })}
+          onChange={(e) => void runModel(() => onSave({ coachDeepModel: e.target.value }))}
         >
           {status.models.map((m) => (
             <option key={m} value={m}>
@@ -337,6 +437,8 @@ function CoachSettings({ onSave, keyLocation }: { onSave(values: SettingsUpdate)
             </option>
           ))}
         </select>
+        <span />
+        <SaveNote status={modelStatus} />
       </div>
       {status.month.length > 0 && (
         <p className="text-sm text-muted">
