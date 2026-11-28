@@ -10,19 +10,62 @@ export function whiteShare(line?: Pick<EngineLine, 'cp' | 'mate'>): number {
   return 1 / (1 + Math.exp(-(line.cp ?? 0) / 250));
 }
 
-/** `decided`: the game is over on the board, so the bar shows the result rather than a score. */
+/** The bar's own short score: "2.1", "M3", or the result when the game is over. */
+function barScore(line: EngineLine | undefined, decided: 'white' | 'black' | 'draw' | undefined): string {
+  if (decided) return decided === 'draw' ? '½' : decided === 'white' ? '1-0' : '0-1';
+  if (!line) return '';
+  if (line.mate !== undefined) return `M${Math.abs(line.mate)}`;
+  return (Math.abs(line.cp ?? 0) / 100).toFixed(1);
+}
+
+/**
+ * `decided`: the game is over on the board, so the bar shows the result rather than a score. White's
+ * share fills from White's side (the bottom, or the top when the board is flipped); the score sits at
+ * the end of the side that is ahead, as on Lichess, and a tick marks the middle.
+ */
 export function EvalBar({ line, flipped, decided }: { line?: EngineLine; flipped: boolean; decided?: 'white' | 'black' | 'draw' }) {
   const share = decided ? (decided === 'white' ? 1 : decided === 'black' ? 0 : 0.5) : whiteShare(line);
   const label = decided ? (decided === 'draw' ? 'Draw' : `${decided === 'white' ? 'White' : 'Black'} has won`) : line ? formatScore(line) : '';
+  const whiteAhead = share >= 0.5;
+  // White's end is the bottom unless the board is flipped; the score goes at the leading side's end.
+  const atBottom = whiteAhead !== flipped;
+  const score = barScore(line, decided);
   return (
     <div
-      className={`relative w-3 shrink-0 self-stretch overflow-hidden rounded-sm border border-[#7a776f] bg-[#2b2a27] ${flipped ? 'rotate-180' : ''}`}
+      className="relative w-5 shrink-0 self-stretch overflow-hidden bg-[#3a3935]"
       aria-label={label ? `Evaluation ${label}` : 'Evaluation'}
       title={label}
     >
-      <div className="absolute inset-x-0 bottom-0 bg-[#f4f2ee] transition-[height] duration-300" style={{ height: `${share * 100}%` }} />
+      <div
+        className={`absolute inset-x-0 bg-[#f4f2ee] transition-[height] duration-300 ${flipped ? 'top-0' : 'bottom-0'}`}
+        style={{ height: `${share * 100}%` }}
+      />
+      <div className="absolute inset-x-0 top-1/2 h-px bg-[#c9442f]/60" aria-hidden />
+      {score && (
+        <span
+          aria-hidden
+          className={`absolute inset-x-0 text-center text-[9px] font-semibold tracking-tighter tabular-nums ${atBottom ? 'bottom-0.5' : 'top-0.5'} ${
+            whiteAhead ? 'text-[#3a3935]' : 'text-[#f4f2ee]'
+          }`}
+        >
+          {score}
+        </span>
+      )}
     </div>
   );
+}
+
+/** Move numbers for a line from a position: "9…Kd8 10.O-O-O+ Kc7" (a number on White's moves and on the first). */
+function numbered(fen: string, sans: string[]): string[] {
+  const [, turn, , , , full] = fen.split(' ');
+  const blackFirst = turn === 'b';
+  const start = Number(full) || 1;
+  return sans.map((san, i) => {
+    const offset = i + (blackFirst ? 1 : 0);
+    const number = start + Math.floor(offset / 2);
+    if (offset % 2 === 0) return `${number}.${san}`;
+    return i === 0 ? `${number}…${san}` : san;
+  });
 }
 
 const DEPTHS = [16, 20, 24, 30, 40];
@@ -145,26 +188,35 @@ export function EnginePanel({
         </p>
       )}
       {!gameOver && analysis?.lines.length === 0 && status === 'done' && <p className="text-muted">No legal moves: the game is over.</p>}
+      {/* One row per line: the score in a chip, then the moves numbered from this position, cut
+          short at the panel's edge (the whole line on hover). */}
       <ol className="space-y-1">
-        {analysis?.lines.map((line) => (
-          <li key={line.multipv} className="flex gap-2">
-            <span className={`w-12 shrink-0 font-semibold tabular-nums ${showingThreat ? 'text-danger' : ''}`}>{formatScore(line)}</span>
-            <span className="min-w-0 leading-6">
-              {showingThreat
-                ? line.san.slice(0, 12).join(' ')
-                : line.san.slice(0, 12).map((san, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => onPlayLine(line.san.slice(0, i + 1))}
-                      className="mr-1 rounded px-0.5 hover:bg-surface-2"
-                    >
-                      {san}
-                    </button>
-                  ))}
-            </span>
-          </li>
-        ))}
+        {analysis?.lines.map((line) => {
+          const moves = numbered(analysis.fen, line.san.slice(0, 12));
+          return (
+            <li key={line.multipv} className="flex items-baseline gap-2" title={moves.join(' ')}>
+              <span
+                className={`w-14 shrink-0 rounded bg-surface-2 py-0.5 text-center text-xs font-semibold tabular-nums ${showingThreat ? 'text-danger' : ''}`}
+              >
+                {formatScore(line)}
+              </span>
+              <span className="min-w-0 truncate whitespace-nowrap leading-6">
+                {showingThreat
+                  ? moves.join(' ')
+                  : moves.map((label, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => onPlayLine(line.san.slice(0, i + 1))}
+                        className="mr-0.5 rounded px-0.5 hover:bg-surface-2"
+                      >
+                        {label}
+                      </button>
+                    ))}
+              </span>
+            </li>
+          );
+        })}
       </ol>
       {!showingThreat && analysis?.lines.length ? (
         <p className="text-xs text-muted">

@@ -650,7 +650,7 @@ function BackupSettings() {
         >
           {busy ? 'Backing up…' : 'Back up now'}
         </button>
-        <code className="min-w-0 truncate text-xs text-muted" title={data.folder}>
+        <code className="min-w-0 text-xs text-muted [overflow-wrap:anywhere]" title={data.folder}>
           {data.folder}
         </code>
       </div>

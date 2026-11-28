@@ -100,7 +100,8 @@ export function GamesScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Every game the filter finds is selected, on every page, not only the ticked rows.
   const [everyMatching, setEveryMatching] = useState(false);
-  const [importing, setImporting] = useState(false);
+  // The import dialog, open on one of its sources.
+  const [importing, setImporting] = useState<Source | false>(false);
   const [refresh, setRefresh] = useState(0);
   const [editing, setEditing] = useState<GameSummary | null>(null);
   const [findingDuplicates, setFindingDuplicates] = useState(false);
@@ -120,6 +121,8 @@ export function GamesScreen() {
     fen: fen || undefined,
   };
   const askText = useAskText();
+  // Nothing in the library at all (not a filter or a collection that is empty).
+  const emptyLibrary = data?.total === 0 && !collectionId && !fen && !Object.values(filters).some(Boolean);
 
   useEffect(() => {
     if (!fen) writeSessionView(VIEW_KEY, { collectionId, filters, sort, offset } satisfies GamesView);
@@ -354,7 +357,7 @@ export function GamesScreen() {
         <button type="button" className={buttonClass} onClick={() => setFindingDuplicates(true)} title="Games that are in the whole library more than once">
           Find duplicates
         </button>
-        <button type="button" className={primaryClass} onClick={() => setImporting(true)}>
+        <button type="button" className={primaryClass} onClick={() => setImporting('pgn')}>
           Import games
         </button>
       </PageHeader>
@@ -385,6 +388,7 @@ export function GamesScreen() {
         </aside>
 
         <section className="@container min-w-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {!emptyLibrary && (
           <div className="flex flex-wrap gap-2">
             <input
               aria-label="Search games"
@@ -475,6 +479,7 @@ export function GamesScreen() {
               </button>
             )}
           </div>
+          )}
 
           {fen && (
             <div className="flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm">
@@ -577,7 +582,24 @@ export function GamesScreen() {
                     ? 'This collection is empty. Select games in All games and add them to it, or import into it.'
                     : collectionId === LAST_IMPORT
                       ? 'The last import has no games left in the library.'
-                      : 'No games yet. Import a PGN file, or your games from Lichess or Chess.com.'}
+                      : null}
+              {/* A new library: where games come from, one click each. */}
+              {emptyLibrary && (
+                <div className="space-y-3">
+                  <p>No games yet. Bring in your own games, or any PGN file.</p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <button type="button" className={primaryClass} onClick={() => setImporting('lichess')}>
+                      From Lichess
+                    </button>
+                    <button type="button" className={primaryClass} onClick={() => setImporting('chesscom')}>
+                      From Chess.com
+                    </button>
+                    <button type="button" className={buttonClass} onClick={() => setImporting('pgn')}>
+                      Open a PGN file
+                    </button>
+                  </div>
+                </div>
+              )}
             </Empty>
           )}
           {data && data.total > 0 && (
@@ -734,6 +756,7 @@ export function GamesScreen() {
       )}
       {importing && (
         <ImportGamesDialog
+          initialSource={importing}
           collections={collections}
           defaultCollection={collectionId === LAST_IMPORT ? '' : collectionId}
           onClose={() => setImporting(false)}
@@ -764,17 +787,19 @@ export function importSummary(report: ImportReport): string {
 type Source = 'pgn' | 'lichess' | 'chesscom';
 
 function ImportGamesDialog({
+  initialSource,
   collections,
   defaultCollection,
   onClose,
   onDone,
 }: {
+  initialSource: Source;
   collections: CollectionSummary[];
   defaultCollection: string;
   onClose(): void;
   onDone(report: ImportReport): void;
 }) {
-  const [source, setSource] = useState<Source>('pgn');
+  const [source, setSource] = useState<Source>(initialSource);
   const [text, setText] = useState('');
   const [username, setUsername] = useState('');
   // The name Settings knows as mine on this site; an import of anyone else's games leaves it alone.

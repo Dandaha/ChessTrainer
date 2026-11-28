@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { readTextFile } from './files.ts';
+import { buttonClass, primaryClass } from './components/ui.tsx';
 
 /** Open dialogs, newest last: only the top one answers Escape, so closing a question keeps its parent. */
 const openDialogs: symbol[] = [];
@@ -64,7 +65,18 @@ export function useDialog(ref: React.RefObject<HTMLElement | null>, onClose: () 
  * started outside (not a text selection let go past the edge), and not once anything has been typed
  * or changed in it, so a stray click never throws away what was written.
  */
-export function Modal({ title, onClose, children }: { title: string; onClose(): void; children: ReactNode }) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  size = 'lg',
+}: {
+  title: string;
+  onClose(): void;
+  children: ReactNode;
+  /** sm for a question or a name, md for a form, lg (the default) for a PGN or a board. */
+  size?: 'sm' | 'md' | 'lg';
+}) {
   const box = useRef<HTMLDivElement>(null);
   useDialog(box, onClose);
   const pressedOutside = useRef(false);
@@ -88,7 +100,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose(): 
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-2xl min-w-0 rounded-xl border border-line bg-surface p-4 shadow-panel"
+        className={`w-full min-w-0 rounded-xl border border-line bg-surface p-4 shadow-panel ${size === 'sm' ? 'max-w-md' : size === 'md' ? 'max-w-xl' : 'max-w-2xl'}`}
         onClick={(e) => e.stopPropagation()}
         onInput={() => {
           changed.current = true;
@@ -106,8 +118,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose(): 
   );
 }
 
-const buttonClass = 'rounded-md border border-line px-3 py-1.5 text-sm hover:bg-surface-2';
-const primaryClass = 'rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:opacity-90';
+
 
 /** Paste or open a PGN or FEN. */
 export function ImportDialog({

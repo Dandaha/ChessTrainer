@@ -13,7 +13,8 @@ export const dangerClass = 'rounded-md border border-line px-3 py-1.5 text-sm te
  * the title, and the screen's buttons on the right. */
 export function PageHeader({ title, titleActions, children }: { title: string; titleActions?: ReactNode; children?: ReactNode }) {
   return (
-    <header className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-5 py-3">
+    // One height on every screen (taller only when its buttons wrap), so the title never jumps.
+    <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-3 border-b border-line bg-surface px-5 py-2">
       <h1 className="min-w-0 text-lg font-semibold tracking-tight [overflow-wrap:anywhere]">{title}</h1>
       {titleActions && <div className="flex gap-3 text-xs">{titleActions}</div>}
       <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>

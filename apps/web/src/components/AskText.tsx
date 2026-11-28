@@ -78,7 +78,7 @@ function ConfirmBox({ question, onDone }: { question: ConfirmOptions; onDone(ok:
   const keep = useRef<HTMLButtonElement>(null);
   useEffect(() => keep.current?.focus(), []);
   return (
-    <Modal title={question.title} onClose={() => onDone(false)}>
+    <Modal title={question.title} onClose={() => onDone(false)} size="sm">
       <p className="mb-4 text-sm">{question.message}</p>
       <div className="flex justify-end gap-2">
         <button type="button" className={primaryClass} ref={keep} onClick={() => onDone(false)}>
@@ -102,7 +102,7 @@ function AskBox({ pending, onDone }: { pending: Pending; onDone(value: string | 
     input.current?.select();
   }, []);
   return (
-    <Modal title={pending.title} onClose={() => onDone(null)}>
+    <Modal title={pending.title} onClose={() => onDone(null)} size="sm">
       <form
         onSubmit={async (e) => {
           e.preventDefault();
@@ -130,6 +130,8 @@ function AskBox({ pending, onDone }: { pending: Pending; onDone(value: string | 
             aria-describedby={error ? 'ask-error' : undefined}
             className={`${inputClass} min-w-0 flex-1`}
             value={value}
+            // Every name the app asks for (a set, a collection, a category, a repertoire) fits in 200.
+            maxLength={200}
             placeholder={pending.placeholder}
             onChange={(e) => {
               setValue(e.target.value);

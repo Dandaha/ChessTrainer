@@ -764,6 +764,7 @@ function NewRepertoire({ onCreated }: { onCreated(id: string): void }) {
   };
   return (
     <div className="space-y-3">
+      <span className="block text-xs text-muted">Name</span>
       <input
         aria-label="Name"
         className={`${inputClass} w-full`}
@@ -979,7 +980,16 @@ function GapsDialog({
   }, [repertoire.id]);
   return (
     <Modal title="Gaps: common replies you have not prepared" onClose={onClose}>
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && (
+        <p className="text-sm text-danger">
+          {error}{' '}
+          {/token|Settings/i.test(error) && (
+            <a href="#/settings" className="font-medium text-accent underline" onClick={onClose}>
+              Open Settings
+            </a>
+          )}
+        </p>
+      )}
       {!data && !error && <p className="text-sm text-muted">Asking the Lichess opening explorer about each position… this takes a few seconds.</p>}
       {data && data.gaps.length === 0 && <p className="text-sm text-muted">No gap above 5% in the {data.checked} positions checked.</p>}
       {data && data.gaps.length > 0 && (

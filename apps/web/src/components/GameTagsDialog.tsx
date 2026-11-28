@@ -67,7 +67,7 @@ export function GameTagsDialog({ game, onSave, onClose }: { game: Game; onSave(h
                 aria-label={name}
                 className={inputClass}
                 value={roster[name]}
-                placeholder={name === 'Date' ? '2026.11.28' : name === 'Round' ? '1' : ''}
+                placeholder={name === 'Date' ? 'YYYY.MM.DD' : name === 'Round' ? 'e.g. 1' : ''}
                 onChange={(e) => setRoster((r) => ({ ...r, [name]: e.target.value }))}
               />
             </label>
@@ -85,7 +85,7 @@ export function GameTagsDialog({ game, onSave, onClose }: { game: Game; onSave(h
         </div>
 
         <div className="space-y-1.5">
-          <span className="text-xs text-muted">Other tags</span>
+          <span className="block text-xs text-muted">Other tags</span>
           <datalist id="tag-names">
             {SUGGESTED.map((name) => (
               <option key={name} value={name} />

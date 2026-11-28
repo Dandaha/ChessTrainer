@@ -115,3 +115,26 @@ describe('grading', () => {
     expect(stats.byRepertoire[0]).toMatchObject({ reviews: 1 });
   });
 });
+
+describe('not knowing the move', () => {
+  it('offers a hint and the answer on a review, and the answer counts as missed', async () => {
+    const { app } = startServer();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'Sicilian', color: 'black' } })).json();
+    await app.inject({ method: 'POST', url: `/api/repertoires/${id}/line`, payload: { sans: ['e4', 'c5'] } });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Start training' }));
+    await screen.findByText('New move: play c5', {}, { timeout: 3000 });
+    // Learning shows the move already: no hint or answer buttons.
+    expect(screen.queryByRole('button', { name: 'Show answer' })).toBeNull();
+    type('c5');
+    await screen.findByText('Learned: c5. It comes back for review soon.');
+    fireEvent.keyDown(window, { key: '1' });
+    // Asked again, now as a review.
+    await screen.findByText('Your move', {}, { timeout: 3000 });
+    fireEvent.click(screen.getByRole('button', { name: 'Hint' }));
+    expect((screen.getByRole('button', { name: 'Hint' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Show answer' }));
+    expect(await screen.findByText('The move is c5.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Again/ }).className).toContain('bg-accent');
+  });
+});

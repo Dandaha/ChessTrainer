@@ -302,6 +302,8 @@ function Session({
   // A card answered wrong stays wrong for scheduling, even when "Try again" then finds the move.
   const [failed, setFailed] = useState(false);
   const [showSolution, setShowSolution] = useState(false);
+  // A hint asked for (the piece to move is marked): a right answer then counts as Hard, not Good.
+  const [hint, setHint] = useState(false);
   // A position whose answer is a line: how many of its moves are played, and the opponent's reply
   // on its way to the board.
   const [progress, setProgress] = useState(0);
@@ -324,6 +326,7 @@ function Session({
     setShowSolution(false);
     setProgress(0);
     setReplying(false);
+    setHint(false);
     graded.current = null;
     if (!card) return;
     if (card.kind === 'saved_position') {
@@ -434,7 +437,7 @@ function Session({
       if (g >= 1 && g <= 4) void grade(g as Grade);
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        void grade(outcome.suggested);
+        void grade(suggestedGrade(outcome));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -619,13 +622,33 @@ function Session({
     );
   }
 
+  /** The move to find now: the repertoire's move, or the next move of a saved position's answer. */
+  const expectedMove: { san: string; uci: string } | undefined =
+    card.kind === 'repertoire_move' ? card.answer : solution.length ? solution[progress] : undefined;
+  /** The grade offered first: a hint used makes a right answer Hard. */
+  const suggestedGrade = (o: Outcome): Grade => (hint && o.correct && o.suggested > 2 ? 2 : o.suggested);
+  const showAnswer = () => {
+    if (!expectedMove) return;
+    setFailed(true);
+    const rest = card.kind === 'saved_position' ? solution.slice(progress) : [];
+    setOutcome({
+      correct: false,
+      suggested: 1,
+      message: rest.length > 1 ? `The line: ${lineLabel(rest)}.` : `The move is ${expectedMove.san}.`,
+      detail: card.kind === 'repertoire_move' && card.answer.comment ? displayComment(card.answer.comment) : undefined,
+      arrow: expectedMove.uci,
+    });
+  };
+
   const shown =
     outcome?.arrow ??
     (showSolution ? outcome?.solution?.uci : undefined) ??
     (learning && ready && !outcome && card.kind === 'repertoire_move' ? card.answer.uci : undefined);
   const arrows: DrawShape[] = shown
     ? [{ orig: shown.slice(0, 2) as DrawShape['orig'], dest: shown.slice(2, 4) as DrawShape['orig'], brush: 'green' }]
-    : [];
+    : hint && !outcome && expectedMove
+      ? [{ orig: expectedMove.uci.slice(0, 2) as DrawShape['orig'], brush: 'green' }]
+      : [];
 
   return (
     <div className="flex h-full flex-col" data-overlay>
@@ -699,6 +722,18 @@ function Session({
               className="w-full rounded-md border border-field bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent"
             />
           )}
+          {/* Not sure: a hint marks the piece to move; the answer shows the move, and the card counts
+              as missed. Learning a new move already shows it. */}
+          {ready && !outcome && !learning && expectedMove && (
+            <div className="flex flex-wrap gap-2 text-sm">
+              <button type="button" className={buttonClass} disabled={hint} onClick={() => setHint(true)} title="Marks the piece to move; a right answer then counts as Hard">
+                Hint
+              </button>
+              <button type="button" className={buttonClass} onClick={showAnswer} title="Shows the move; the card counts as missed">
+                Show answer
+              </button>
+            </div>
+          )}
           {checking && <p className="text-sm text-muted">Checking with Stockfish…</p>}
           {outcome && (
             <div className={`space-y-2 rounded-xl border p-4 ${outcome.unjudged ? 'border-line' : outcome.correct ? 'border-accent' : 'border-danger'}`}>
@@ -749,7 +784,7 @@ function Session({
                         key={g}
                         type="button"
                         onClick={() => void grade(g)}
-                        className={g === outcome.suggested ? primaryClass : buttonClass}
+                        className={g === suggestedGrade(outcome) ? primaryClass : buttonClass}
                         title={`${label} (${g})`}
                       >
                         {label} <span className="text-xs opacity-70">{g}</span>

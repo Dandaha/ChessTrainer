@@ -194,7 +194,7 @@ export function PositionsScreen() {
               Solve
             </button>
             <button type="button" className={buttonClass} onClick={() => navigate(`print/${currentSet.id}`)}>
-              Worksheet (print / PDF)
+              Print worksheet
             </button>
             <button
               type="button"
@@ -272,7 +272,8 @@ export function PositionsScreen() {
                 <button type="button" onClick={() => setOpenId(p.id)} className="block w-full text-left" aria-label={`Open ${p.title}`}>
                   <MiniBoard fen={p.fen} flipped={p.sideToSolve === 'black'} />
                   <div className="space-y-0.5 p-2">
-                    <div className="truncate text-sm font-medium">
+                    {/* Two lines for a title before it is cut: "Opera Game: the queen sacrifice" reads whole. */}
+                    <div className="line-clamp-2 text-sm font-medium [overflow-wrap:anywhere]" title={p.title}>
                       {setId && <span className="mr-1 text-muted">{p.setPlace ?? i + 1}.</span>}
                       {p.title}
                     </div>

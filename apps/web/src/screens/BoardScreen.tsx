@@ -85,7 +85,8 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const threatLine = threatFen && engine.analysis?.fen === threatFen ? engine.analysis.lines[0] : undefined;
   const arrow = (line: typeof best, brush: string): DrawShape[] =>
     line?.pv[0] ? [{ orig: line.pv[0].slice(0, 2) as DrawShape['orig'], dest: line.pv[0].slice(2, 4) as DrawShape['orig'], brush }] : [];
-  const engineShapes: DrawShape[] = [...arrow(best, 'paleBlue'), ...arrow(threatLine, 'red')];
+  // The engine's arrow is purple on every board (the repertoire's too); threats are red.
+  const engineShapes: DrawShape[] = [...arrow(best, 'purple'), ...arrow(threatLine, 'red')];
   const changeEngineSettings = (next: EngineSettings) => {
     setEngineSettings(next);
     writeEngineSettings(next);
@@ -112,6 +113,11 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
     });
   };
   const isRoot = current === game.root;
+  // At the starting position there is no line to add yet: a word, not a dialog with only that in it.
+  const addToRepertoire = () =>
+    current === game.root
+      ? ws.toast('Go to a move first: R adds the line from the start of the game to the move on the board.')
+      : setDialog('repertoire');
   const onMainline = isOnMainline(game.root, current.id);
 
   const openTypedFen = async () => {
@@ -181,7 +187,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       o: () => setDialog('import'),
       x: () => setDialog('export'),
       s: () => setDialog('save'),
-      r: () => setDialog('repertoire'),
+      r: addToRepertoire,
       e: toggleEngine,
       t: toggleThreat,
       ' ': () => {
@@ -256,18 +262,23 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
           <button type="button" className={toolButton} onClick={() => setDialog('import')} title="Open (O)">
             Open
           </button>
+          {/* Filled when there is something to save; "Saved" when the library has it as it is. */}
           <button
             type="button"
-            className={toolButton}
+            className={
+              (ws.linked ? g.dirty : game.root.children.length > 0)
+                ? 'rounded-md bg-accent px-2.5 py-1.5 text-sm font-medium text-on-accent hover:opacity-90'
+                : toolButton
+            }
             onClick={() => void ws.saveToLibrary()}
             title="Save to library (Ctrl+S)"
           >
-            {ws.linked ? 'Save' : 'Save game'}
+            {ws.linked ? (g.dirty ? 'Save' : 'Saved ✓') : 'Save game'}
           </button>
           <button type="button" className={toolButton} onClick={() => setDialog('save')} title="Save position (S)">
             Save position
           </button>
-          <button type="button" className={toolButton} onClick={() => setDialog('repertoire')} title="Add to repertoire (R)">
+          <button type="button" className={toolButton} onClick={addToRepertoire} title="Add to repertoire (R)">
             Add to repertoire
           </button>
           <button type="button" className={toolButton} onClick={() => setDialog('export')} title="Export (X)">
