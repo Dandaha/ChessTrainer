@@ -398,10 +398,10 @@ function PositionDetail({
           Open on board
         </button>
         <button type="button" className={buttonClass} onClick={async () => download(await boardPng(saved.fen, saved.sideToSolve === 'black'), `${safeFileName(saved.title)}.png`)}>
-          PNG
+          Download image
         </button>
         <button type="button" className={buttonClass} onClick={() => download(new Blob([savedToPgn([saved])], { type: 'application/x-chess-pgn' }), `${safeFileName(saved.title)}.pgn`)}>
-          PGN
+          Download PGN
         </button>
       </div>
 
@@ -425,23 +425,34 @@ function PositionDetail({
           <span className="text-xs text-muted">Tags</span>
           <input aria-label="Tags" className={field} defaultValue={saved.tags.join(', ')} onBlur={(e) => void update({ tags: e.target.value.split(',') })} />
         </label>
-        <div className="col-span-2 space-y-1">
+        {/* The key idea and the answer give the position away: hidden until asked for (an empty one has
+            nothing to give away, so it can be filled in straight away). */}
+        <div className="col-span-2 space-y-2 rounded-md border border-line p-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted">Key idea</span>
-            <button type="button" className="text-xs text-accent" onClick={() => setShowIdea((s) => !s)}>
-              {showIdea ? 'Hide' : 'Show'}
-            </button>
+            <span className="text-xs font-medium">Key idea and answer</span>
+            {(saved.keyIdea || saved.answer) && (
+              <button type="button" className="text-xs text-accent" onClick={() => setShowIdea((s) => !s)}>
+                {showIdea ? 'Hide' : 'Show'}
+              </button>
+            )}
           </div>
-          {showIdea ? (
-            <input aria-label="Key idea" className={field} defaultValue={saved.keyIdea ?? ''} onBlur={(e) => void update({ keyIdea: e.target.value || null })} />
-          ) : (
-            <div className="rounded-md border border-dashed border-line px-2.5 py-1.5 text-xs text-muted">Hidden</div>
-          )}
+          <label className="block space-y-1">
+            <span className="text-xs text-muted">Key idea</span>
+            {showIdea || !saved.keyIdea ? (
+              <input aria-label="Key idea" className={field} defaultValue={saved.keyIdea ?? ''} onBlur={(e) => void update({ keyIdea: e.target.value || null })} />
+            ) : (
+              <div className="rounded-md border border-dashed border-line px-2.5 py-1.5 text-xs text-muted">Hidden</div>
+            )}
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs text-muted">Answer: a move, or a line drilled move by move</span>
+            {showIdea || !saved.answer ? (
+              <AnswerInput fen={saved.fen} initial={saved.answer ?? ''} className={field} onSave={(answer) => void update({ answer: answer || null })} />
+            ) : (
+              <div className="rounded-md border border-dashed border-line px-2.5 py-1.5 text-xs text-muted">Hidden</div>
+            )}
+          </label>
         </div>
-        <label className="col-span-2 space-y-1">
-          <span className="text-xs text-muted">Answer: a move, or a line drilled move by move</span>
-          <AnswerInput fen={saved.fen} initial={saved.answer ?? ''} className={field} onSave={(answer) => void update({ answer: answer || null })} />
-        </label>
         <div className="col-span-2 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted">Notes</span>

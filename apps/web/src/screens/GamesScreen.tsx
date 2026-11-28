@@ -9,6 +9,7 @@ import { useAskText } from '../components/AskText.tsx';
 import { readTextFile } from '../files.ts';
 import { download, safeFileName } from '../pieces.ts';
 import { readSessionView, writeSessionView } from '../storage.ts';
+import { OUTCOME_CLASS, formatPgnDate, myOutcome } from '../gameText.ts';
 
 const LIMIT = 50;
 /** The sidebar entry for the games of the last import, beside the collections. */
@@ -519,14 +520,28 @@ export function GamesScreen() {
                       <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" aria-label="Select game" checked={selected.has(g.id)} onChange={() => toggle(g.id)} />
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-muted">{g.date?.replace(/\.\?\?/g, '') ?? ''}</td>
-                      <td className={`px-2 py-1.5 ${g.myColor === 'white' ? 'font-semibold' : ''}`}>
-                        {g.white ?? '?'} {g.whiteElo && <span className="text-xs text-muted">{g.whiteElo}</span>}
+                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-muted" title={g.date ?? undefined}>
+                        {formatPgnDate(g.date)}
                       </td>
-                      <td className={`px-2 py-1.5 ${g.myColor === 'black' ? 'font-semibold' : ''}`}>
-                        {g.black ?? '?'} {g.blackElo && <span className="text-xs text-muted">{g.blackElo}</span>}
+                      {/* One line per row: a long name is cut short (whole on hover), the rating kept. */}
+                      <td className={`max-w-48 whitespace-nowrap px-2 py-1.5 ${g.myColor === 'white' ? 'font-semibold' : ''}`} title={g.white ?? undefined}>
+                        <span className="flex items-baseline gap-1">
+                          <span className="truncate">{g.white ?? '?'}</span>
+                          {g.whiteElo && <span className="shrink-0 text-xs font-normal text-muted">{g.whiteElo}</span>}
+                        </span>
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">{g.result === '1/2-1/2' ? '½-½' : g.result}</td>
+                      <td className={`max-w-48 whitespace-nowrap px-2 py-1.5 ${g.myColor === 'black' ? 'font-semibold' : ''}`} title={g.black ?? undefined}>
+                        <span className="flex items-baseline gap-1">
+                          <span className="truncate">{g.black ?? '?'}</span>
+                          {g.blackElo && <span className="shrink-0 text-xs font-normal text-muted">{g.blackElo}</span>}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">
+                        {g.result === '1/2-1/2' ? '½-½' : g.result}
+                        {myOutcome(g) && (
+                          <span className={`ml-1.5 rounded px-1 py-px text-[11px] font-medium ${OUTCOME_CLASS[myOutcome(g)!]}`}>{myOutcome(g)}</span>
+                        )}
+                      </td>
                       <td className="max-w-64 truncate px-2 py-1.5">
                         {g.eco && <span className="mr-1 text-xs text-muted">{g.eco}</span>}
                         {g.openingName}

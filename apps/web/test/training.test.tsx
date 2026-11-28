@@ -22,9 +22,9 @@ describe('training', () => {
     await app.inject({ method: 'POST', url: `/api/repertoires/${id}/line`, payload: { sans: ['e4', 'c5', 'Nf3', 'd6'] } });
     render(<App />);
 
-    expect(await screen.findByText(/0 repertoire cards and 0 positions due today/)).toBeTruthy();
-    expect(screen.getByText(/plus 2 new/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Train everything due' }));
+    expect(await screen.findByText(/Nothing to review/)).toBeTruthy();
+    expect(screen.getByText(/2 new to learn/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Start training' }));
 
     // Card 1, new: after 1.e4 the board shows my move (learn mode) and I play it.
     await screen.findByText('New move: play c5', {}, { timeout: 3000 });
@@ -58,7 +58,7 @@ describe('training', () => {
     const { id } = (await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'Sicilian', color: 'black' } })).json();
     await app.inject({ method: 'POST', url: `/api/repertoires/${id}/line`, payload: { sans: ['e4', 'c5'] } });
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Train everything due' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start training' }));
 
     await screen.findByText('New move: play c5', {}, { timeout: 3000 });
     type('e5');
@@ -87,7 +87,7 @@ describe('training', () => {
       payload: { fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1', title: 'Back rank', answer: '1. Rd8#', inTraining: true },
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Train everything due' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start training' }));
     await screen.findByText('Back rank');
     type('g3');
     expect(await screen.findByText('Your answer was 1. Rd8#; you played g3.')).toBeTruthy();

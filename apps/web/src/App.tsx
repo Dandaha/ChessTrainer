@@ -99,8 +99,8 @@ function Shell() {
   return (
     <div className="flex h-full print:block print:h-auto">
       {!fullScreen && (
-        <nav className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-3 lg:w-48 lg:items-stretch lg:px-2 print:hidden">
-          <div className="mb-3 hidden items-center gap-2 whitespace-nowrap px-2 text-[15px] font-semibold tracking-tight lg:flex">
+        <nav className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-3 xl:w-48 xl:items-stretch xl:px-2 print:hidden">
+          <div className="mb-3 hidden items-center gap-2 whitespace-nowrap px-2 text-[15px] font-semibold tracking-tight xl:flex">
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" width={24} height={24} className="rounded-md" />
             Chess Workspace
           </div>
@@ -115,14 +115,14 @@ function Shell() {
               }`}
             >
               <Icon name={s.icon} />
-              <span className="hidden lg:inline">{s.label}</span>
+              <span className="hidden xl:inline">{s.label}</span>
             </a>
           ))}
           <div className="mt-auto space-y-1">
             <button
               type="button"
               onClick={() => setPalette(true)}
-              className="hidden w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left text-xs text-muted hover:bg-surface-2 lg:flex"
+              className="hidden w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left text-xs text-muted hover:bg-surface-2 xl:flex"
             >
               <Icon name="search" size={16} />
               <span>
@@ -137,7 +137,7 @@ function Shell() {
               className="flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2"
             >
               <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-              <span className="hidden lg:inline">{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span>
+              <span className="hidden xl:inline">{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span>
             </button>
           </div>
         </nav>

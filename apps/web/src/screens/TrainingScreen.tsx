@@ -145,7 +145,7 @@ export function TrainingScreen() {
             ) : (
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={primaryClass} onClick={() => void start()}>
-                  {repertoireId ? 'Train this repertoire' : 'Train everything due'}
+                  {repertoireId ? 'Train this repertoire' : 'Start training'}
                 </button>
                 {repertoireId && (
                   <button type="button" className={buttonClass} onClick={() => navigate(`training?drill=${repertoireId}&from=training`)} title="Whole lines from the first move, as practice">
@@ -172,15 +172,17 @@ export function TrainingScreen() {
   );
 }
 
+/** "12 to review (8 repertoire, 4 positions) · 20 new to learn." */
 export function QueueLine({ summary }: { summary: QueueSummary }) {
-  const parts = [
-    `${summary.repertoireDue} repertoire card${summary.repertoireDue === 1 ? '' : 's'}`,
-    `${summary.positionsDue} position${summary.positionsDue === 1 ? '' : 's'} due today`,
-  ];
+  const due = summary.repertoireDue + summary.positionsDue;
+  const which =
+    summary.repertoireDue && summary.positionsDue
+      ? ` (${summary.repertoireDue} repertoire, ${summary.positionsDue} position${summary.positionsDue === 1 ? '' : 's'})`
+      : '';
   return (
     <p>
-      {parts.join(' and ')}
-      {summary.newToday > 0 && <span className="text-muted">, plus {summary.newToday} new</span>}.
+      {due ? `${due} to review${which}` : 'Nothing to review'}
+      {summary.newToday > 0 && <span className="text-muted"> · {summary.newToday} new to learn</span>}.
     </p>
   );
 }
@@ -191,10 +193,11 @@ function Stats({ stats }: { stats: TrainingStats }) {
   return (
     <section className="space-y-4">
       <h2 className="font-semibold">Last two weeks</h2>
+      {stats.days.every((d) => !d.reviews) && <p className="text-sm text-muted">No reviews yet: your first session shows here.</p>}
       <div className="flex h-24 items-end gap-1" aria-label="Reviews per day">
         {stats.days.map((d) => (
           <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day}: ${d.reviews} reviews, ${d.correct} right`}>
-            <div className="w-full rounded-t-sm bg-accent" style={{ height: `${(d.reviews / max) * 80}px`, opacity: d.reviews ? 1 : 0.15 }} />
+            <div className="w-full rounded-t-sm bg-accent" style={{ height: `${Math.max(2, (d.reviews / max) * 80)}px`, opacity: d.reviews ? 1 : 0.25 }} />
             <span className="text-[10px] text-muted">{d.day.slice(8)}</span>
           </div>
         ))}
