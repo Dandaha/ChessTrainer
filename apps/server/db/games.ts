@@ -6,13 +6,15 @@ import {
   mainlineFrom,
   parseGame,
   parsePgn,
+  playedPositionKey,
+  positionHash,
   positionKey,
   readPgnGames,
   writePgn,
 } from '@chess/chess-core';
 import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
-import { collectionGames, collections, gamePositions, games, positions, taggings, tags } from './schema.ts';
+import { collectionGames, collections, gamePositions, games, taggings, tags } from './schema.ts';
 import { setTags, tagsFor } from './tags.ts';
 import { containsText } from './search.ts';
 
@@ -157,34 +159,15 @@ function columnsFor(game: Game) {
 /** Prepared statements for writing a game's positions quickly, inside a transaction. */
 function positionWriter(db: Db) {
   const sqlite = db.$client;
-  const insertPosition = sqlite.prepare(
-    'INSERT INTO positions (id, fen_key, full_fen, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(fen_key) DO NOTHING',
-  );
-  const selectPosition = sqlite.prepare('SELECT id FROM positions WHERE fen_key = ?');
   const clear = sqlite.prepare('DELETE FROM game_positions WHERE game_id = ?');
-  const insertGamePosition = sqlite.prepare(
-    'INSERT INTO game_positions (game_id, ply, position_id, next_san) VALUES (?, ?, ?, ?)',
-  );
-  const cache = new Map<string, string>();
-
-  const positionId = (fen: string): string => {
-    const key = positionKey(fen);
-    let id = cache.get(key);
-    if (!id) {
-      insertPosition.run(randomUUID(), key, fen, new Date().toISOString());
-      id = (selectPosition.get(key) as { id: string }).id;
-      cache.set(key, id);
-    }
-    return id;
-  };
-
+  const insert = sqlite.prepare('INSERT INTO game_positions (game_id, ply, position_hash, next_san) VALUES (?, ?, ?, ?)');
   return {
     /** Replaces the positions a game's main line passes through. */
     write(gameId: string, game: Game) {
       clear.run(gameId);
       const line = mainlineFrom(game.root);
       line.forEach((node, i) => {
-        insertGamePosition.run(gameId, node.ply, positionId(node.fen), line[i + 1]?.san ?? null);
+        insert.run(gameId, node.ply, positionHash(playedPositionKey(node.fen)), line[i + 1]?.san ?? null);
       });
     },
   };
@@ -334,8 +317,9 @@ export function updateGame(
   });
 }
 
-function positionIdFor(db: Db, fen: string): string | undefined {
-  return db.select({ id: positions.id }).from(positions).where(eq(positions.fenKey, positionKey(fen))).get()?.id;
+/** How the game index knows a position. */
+function indexHash(fen: string): bigint {
+  return positionHash(positionKey(fen));
 }
 
 function conditions(db: Db, f: GameFilters): SQL[] | null {
@@ -388,11 +372,8 @@ function conditions(db: Db, f: GameFilters): SQL[] | null {
     );
   }
   if (f.fen) {
-    const positionId = positionIdFor(db, f.fen);
-    if (!positionId) return null; // the position was never seen: no game reached it
-    where.push(
-      inArray(games.id, db.select({ id: gamePositions.gameId }).from(gamePositions).where(eq(gamePositions.positionId, positionId))),
-    );
+    const hash = indexHash(f.fen);
+    where.push(inArray(games.id, db.select({ id: gamePositions.gameId }).from(gamePositions).where(eq(gamePositions.positionHash, hash))));
   }
   return where;
 }
@@ -515,9 +496,7 @@ export function gamesAtPosition(
   fen: string,
   limit = 50,
 ): { total: number; moves: MoveStat[]; games: (GameSummary & { ply: number; nextSan: string | null })[] } {
-  const positionId = positionIdFor(db, fen);
-  if (!positionId) return { total: 0, moves: [], games: [] };
-  const live = and(eq(gamePositions.positionId, positionId), isNull(games.deletedAt));
+  const live = and(eq(gamePositions.positionHash, indexHash(fen)), isNull(games.deletedAt));
 
   const moves = db
     .select({

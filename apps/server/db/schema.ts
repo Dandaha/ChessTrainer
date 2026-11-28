@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
  * The database schema. Every id is a UUID and every timestamp an ISO 8601
@@ -12,6 +12,9 @@ const id = () =>
     .$defaultFn(() => crypto.randomUUID());
 
 const now = () => new Date().toISOString();
+
+/** A 64-bit integer, read and written as a BigInt (a JavaScript number holds only 53 bits). */
+const int64 = customType<{ data: bigint; driverData: bigint }>({ dataType: () => 'integer' });
 
 /** Every unique position the app has seen; the hub every other table points at. */
 export const positions = sqliteTable('positions', {
@@ -55,7 +58,12 @@ export const games = sqliteTable('games', {
 // ---------------------------------------------------------------------------
 // Phase 2: the game library, saved positions, sets, tags, settings.
 
-/** Which positions each game's main line passes through, for "games that reached this position". */
+/**
+ * Which positions each game's main line passes through, for "games that reached this position".
+ * A position is stored as the 64-bit positionHash of its key rather than as a row in positions: a
+ * library's games pass through millions of positions, and a row of text for each was most of the
+ * database. Only positions something else points at (saves, repertoires, the engine cache) have rows.
+ */
 export const gamePositions = sqliteTable(
   'game_positions',
   {
@@ -63,13 +71,11 @@ export const gamePositions = sqliteTable(
       .notNull()
       .references(() => games.id, { onDelete: 'cascade' }),
     ply: integer('ply').notNull(),
-    positionId: text('position_id')
-      .notNull()
-      .references(() => positions.id),
+    positionHash: int64('position_hash').notNull(),
     /** The move the game played from this position (SAN); null after the last move. */
     nextSan: text('next_san'),
   },
-  (t) => [primaryKey({ columns: [t.gameId, t.ply] }), index('game_positions_position_idx').on(t.positionId)],
+  (t) => [primaryKey({ columns: [t.gameId, t.ply] }), index('game_positions_hash_idx').on(t.positionHash)],
 );
 
 export const collections = sqliteTable('collections', {

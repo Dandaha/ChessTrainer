@@ -148,7 +148,35 @@ export function playMove(from: MoveNode, input: MoveInput): MoveNode {
   } catch {
     throw new IllegalMoveError(label, from.fen);
   }
-  return emptyNode({ ply: from.ply + 1, san: move.san, uci: move.lan, fen: chess.fen() });
+  return emptyNode({ ply: from.ply + 1, san: move.san, uci: move.lan, fen: move.after });
+}
+
+/**
+ * playMove for many moves in a row, as when reading a game: one board follows the line and is set up
+ * again only when the next move starts somewhere else (a variation).
+ */
+export class MovePlayer {
+  private readonly chess = new Chess();
+  private at: MoveNode | null = null;
+
+  play(from: MoveNode, san: string): MoveNode {
+    if (this.at !== from) this.chess.load(from.fen, { skipValidation: true });
+    let move;
+    try {
+      move = this.chess.move(cleanSan(san));
+    } catch {
+      this.at = from;
+      throw new IllegalMoveError(san, from.fen);
+    }
+    const node = emptyNode({ ply: from.ply + 1, san: move.san, uci: move.lan, fen: move.after });
+    this.at = node;
+    return node;
+  }
+
+  /** The line went on from `node` (the same position as the move just played, already in the tree). */
+  continueFrom(node: MoveNode): void {
+    this.at = node;
+  }
 }
 
 /**

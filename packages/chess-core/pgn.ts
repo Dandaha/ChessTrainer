@@ -11,11 +11,11 @@ import {
   type Header,
   IllegalMoveError,
   type MoveNode,
+  MovePlayer,
   SEVEN_TAG_ROSTER,
   emptyNode,
   isWhiteMove,
   moveNumber,
-  playMove,
   plyFromFen,
 } from './tree.ts';
 
@@ -300,6 +300,7 @@ function buildGame(tokens: Token[]): Game {
   const stack: Frame[] = [];
   let frame: Frame = { start: root, pos: root, before: null, pending: [], ownsPos: true };
   let result: string | undefined;
+  const player = new MovePlayer();
 
   for (const token of tokens) {
     switch (token.kind) {
@@ -308,7 +309,7 @@ function buildGame(tokens: Token[]): Game {
       case 'move': {
         let played: MoveNode;
         try {
-          played = playMove(frame.pos, token.san);
+          played = player.play(frame.pos, token.san);
         } catch (error) {
           if (!(error instanceof IllegalMoveError)) throw error;
           const ply = frame.pos.ply + 1;
@@ -324,6 +325,8 @@ function buildGame(tokens: Token[]): Game {
           node = played;
           if (frame.ownsPos) frame.pos.children.unshift(node);
           else frame.pos.children.push(node);
+        } else {
+          player.continueFrom(node);
         }
         if (frame.pending.length) {
           node.startingComments.push(...frame.pending);

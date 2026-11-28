@@ -33,6 +33,37 @@ export function positionKey(fen: string): string {
 }
 
 /**
+ * The key of a position reached by playing legal moves with chess.js, which needs no validation: the
+ * same string as positionKey, at a fraction of the cost. For indexing every position of a game; use
+ * positionKey for any FEN from elsewhere.
+ */
+export function playedPositionKey(fen: string): string {
+  const [board = '', turn = 'w', castling = '-', ep = '-'] = fen.split(' ');
+  const rights = normalizeCastling(board, castling);
+  return `${board} ${turn} ${rights} ${ep === '-' ? '-' : epIfCapturable(board, turn, rights, ep)}`;
+}
+
+/**
+ * A 64-bit number for a position key (from positionKey or playedPositionKey): how the game index
+ * stores positions, 8 bytes instead of a row of text per position. Two 32-bit hashes of the key side
+ * by side (cyrb64); a collision between two of a library's positions is a one in billions chance.
+ */
+export function positionHash(key: string): bigint {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < key.length; i += 1) {
+    const c = key.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return BigInt.asIntN(64, (BigInt(h2 >>> 0) << 32n) | BigInt(h1 >>> 0));
+}
+
+/**
  * The same FEN with fields 3 and 4 normalised as in the key and the move
  * counters kept (or defaulted to "0 1"). Use it for a FEN a person pasted.
  */
@@ -116,9 +147,21 @@ function normalizeCastling(board: string, castling: string): string {
 function normalizeEnPassant(fen: string, ep: string): string {
   if (ep === '-') return '-';
   const [board, turn, castling] = parseFields(fen);
+  return epIfCapturable(board, turn, normalizeCastling(board, castling), ep);
+}
+
+/** The en passant square if a pawn can legally take there, '-' otherwise. */
+function epIfCapturable(board: string, turn: string, rights: string, ep: string): string {
+  // Only a pawn beside the pawn that just moved can take: most double steps have none, and then
+  // there is no need for chess.js.
+  const file = ep.charCodeAt(0) - 97;
+  const rank = turn === 'w' ? 5 : 4;
+  const pawn = turn === 'w' ? 'P' : 'p';
+  const squares = boardSquares(board);
+  const beside = [file - 1, file + 1].some((f) => f >= 0 && f < 8 && squares.get(`${'abcdefgh'[f]}${rank}`) === pawn);
+  if (!beside) return '-';
   // chess.js plays only castling moves its own castling field allows, so give
   // it the normalised rights; the en passant capture itself is unaffected.
-  const chess = new Chess(`${board} ${turn} ${normalizeCastling(board, castling)} ${ep} 0 1`);
-  const legal = chess.moves({ verbose: true }).some((m) => m.isEnPassant());
-  return legal ? ep : '-';
+  const chess = new Chess(`${board} ${turn} ${rights} ${ep} 0 1`);
+  return chess.moves({ verbose: true }).some((m) => m.isEnPassant()) ? ep : '-';
 }
