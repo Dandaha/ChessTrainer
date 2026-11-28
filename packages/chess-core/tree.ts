@@ -151,6 +151,24 @@ export function moveSpellings(typed: string): string[] {
   return [...new Set(out)];
 }
 
+/**
+ * The legal moves a typed move could mean when it does not say which piece: "Nd2" with knights on b1
+ * and f3 is ["Nbd2", "Nfd2"]. Empty when it is not such a move.
+ */
+export function ambiguousMoves(fen: string, typed: string): string[] {
+  const m = /^([KQRBN])x?([a-h][1-8])[+#]?$/i.exec(typed.trim());
+  if (!m) return [];
+  const piece = m[1]!.toLowerCase();
+  const to = m[2]!.toLowerCase();
+  // "b" is a pawn file before it is a bishop: "bd2" stays a pawn move.
+  if (m[1] === 'b') return [];
+  return new Chess(fen)
+    .moves({ verbose: true })
+    .filter((move) => move.piece === piece && move.to === to)
+    .map((move) => move.san)
+    .sort();
+}
+
 /** Plays a move from a node's position without changing the tree. Throws IllegalMoveError. */
 export function playMove(from: MoveNode, input: MoveInput): MoveNode {
   const chess = new Chess(from.fen);

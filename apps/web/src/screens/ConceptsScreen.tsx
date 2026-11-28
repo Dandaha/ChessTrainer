@@ -1,4 +1,4 @@
-import { type MoveNode, createGame, moveLabel, playMove } from '@chess/chess-core';
+import { type MoveNode, createGame, playMove, lineLabel } from '@chess/chess-core';
 import { useCallback, useEffect, useState } from 'react';
 import { type ConceptPage, type ConceptSummary, type PositionCategory, api } from '../api.ts';
 import { CategoryList, CategorySelect } from '../components/CategorySelect.tsx';
@@ -483,7 +483,7 @@ function ConceptDrill({ conceptId, onReveal, onClose }: { conceptId: string; onR
           {played.length > 0 && (
             <>
               <p>
-                You played <strong>{played.map((s, i) => moveLabel(start.ply + i + 1, s)).join(' ')}</strong>.
+                You played <strong>{lineLabel(played.map((s, i) => ({ ply: start.ply + i + 1, san: s })))}</strong>.
                 {drill.answer && (
                   <>
                     {' '}

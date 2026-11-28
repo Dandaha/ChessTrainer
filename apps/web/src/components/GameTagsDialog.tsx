@@ -74,7 +74,7 @@ export function GameTagsDialog({ game, onSave, onClose }: { game: Game; onSave(h
           ))}
           <label className="contents">
             <span className="text-muted">Result</span>
-            <select aria-label="Result" className={`${inputClass} w-32`} value={result} onChange={(e) => setResult(e.target.value)}>
+            <select aria-label="Result" className={`${inputClass} w-40`} value={result} onChange={(e) => setResult(e.target.value)}>
               {RESULTS.map((r) => (
                 <option key={r} value={r}>
                   {r === '*' ? 'Unfinished (*)' : r === '1/2-1/2' ? '½-½' : r}

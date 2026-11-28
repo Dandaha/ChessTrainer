@@ -1,4 +1,5 @@
-import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, materialBalance, moveSpellings, normalizeFen, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { type GameEnd, type MoveNode, ambiguousMoves, describeGameEnd, gameEnd, materialBalance, moveSpellings, normalizeFen, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { fenProblem } from '../loadText.ts';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
@@ -17,7 +18,7 @@ import { ExportDialog, ImportDialog, ShortcutsDialog } from '../Dialogs.tsx';
 import { MoveList } from '../MoveList.tsx';
 import { BoardEditor } from '../components/BoardEditor.tsx';
 import { GameTagsDialog } from '../components/GameTagsDialog.tsx';
-import { useWorkspace } from '../workspace.tsx';
+import { gameLabel, useWorkspace } from '../workspace.tsx';
 
 type Dialog = 'import' | 'export' | 'shortcuts' | 'save' | 'repertoire' | 'editor' | 'tags' | null;
 export type BoardTab = 'notes' | 'games' | 'saved';
@@ -76,6 +77,11 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const history = useMemo(() => (engineOn && !threatFen ? repetitionHistory(g.path) : undefined), [engineOn, threatFen, g.path]);
   const engine = useEngine(threatFen ?? current.fen, engineOn, engineSettings, history);
   const best = engine.analysis?.fen === current.fen ? engine.analysis.lines[0] : undefined;
+  // The position's own score, kept while threat mode analyses the other side's move instead: the bar
+  // goes on showing it rather than an empty, even-looking bar.
+  const lastBest = useRef<{ fen: string; line: NonNullable<typeof best> } | null>(null);
+  if (best) lastBest.current = { fen: current.fen, line: best };
+  const barLine = best ?? (threatFen && lastBest.current?.fen === current.fen ? lastBest.current.line : undefined);
   const threatLine = threatFen && engine.analysis?.fen === threatFen ? engine.analysis.lines[0] : undefined;
   const arrow = (line: typeof best, brush: string): DrawShape[] =>
     line?.pv[0] ? [{ orig: line.pv[0].slice(0, 2) as DrawShape['orig'], dest: line.pv[0].slice(2, 4) as DrawShape['orig'], brush }] : [];
@@ -99,7 +105,9 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
     : [];
   const toggleEngine = () => {
     setEngineOn((on) => {
-      setTab(on ? 'notes' : 'engine');
+      // On: its tab comes up. Off: the tab stays where it is, unless it was the engine's own.
+      if (!on) setTab('engine');
+      else setTab((t) => (t === 'engine' ? 'notes' : t));
       return !on;
     });
   };
@@ -112,8 +120,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       await ws.openFen(normalizeFen(fenText));
       setFenText(null);
     } catch (error) {
-      const why = (error as Error).message.replace(/^Invalid FEN:\s*/i, '');
-      ws.toast(`That is not a position the board can show: ${why.charAt(0).toLowerCase()}${why.slice(1).replace(/\.?$/, '.')}`, true);
+      ws.toast(`That is not a position the board can show. ${fenProblem(error as Error)}`, true);
     }
   };
   const copyFen = async () => {
@@ -127,8 +134,10 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 
   const playTyped = () => {
     if (!typed.trim()) return;
-    if (moveSpellings(typed).some((move) => g.play(move))) setTyped('');
-    else ws.toast(`${typed.trim()} is not a legal move here.`, true);
+    if (moveSpellings(typed).some((move) => g.play(move))) return setTyped('');
+    // "Nd2" when both knights can go there: say which ones, not that the move is illegal.
+    const which = ambiguousMoves(current.fen, typed.trim());
+    ws.toast(which.length > 1 ? `${typed.trim()} could be ${which.join(' or ')}: say which piece.` : `${typed.trim()} is not a legal move here.`, true);
   };
 
   const keys = useRef<(event: KeyboardEvent) => void>(() => {});
@@ -146,6 +155,11 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       return;
     }
     if (dialog || isTyping(event.target) || document.querySelector('[data-overlay]')) return;
+    if (mod && (event.key.toLowerCase() === 'y' || (event.key.toLowerCase() === 'z' && event.shiftKey))) {
+      event.preventDefault();
+      g.redo();
+      return;
+    }
     if (mod && event.key.toLowerCase() === 'z') {
       event.preventDefault();
       g.undo();
@@ -180,7 +194,8 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       '?': () => setDialog('shortcuts'),
     };
     for (const extra of extraTabs) if (extra.key) actions[extra.key] = () => setTab((t) => (t === extra.id ? 'notes' : extra.id));
-    const action = actions[event.key];
+    // Letters work with Shift or Caps Lock too: the shortcuts list writes them as capitals.
+    const action = actions[event.key] ?? (event.key.length === 1 ? actions[event.key.toLowerCase()] : undefined);
     if (action) {
       event.preventDefault();
       setMenu(null);
@@ -202,7 +217,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   // Where a save of this position came from.
   const nextPly = current.ply + 1;
   const sourceLabel = ws.linked
-    ? `${ws.linked.label}, move ${Math.ceil(nextPly / 2)}${nextPly % 2 === 1 ? '' : ' (Black to move)'}`
+    ? `${gameLabel(game)}, move ${Math.ceil(nextPly / 2)}${nextPly % 2 === 1 ? '' : ' (Black to move)'}`
     : null;
 
   const tabs: { id: string; label: string; key?: string }[] = [
@@ -221,11 +236,14 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-surface px-4 py-1.5">
-        <span className="mr-2 text-sm">
+        <span className="mr-2 flex min-w-0 max-w-full items-baseline gap-1 text-sm">
           {ws.linked ? (
             <>
-              <span className="font-medium">{ws.linked.label}</span>{' '}
-              <span className="text-muted">{g.dirty ? '· unsaved changes' : '· in library'}</span>
+              {/* From the tags as they are now (renamed in Tags… shows at once); cut short, whole on hover. */}
+              <span className="min-w-0 truncate font-medium" title={gameLabel(game)}>
+                {gameLabel(game)}
+              </span>
+              <span className="shrink-0 text-muted">{g.dirty ? '· unsaved changes' : '· in library'}</span>
             </>
           ) : (
             <span className="text-muted">Analysis</span>
@@ -272,7 +290,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               // could not start: an empty bar would read as an even position.
               <div className="flex py-6">
                 <EvalBar
-                  line={best}
+                  line={barLine}
                   flipped={ws.orientation === 'black'}
                   decided={end ? (end.kind === 'checkmate' ? end.winner : 'draw') : undefined}
                 />
@@ -465,6 +483,13 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
           role="menu"
           className="fixed z-40 min-w-44 rounded-lg border border-line bg-surface py-1 text-sm shadow-panel"
           style={{ left: menu.x, top: menu.y }}
+          // Inside the window: a move near its right or bottom edge opens the menu to its left or above.
+          ref={(el) => {
+            if (!el) return;
+            const box = el.getBoundingClientRect();
+            el.style.left = `${Math.max(8, Math.min(menu.x, window.innerWidth - box.width - 8))}px`;
+            el.style.top = `${Math.max(8, Math.min(menu.y, window.innerHeight - box.height - 8))}px`;
+          }}
           onPointerDown={(e) => e.stopPropagation()}
         >
           {(
@@ -595,7 +620,7 @@ function Branches({ node, choice, onEnter }: { node: MoveNode; choice: number; o
           onClick={() => onEnter(child.id)}
           className={`mr-1 rounded px-1.5 py-0.5 ${i === choice ? 'bg-selected text-on-selected' : 'hover:bg-surface-2'}`}
         >
-          {white ? `${number}.` : `${number}...`}
+          {white ? `${number}.` : `${number}…`}
           {child.san}
         </button>
       ))}

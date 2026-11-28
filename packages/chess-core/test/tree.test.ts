@@ -133,3 +133,14 @@ describe('moveSpellings', () => {
     expect(moveSpellings('b4')).toEqual(['b4', 'B4']);
   });
 });
+
+describe('ambiguousMoves', () => {
+  it('names the moves an ambiguous one could mean, and nothing for a clear or pawn move', async () => {
+    const { ambiguousMoves } = await import('../tree.ts');
+    const fen = 'rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3';
+    expect(ambiguousMoves(fen, 'Nd2')).toEqual(['Nbd2', 'Nfd2']);
+    expect(ambiguousMoves(fen, 'nd2')).toEqual(['Nbd2', 'Nfd2']);
+    expect(ambiguousMoves(fen, 'Nc3')).toEqual(['Nc3']);
+    expect(ambiguousMoves(fen, 'e4')).toEqual([]);
+  });
+});

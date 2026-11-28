@@ -31,7 +31,7 @@ describe('the repertoire', () => {
 
     typeMoves('d4', 'Nf6', 'c4', 'e6');
     fireEvent.keyDown(window, { key: 'r' });
-    expect(await screen.findByText(/1\.d4 1\.\.\.Nf6 2\.c4 2\.\.\.e6/)).toBeTruthy();
+    expect(await screen.findByText(/1\.d4 Nf6 2\.c4 e6/)).toBeTruthy();
     fireEvent.submit((await screen.findByRole('radio')).closest('form')!);
     expect(await screen.findByText('Added 4 moves to “Main”.')).toBeTruthy();
 

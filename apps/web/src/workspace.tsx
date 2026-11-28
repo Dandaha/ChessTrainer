@@ -43,7 +43,9 @@ export interface Workspace {
    * Opens pasted PGN or FEN on the board and gives back an error message, or null. Straight away,
    * unless edits on the board have to be asked about first.
    */
-  openText(text: string): string | null | Promise<string | null>;
+  /** Opens a PGN or FEN; says what was wrong with it, null when it opened, false when the person kept
+   * the edited game instead (Keep editing). */
+  openText(text: string): string | null | false | Promise<string | null | false>;
   openFen(fen: string, orientation?: Color): Promise<void>;
   /** Opens a position with a line of moves played from it, showing the end of the line. */
   openLine(fen: string, sans: string[]): Promise<void>;
@@ -93,6 +95,8 @@ interface Draft {
   linked: LinkedGame | null;
   /** The moves to the position on the board, so a reload comes back to it. */
   at?: string[];
+  /** Which side is at the bottom, kept over a reload too. */
+  orientation?: Color;
 }
 
 function readSavedDraft(): Draft | null {
@@ -107,7 +111,8 @@ function readSavedDraft(): Draft | null {
   return null;
 }
 
-function gameLabel(game: Game): string {
+/** A game as the header names it: "Carlsen – Nepomniachtchi, 2021"; from its tags as they are now. */
+export function gameLabel(game: Game): string {
   const white = getHeader(game, 'White');
   const black = getHeader(game, 'Black');
   const year = getHeader(game, 'Date')?.slice(0, 4);
@@ -144,18 +149,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const discardRefused = async (): Promise<boolean> =>
     !(await confirm({
       title: 'Discard the changes?',
-      message: `Your changes to “${linked?.label ?? 'this game'}” are not saved in the library. Ctrl+Z brings them back afterwards.`,
+      message: `Your changes to “${linked ? gameLabel(g.game) : 'this game'}” are not saved in the library. Ctrl+Z brings them back afterwards.`,
       confirm: 'Discard changes',
       cancel: 'Keep editing',
     }));
   /** Call before replacing the board; returns what to say afterwards, if anything. */
   const clearedNote = () => (linked === null && edited() ? 'The previous analysis is cleared. Ctrl+Z brings it back.' : null);
-  const [orientation, setOrientation] = useState<Color>('white');
+  const [orientation, setOrientation] = useState<Color>(() => (draft.current?.orientation === 'black' ? 'black' : 'white'));
   const [message, setMessage] = useState<{ text: string; error: boolean; action?: ToastAction } | null>(null);
 
   useEffect(() => {
-    writeDraft(JSON.stringify({ pgn: writePgn(g.game), linked, at: g.path.slice(1).map((n) => n.san) } satisfies Draft));
-  }, [g.game, g.version, linked, g.current.id]);
+    writeDraft(JSON.stringify({ pgn: writePgn(g.game), linked, at: g.path.slice(1).map((n) => n.san), orientation } satisfies Draft));
+  }, [g.game, g.version, linked, g.current.id, orientation]);
 
   // After a reload, back to the move that was on the board.
   useEffect(() => {
@@ -217,7 +222,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         navigate('board');
         return null;
       };
-      return hasEdits() ? discardRefused().then((refused) => (refused ? null : open())) : open();
+      return hasEdits() ? discardRefused().then((refused) => (refused ? false : open())) : open();
     },
     openFen: async (fen, color) => {
       if (hasEdits() && (await discardRefused())) return;

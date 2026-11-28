@@ -156,7 +156,16 @@ export function Board({ node, orientation, autoShapes = [], viewOnly = false, on
   };
 
   return (
-    <div ref={frame} className="board-frame relative select-none">
+    <div
+      ref={frame}
+      className="board-frame relative select-none"
+      // A press on the board lets go of a text box (the move box, the FEN): chessground stops the
+      // browser from moving the focus, and the arrow keys and letters would still type there.
+      onPointerDown={() => {
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
+      }}
+    >
       <div ref={element} className="h-full w-full" data-testid="board" />
       {promotion && (
         <PromotionPicker color={boardState(node.fen).turn} square={promotion.to} orientation={orientation} onChoose={choosePromotion} />
@@ -190,6 +199,8 @@ function PromotionPicker({
       if (piece) onChoose(piece.key);
       else if (event.key === 'Escape') onChoose(null);
       event.stopPropagation();
+      // The letter picks the piece; it is not typed into a text box that still has the focus.
+      if (piece || event.key === 'Escape') event.preventDefault();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);

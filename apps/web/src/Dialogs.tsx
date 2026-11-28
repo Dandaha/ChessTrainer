@@ -114,8 +114,9 @@ export function ImportDialog({
   onLoad,
   onClose,
 }: {
-  /** Returns an error message, or null when the text loaded. */
-  onLoad(text: string): string | null | Promise<string | null>;
+  /** Returns an error message, null when the text loaded, or false when it was not loaded on purpose
+   * (the edited game kept): the dialog then stays, with the text. */
+  onLoad(text: string): string | null | false | Promise<string | null | false>;
   onClose(): void;
 }) {
   const [text, setText] = useState('');
@@ -125,7 +126,11 @@ export function ImportDialog({
   useEffect(() => area.current?.focus(), []);
 
   const load = (value = text) => {
-    const settle = (problem: string | null) => (problem ? setError(problem) : onClose());
+    const settle = (problem: string | null | false) => {
+      if (problem === false) return;
+      if (problem) setError(problem);
+      else onClose();
+    };
     const result = onLoad(value);
     if (result instanceof Promise) void result.then(settle);
     else settle(result);
@@ -227,12 +232,14 @@ export function ExportDialog({ pgn, fileName, onClose }: { pgn: string; fileName
 
 const SHORTCUTS: [string, string][] = [
   ['← →', 'Previous / next move'],
+  ['Mouse wheel', 'Previous / next move, over the board'],
   ['↑ or Home', 'Starting position (at a branch, ↑ picks the line above)'],
   ['↓ or End', 'End of the line (at a branch, ↓ picks the line below; → goes into it)'],
   ['F', 'Flip the board'],
   ['/', 'Type a move'],
   ['Delete', 'Delete from the current move'],
   ['Ctrl+Z', 'Undo the last change: a move, a delete, a comment, a drawing'],
+  ['Ctrl+Y', 'Redo what Ctrl+Z took back (Ctrl+Shift+Z too)'],
   ['E', 'Engine on / off (Stockfish runs only while it is on)'],
   ['Space', "Play the engine's best move"],
   ['T', 'Threat: what the opponent would play if it were their move'],
@@ -245,6 +252,7 @@ const SHORTCUTS: [string, string][] = [
   ['Ctrl+V', 'Paste a PGN or FEN anywhere'],
   ['Right-click drag', 'Draw an arrow (Shift red, Alt blue)'],
   ['Right-click a move', 'Promote, make main line, delete'],
+  ['Esc', 'Close a dialog or menu; leave a box you are typing in'],
   ['?', 'This list'],
 ];
 

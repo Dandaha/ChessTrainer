@@ -1,4 +1,4 @@
-import { type Color, type Game, type RepertoireCheck, displayComment, moveLabel, writePgn } from '@chess/chess-core';
+import { type Color, type Game, type RepertoireCheck, displayComment, writePgn, lineLabel } from '@chess/chess-core';
 import { useEffect, useRef, useState } from 'react';
 import { type RepertoireSummary, api } from '../api.ts';
 import { Modal } from '../Dialogs.tsx';
@@ -172,7 +172,7 @@ export function AddToRepertoireDialog({
     }
   };
 
-  const line = sans.map((san, i) => moveLabel(startPly + i + 1, san)).join(' ');
+  const line = lineLabel(sans.map((san, i) => ({ ply: startPly + i + 1, san })));
 
   return (
     <Modal title="Add to repertoire" onClose={onClose}>

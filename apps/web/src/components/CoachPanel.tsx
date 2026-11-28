@@ -128,7 +128,8 @@ export const CoachPanel = forwardRef<
           Open Settings
         </a>
         <p className="text-xs text-muted">
-          Without a key you can still use the coach through the Claude desktop app: see the MCP section in the README.
+          The key is your own Anthropic API key; Settings says where it is kept. The engine, the library and
+          training all work without it.
         </p>
       </div>
     );

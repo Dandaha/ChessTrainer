@@ -168,3 +168,20 @@ describe('the games list', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });
+
+describe('redo on the board', () => {
+  it('puts back what undo took back, and an ambiguous move names its choices', async () => {
+    startServer();
+    render(<App />);
+    go('#/board');
+    await screen.findByLabelText('Type a move');
+    for (const move of ['d4', 'd5', 'Nf3', 'Nf6']) play(move);
+    await waitFor(() => expect(screen.getAllByText('Nf6').length).toBeGreaterThan(0));
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(screen.queryAllByText('Nf6')).toHaveLength(0));
+    fireEvent.keyDown(window, { key: 'y', ctrlKey: true });
+    await waitFor(() => expect(screen.getAllByText('Nf6').length).toBeGreaterThan(0));
+    play('Nd2');
+    expect(await screen.findByText('Nd2 could be Nbd2 or Nfd2: say which piece.')).toBeTruthy();
+  });
+});

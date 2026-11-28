@@ -180,17 +180,19 @@ function Shell() {
       {palette && <CommandPalette screens={SCREENS} onClose={() => setPalette(false)} />}
 
       {ws.message && (
+        // Bottom right, clear of the board's FEN row and buttons; it can be closed at once.
         <div
           role={ws.message.error ? 'alert' : 'status'}
-          className={`fixed bottom-4 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded-lg border bg-surface px-4 py-2 text-sm shadow-panel [overflow-wrap:anywhere] print:hidden ${
+          className={`fixed right-4 bottom-4 z-50 flex max-w-[min(26rem,calc(100vw-2rem))] items-start gap-3 rounded-lg border bg-surface px-4 py-2 text-sm shadow-panel [overflow-wrap:anywhere] print:hidden ${
             ws.message.error ? 'border-danger text-danger' : 'border-line'
           }`}
         >
-          {ws.message.text}
+          <span className="min-w-0 flex-1">{ws.message.text}</span>
           {ws.message.action && (
             <button
               type="button"
-              className="ml-3 font-semibold text-accent hover:underline"
+              title={ws.message.action.label === 'Undo' ? 'Undo (Ctrl+Z)' : undefined}
+              className="shrink-0 font-semibold text-accent hover:underline"
               onClick={() => {
                 const action = ws.message?.action;
                 ws.dismissMessage();
@@ -200,6 +202,9 @@ function Shell() {
               {ws.message.action.label}
             </button>
           )}
+          <button type="button" className="shrink-0 text-muted hover:text-text" aria-label="Close message" onClick={ws.dismissMessage}>
+            ✕
+          </button>
         </div>
       )}
     </div>

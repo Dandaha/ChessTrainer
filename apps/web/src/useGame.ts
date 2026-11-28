@@ -68,6 +68,8 @@ export interface GameApi {
   /** Loads a game; `at` picks the node to show, `clean` marks it as saved. */
   load(game: Game, options?: { at?: string; clean?: boolean }): void;
   undo(): void;
+  /** Puts back what the last undo took back (Ctrl+Y). */
+  redo(): void;
 }
 
 /**
@@ -90,6 +92,9 @@ export function useGame(
   // How deep the undo stack was when the game was last clean (loaded clean or saved): undoing back to
   // that depth makes it clean again. Null once that state can no longer be reached by undoing.
   const undoStack = useRef<Snapshot[]>([]);
+  // What undo took back, newest last, for redo; a new change empties it.
+  const redoStack = useRef<Snapshot[]>([]);
+  const redoBefore = useRef<Snapshot[] | null>(null);
   const cleanDepth = useRef<number | null>(null);
   const contextRef = useRef(context);
   contextRef.current = context;
@@ -106,6 +111,8 @@ export function useGame(
     (replacing = false) => {
       // An edit made after undoing past the clean state: that state cannot come back by undoing.
       if (cleanDepth.current !== null && undoStack.current.length < cleanDepth.current) cleanDepth.current = null;
+      redoBefore.current = redoStack.current;
+      redoStack.current = [];
       undoStack.current.push({
         game: structuredClone(game),
         currentId,
@@ -118,6 +125,19 @@ export function useGame(
     },
     [game, currentId],
   );
+  /** A snapshot that turned out not to be a change (stepping into a move already there): dropped, and
+   * what redo had is kept. */
+  const unsnapshot = () => {
+    undoStack.current.pop();
+    if (redoBefore.current) redoStack.current = redoBefore.current;
+    redoBefore.current = null;
+  };
+  /** The game as it is now, for the other stack; with the workspace's context when crossing a load. */
+  const here = (withContext: boolean): Snapshot => ({
+    game: structuredClone(game),
+    currentId,
+    ...(withContext ? { context: { value: contextRef.current?.current() } } : {}),
+  });
   // Typing a comment is one change per move, not one per key.
   const commentEdit = useRef<{ id: string; at: number } | null>(null);
 
@@ -168,7 +188,7 @@ export function useGame(
       }
       setCurrentId(node.id);
       if (added) bump();
-      else undoStack.current.pop(); // only went to moves already there
+      else unsnapshot(); // only went to moves already there
     },
     play: (move) => {
       snapshot();
@@ -178,10 +198,10 @@ export function useGame(
         setCurrentId(node.id);
         // Stepping into a move that is already there is navigation, not an edit.
         if (current.children.length !== before) bump();
-        else undoStack.current.pop();
+        else unsnapshot();
         return true;
       } catch {
-        undoStack.current.pop();
+        unsnapshot();
         return false;
       }
     },
@@ -248,12 +268,24 @@ export function useGame(
     undo: () => {
       const last = undoStack.current.pop();
       if (!last) return;
+      redoStack.current.push(here(!!last.context));
       setGame(last.game);
       setCurrentId(last.currentId);
       if (last.context) contextRef.current?.restore(last.context.value);
       bump();
       bumpRestores();
       // Back to how it was when saved: no longer "unsaved changes".
+      if (cleanDepth.current !== null && undoStack.current.length === cleanDepth.current) setCleanVersion(version + 1);
+    },
+    redo: () => {
+      const next = redoStack.current.pop();
+      if (!next) return;
+      undoStack.current.push(here(!!next.context));
+      setGame(next.game);
+      setCurrentId(next.currentId);
+      if (next.context) contextRef.current?.restore(next.context.value);
+      bump();
+      bumpRestores();
       if (cleanDepth.current !== null && undoStack.current.length === cleanDepth.current) setCleanVersion(version + 1);
     },
   };
