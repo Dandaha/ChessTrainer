@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { type Backup, type EngineStatus, type Settings, type SettingsUpdate, type TrashItem, api } from '../api.ts';
 import { Empty, PageHeader, buttonClass, inputClass } from '../components/ui.tsx';
-import { type Theme, applyTheme, currentTheme } from '../storage.ts';
+import { type Theme, applyTheme, useTheme } from '../storage.ts';
 import { useWorkspace } from '../workspace.tsx';
 
 /** Sections later phases add (engine, coach). */
@@ -11,7 +11,7 @@ export function SettingsScreen() {
   const ws = useWorkspace();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [trash, setTrash] = useState<TrashItem[] | null>(null);
-  const [theme, setTheme] = useState<Theme>(currentTheme);
+  const theme = useTheme();
   const [system, setSystem] = useState<Awaited<ReturnType<typeof api.systemInfo>> | null>(null);
 
   useEffect(() => {
@@ -42,11 +42,7 @@ export function SettingsScreen() {
               aria-label="Theme"
               className={`${inputClass} w-40`}
               value={theme}
-              onChange={(e) => {
-                const next = e.target.value as Theme;
-                applyTheme(next);
-                setTheme(next);
-              }}
+              onChange={(e) => applyTheme(e.target.value as Theme)}
             >
               <option value="light">Light</option>
               <option value="dark">Dark</option>

@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { type GameSummary, type QueueSummary, type SavedPosition, api } from '../api.ts';
+import { type GameSummary, type QueueSummary, type SavedPosition, SERVER_DOWN, api, useServerOnline } from '../api.ts';
 import { QueueLine } from './TrainingScreen.tsx';
 import { MiniBoard } from '../components/MiniBoard.tsx';
 import { Empty, buttonClass, inputClass, primaryClass } from '../components/ui.tsx';
@@ -14,20 +14,22 @@ export function HomeScreen() {
   const [text, setText] = useState('');
   const [games, setGames] = useState<GameSummary[] | null>(null);
   const [positions, setPositions] = useState<SavedPosition[] | null>(null);
-  const [offline, setOffline] = useState(false);
+  const online = useServerOnline();
   const [queue, setQueue] = useState<QueueSummary | null>(null);
 
+  // Loaded when the screen opens, and again when the server comes back.
   useEffect(() => {
+    if (!online) return;
     api
       .games({ sort: 'added', limit: 8 })
       .then((d) => setGames(d.games))
-      .catch(() => setOffline(true));
+      .catch(() => {});
     api
       .savedPositions({ limit: 6 })
       .then((d) => setPositions(d.positions))
-      .catch(() => setOffline(true));
+      .catch(() => {});
     api.trainingSummary().then(setQueue).catch(() => {});
-  }, []);
+  }, [online]);
 
   const open = async () => {
     const problem = await ws.openText(text);
@@ -76,7 +78,7 @@ export function HomeScreen() {
         </div>
       </section>
 
-      {offline && <Empty>The local server is not running, so the library is unavailable. Start it with pnpm dev.</Empty>}
+      {!online && <Empty>The library is unavailable. {SERVER_DOWN}</Empty>}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-2">

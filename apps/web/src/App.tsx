@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { api } from './api.ts';
+import { SERVER_DOWN, api, useServerOnline } from './api.ts';
 import { CommandPalette } from './components/CommandPalette.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { useRoute } from './router.ts';
@@ -13,7 +13,7 @@ import { RepertoireScreen } from './screens/RepertoireScreen.tsx';
 import { TrainingScreen } from './screens/TrainingScreen.tsx';
 import { ConceptsScreen } from './screens/ConceptsScreen.tsx';
 import { SettingsScreen } from './screens/SettingsScreen.tsx';
-import { type Theme, applyTheme, currentTheme } from './storage.ts';
+import { applyTheme, useTheme } from './storage.ts';
 import { WorkspaceProvider, useWorkspace } from './workspace.tsx';
 import { AskTextProvider } from './components/AskText.tsx';
 import { Icon, type IconName } from './components/icons.tsx';
@@ -49,17 +49,14 @@ export function App() {
 function Shell() {
   const ws = useWorkspace();
   const route = useRoute();
-  const [theme, setTheme] = useState<Theme>(currentTheme);
+  const theme = useTheme();
   const [palette, setPalette] = useState(false);
-  const [serverOnline, setServerOnline] = useState(true);
+  const serverOnline = useServerOnline();
   const latest = useRef(ws);
   latest.current = ws;
 
   useEffect(() => {
-    api
-      .health()
-      .then(() => setServerOnline(true))
-      .catch(() => setServerOnline(false));
+    api.health().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -93,11 +90,7 @@ function Shell() {
     };
   }, []);
 
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    applyTheme(next);
-    setTheme(next);
-  };
+  const toggleTheme = () => applyTheme(theme === 'dark' ? 'light' : 'dark');
 
   const [first = ''] = route.parts;
   const fullScreen = first === 'present' || first === 'print';
@@ -160,8 +153,7 @@ function Shell() {
         </main>
         {!serverOnline && !fullScreen && (
           <footer className="border-t border-line bg-surface px-4 py-1.5 text-xs text-muted print:hidden">
-            The local server is not running, so the library is unavailable. The board still works; start both with{' '}
-            <kbd>pnpm dev</kbd>.
+            The library is unavailable, but the board still works. {SERVER_DOWN}
           </footer>
         )}
       </div>

@@ -1,23 +1,70 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { readTextFile } from './files.ts';
 
-/** A modal panel. Escape or a click outside closes it. */
-export function Modal({ title, onClose, children }: { title: string; onClose(): void; children: ReactNode }) {
+/** Open dialogs, newest last: only the top one answers Escape, so closing a question keeps its parent. */
+const openDialogs: symbol[] = [];
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * What every dialog does, as the WAI-ARIA dialog pattern asks: Escape closes the top one only, Tab
+ * stays inside it, and when it closes the focus goes back to where it was.
+ */
+export function useDialog(ref: React.RefObject<HTMLElement | null>, onClose: () => void): void {
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
+    const me = Symbol('dialog');
+    openDialogs.push(me);
+    const before = document.activeElement as HTMLElement | null;
+    // Focus something inside unless the dialog already did (an input it focuses itself).
+    const settle = requestAnimationFrame(() => {
+      const box = ref.current;
+      if (box && !box.contains(document.activeElement)) box.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    });
     const onKey = (event: KeyboardEvent) => {
+      if (openDialogs.at(-1) !== me) return;
       if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
+        event.stopImmediatePropagation();
+        event.preventDefault();
+        close.current();
+        return;
+      }
+      if (event.key === 'Tab' && ref.current) {
+        const items = [...ref.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
+        if (!items.length) return;
+        const first = items[0]!;
+        const last = items.at(-1)!;
+        if (event.shiftKey && (document.activeElement === first || !ref.current.contains(document.activeElement))) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || !ref.current.contains(document.activeElement))) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
+    return () => {
+      cancelAnimationFrame(settle);
+      window.removeEventListener('keydown', onKey, true);
+      openDialogs.splice(openDialogs.indexOf(me), 1);
+      if (before && document.contains(before)) before.focus();
+    };
+  }, [ref]);
+}
+
+/** A modal panel. Escape or a click outside closes it. */
+export function Modal({ title, onClose, children }: { title: string; onClose(): void; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  useDialog(box, onClose);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[10vh]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[10vh]" onClick={onClose} data-overlay>
       <div
+        ref={box}
         role="dialog"
+        aria-modal="true"
         aria-label={title}
         className="w-full max-w-2xl rounded-xl border border-line bg-surface p-4 shadow-panel"
         onClick={(e) => e.stopPropagation()}

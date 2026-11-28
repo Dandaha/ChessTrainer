@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { type ConceptSummary, api } from '../api.ts';
 import { navigate } from '../router.ts';
 import { inputClass } from './ui.tsx';
@@ -22,7 +22,10 @@ export function ConceptPicker({
   const [text, setText] = useState('');
   const [options, setOptions] = useState<ConceptSummary[]>([]);
   const [open, setOpen] = useState(false);
+  // The highlighted row, which Enter takes: the first suggestion unless the arrow keys moved it.
+  const [active, setActive] = useState(0);
   const box = useRef<HTMLDivElement>(null);
+  const listId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -47,7 +50,12 @@ export function ConceptPicker({
     return () => window.removeEventListener('pointerdown', close);
   }, []);
 
-  const exact = options.some((o) => o.title.toLowerCase() === text.trim().toLowerCase());
+  // A concept is already there when the text is its title or one of its aliases.
+  const typed = text.trim().toLowerCase();
+  const exact = options.some((o) => o.title.toLowerCase() === typed || o.aliases.some((a) => a.toLowerCase() === typed));
+  const canCreate = Boolean(text.trim()) && !exact;
+  const rows = options.length + (canCreate ? 1 : 0);
+  const create = () => void api.createConcept({ title: text.trim() }).then(choose);
 
   const choose = async (concept: ConceptSummary) => {
     setText('');
@@ -77,39 +85,58 @@ export function ConceptPicker({
         aria-label="Link a concept"
         value={text}
         onFocus={() => setOpen(true)}
+        role="combobox"
+        aria-expanded={open && rows > 0}
+        aria-controls={listId}
         onChange={(e) => {
           setText(e.target.value);
           setOpen(true);
+          setActive(0);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') setOpen(false);
+          if (e.key === 'ArrowDown' && rows) {
+            e.preventDefault();
+            setOpen(true);
+            setActive((a) => Math.min(a + 1, rows - 1));
+          }
+          if (e.key === 'ArrowUp' && rows) {
+            e.preventDefault();
+            setActive((a) => Math.max(a - 1, 0));
+          }
           if (e.key === 'Enter') {
             e.preventDefault();
             e.stopPropagation();
-            const first = options[0];
-            if (first && (exact || !text.trim())) void choose(first);
-            else if (text.trim()) void api.createConcept({ title: text.trim() }).then(choose);
+            const option = options[Math.min(active, rows - 1)];
+            if (option && active < options.length) void choose(option);
+            else if (canCreate) create();
           }
         }}
         placeholder={placeholder}
         className={`${inputClass} w-full`}
       />
       {open && (options.length > 0 || text.trim()) && (
-        <ul className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-line bg-surface py-1 text-sm shadow-panel">
-          {options.map((o) => (
-            <li key={o.id}>
-              <button type="button" className="w-full px-3 py-1 text-left hover:bg-surface-2" onClick={() => void choose(o)}>
+        <ul id={listId} role="listbox" className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-line bg-surface py-1 text-sm shadow-panel">
+          {options.map((o, i) => (
+            <li key={o.id} role="option" aria-selected={i === active}>
+              <button
+                type="button"
+                className={`w-full px-3 py-1 text-left hover:bg-surface-2 ${i === active ? 'bg-surface-2' : ''}`}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => void choose(o)}
+              >
                 {o.title}
                 {o.aliases.length > 0 && <span className="text-xs text-muted"> · {o.aliases.join(', ')}</span>}
               </button>
             </li>
           ))}
-          {text.trim() && !exact && (
-            <li>
+          {canCreate && (
+            <li role="option" aria-selected={active === options.length}>
               <button
                 type="button"
-                className="w-full px-3 py-1 text-left text-accent hover:bg-surface-2"
-                onClick={() => void api.createConcept({ title: text.trim() }).then(choose)}
+                className={`w-full px-3 py-1 text-left text-accent hover:bg-surface-2 ${active === options.length ? 'bg-surface-2' : ''}`}
+                onMouseEnter={() => setActive(options.length)}
+                onClick={create}
               >
                 + Create “{text.trim()}”
               </button>

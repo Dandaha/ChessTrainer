@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react';
 import type { GameDetail, GameFilters, GameSort, GameSummary, ImportReport, MoveStat } from '@chess/server/db/games.ts';
 import type { Color, Priority, RepEdge, RepertoireCheck } from '@chess/chess-core';
 import type { RepertoireSummary } from '@chess/server/db/repertoire.ts';
@@ -69,17 +70,65 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** What to do when the local server can't be reached: run it (from source) or restart the app. */
+export const SERVER_DOWN = import.meta.env.DEV
+  ? 'The local server is not running. Start it with pnpm dev.'
+  : 'Chess Workspace has lost its connection to its library. Restart the app.';
+
+// Whether the server answered the last request. While it doesn't, it is asked again every few
+// seconds, so the "not running" notices clear by themselves when it is back.
+let online = true;
+let recheck: ReturnType<typeof setTimeout> | undefined;
+const onlineListeners = new Set<() => void>();
+
+function setOnline(next: boolean): void {
+  if (next !== online) {
+    online = next;
+    for (const listener of onlineListeners) listener();
+  }
+  if (!next && !recheck) {
+    recheck = setTimeout(() => {
+      recheck = undefined;
+      api.health().catch(() => {});
+    }, 3000);
+  }
+}
+
+/** Whether the local server is answering, updated by every request. */
+export function useServerOnline(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      onlineListeners.add(listener);
+      return () => onlineListeners.delete(listener);
+    },
+    () => online,
+  );
+}
+
+/**
+ * A request to the local server. Not reaching it is the same error whichever way it shows: the
+ * request fails (the installed app), or the dev server's proxy answers 502 in plain text (the server
+ * itself always answers in JSON).
+ */
+async function send(path: string, init: RequestInit): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(path, {
-      method,
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    response = await fetch(path, init);
   } catch {
-    throw new ApiError('The local server is not running. Start it with pnpm dev.', 0);
+    response = new Response(null, { status: 502 });
   }
+  const proxyError = response.status >= 502 && response.status <= 504 && !response.headers.get('content-type')?.includes('json');
+  setOnline(!proxyError);
+  if (proxyError) throw new ApiError(SERVER_DOWN, 0);
+  return response;
+}
+
+async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const response = await send(path, {
+    method,
+    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   const data = (await response.json().catch(() => ({}))) as { error?: string };
   if (!response.ok) throw new ApiError(data.error ?? `The server answered ${response.status}.`, response.status);
   return data as T;
@@ -87,12 +136,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 
 /** POSTs and reads the server-sent events the coach streams back. */
 async function streamPost(path: string, body: unknown, onEvent: (event: CoachEvent) => void): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  } catch {
-    throw new ApiError('The local server is not running. Start it with pnpm dev.', 0);
-  }
+  const response = await send(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok || !response.body) {
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     throw new ApiError(data.error ?? `The server answered ${response.status}.`, response.status);

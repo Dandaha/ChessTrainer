@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { navigate } from '../router.ts';
 import { useWorkspace } from '../workspace.tsx';
+import { useDialog } from '../Dialogs.tsx';
 
 interface Item {
   key: string;
@@ -23,6 +24,8 @@ export function CommandPalette({
   const [found, setFound] = useState<Item[]>([]);
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useDialog(box, onClose);
 
   useEffect(() => input.current?.focus(), []);
 
@@ -78,9 +81,11 @@ export function CommandPalette({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]" onClick={onClose} data-overlay>
       <div
+        ref={box}
         role="dialog"
+        aria-modal="true"
         aria-label="Jump to"
         className="w-full max-w-xl overflow-hidden rounded-xl border border-line bg-surface shadow-panel"
         onClick={(e) => e.stopPropagation()}
@@ -94,7 +99,6 @@ export function CommandPalette({
             setActive(0);
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') onClose();
             if (e.key === 'ArrowDown') setActive((a) => Math.min(a + 1, items.length - 1));
             if (e.key === 'ArrowUp') setActive((a) => Math.max(a - 1, 0));
             if (e.key === 'Enter') choose(items[active]);
