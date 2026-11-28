@@ -111,6 +111,11 @@ database path.
   move to the repertoire, and a click on a move in an engine line adds the line up to it.
 - The mouse wheel over a board steps through the moves, on the analysis board and the
   repertoire's.
+- **Opening names** come from Lichess's table (all of ECO A00–E99 with its named variations,
+  CC0), by position, so a transposition is named too: the move on the analysis board, the
+  selected repertoire move (and each move's tooltip in the tree), and a saved position (from
+  its game's moves, or its own position if that is a named one). The name is the deepest named
+  position along the line, so a move past the book keeps its opening's name.
 - The analysis board's **Repertoire** tab shows your prepared moves for the position and,
   for the game on the board, where it left your preparation ("You left your preparation on
   move 9 with ...Nd7; your line is ...Bd6").

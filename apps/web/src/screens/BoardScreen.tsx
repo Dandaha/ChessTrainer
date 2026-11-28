@@ -8,6 +8,7 @@ import { EnginePanel, EvalBar } from '../components/EnginePanel.tsx';
 import { CoachPanel, type CoachPanelHandle } from '../components/CoachPanel.tsx';
 import type { Annotations } from '../api.ts';
 import { useEngine } from '../useEngine.ts';
+import { OpeningLabel, useOpenings } from '../openings.tsx';
 import { type EngineSettings, readEngineSettings, writeEngineSettings } from '../storage.ts';
 import type { DrawShape } from '../Board.tsx';
 import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
@@ -62,6 +63,9 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 
   const { game, current } = g;
   const end = useMemo(() => gameEnd(g.path), [g.path]);
+  // The opening of the move on the board: the deepest named position on the way to it, as on Lichess.
+  const openings = useOpenings();
+  const opening = useMemo(() => openings?.classifyOpening(g.path.map((n) => n.fen)) ?? null, [openings, g.path]);
   // Threat mode analyses the same position with the other side to move (not possible in check).
   const threatFen = useMemo(() => (engineOn && threat ? passTurn(current.fen) : null), [engineOn, threat, current.fen]);
   const history = useMemo(() => (engineOn && !threatFen ? repetitionHistory(g.path) : undefined), [engineOn, threatFen, g.path]);
@@ -345,6 +349,11 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
         </section>
 
         <aside className="flex max-h-[calc(100dvh-7rem)] min-h-[24rem] w-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel md:w-[22rem] md:shrink-0 xl:w-[26rem]">
+          {opening && (
+            <div className="truncate border-b border-line px-3 py-1.5 text-xs" aria-label="Opening">
+              <OpeningLabel opening={opening} />
+            </div>
+          )}
           <MoveList game={game} currentId={current.id} onSelect={g.goTo} onMenu={(id, x, y) => setMenu({ id, x, y })} />
           <Branches node={current} choice={g.choice} onEnter={g.goTo} />
           <GameOver end={end} result={game.result} atEnd={!current.children.length && onMainline} onSetResult={g.setResult} />

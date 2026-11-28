@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyOpening } from '../openings.ts';
+import { classifyOpening, openingAt } from '../openings.ts';
 import { parseGame } from '../pgn.ts';
 import { mainlineFrom } from '../tree.ts';
 
@@ -19,5 +19,15 @@ describe('classifyOpening', () => {
 
   it('says nothing for a game from a position no opening reaches', () => {
     expect(classifyOpening(['8/8/8/4k3/8/8/4P3/4K3 w - - 0 1'])).toBeNull();
+  });
+});
+
+describe('openingAt', () => {
+  it('names a position only if it is a named one, whatever the move counters', () => {
+    const najdorf = fens('1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6').at(-1)!;
+    expect(openingAt(najdorf)?.name).toBe('Sicilian Defense: Najdorf Variation');
+    expect(openingAt(najdorf.replace(/ \d+ \d+$/, ' 7 40'))?.name).toBe('Sicilian Defense: Najdorf Variation');
+    expect(openingAt(fens('1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. h3 h6 7. a3').at(-1)!)).toBeNull();
+    expect(openingAt('8/8/8/4k3/8/8/4P3/4K3 w - - 0 1')).toBeNull();
   });
 });

@@ -32,6 +32,7 @@ import { useAskText, useConfirm } from '../components/AskText.tsx';
 import { NagButtons } from '../AnnotationPanel.tsx';
 import { EnginePanel, EvalBar } from '../components/EnginePanel.tsx';
 import { useEngine } from '../useEngine.ts';
+import { OpeningLabel, type OpeningName, useOpenings } from '../openings.tsx';
 import { type EngineSettings, readEngineSettings, readFlag, writeEngineSettings, writeFlag } from '../storage.ts';
 import { isTyping } from './BoardScreen.tsx';
 
@@ -143,6 +144,21 @@ export function RepertoireScreen() {
     lines.forEach((line, index) => line.nodes.forEach((node, i) => map.set(node.edge.id, { line: index, parent: i ? line.nodes[i - 1]! : line.parent })));
     return map;
   }, [lines]);
+  // Each move's opening: the deepest named position along its line (a transposition into one counts).
+  const openings = useOpenings();
+  const openingOf = useMemo(() => {
+    const names = new Map<string, OpeningName>();
+    if (!openings) return names;
+    const walk = (nodes: RepTreeNode[], above: OpeningName | null) => {
+      for (const node of nodes) {
+        const here = openings.openingAt(node.fen) ?? above;
+        if (here) names.set(node.edge.id, here);
+        walk(node.children, here);
+      }
+    };
+    walk(tree, null);
+    return names;
+  }, [openings, tree]);
   const current = selected ? findNode(tree, (n) => n.edge.id === selected) : undefined;
   const fen = current?.fen ?? START_FEN;
   const ply = current?.ply ?? 0;
@@ -485,6 +501,7 @@ export function RepertoireScreen() {
                         key={node.edge.id}
                         type="button"
                         data-selected={isSel}
+                        title={openingOf.has(node.edge.id) ? `${openingOf.get(node.edge.id)!.eco} ${openingOf.get(node.edge.id)!.name}` : undefined}
                         onClick={() => select(node.edge.id)}
                         className={`inline-flex items-center gap-1 rounded px-1 py-0.5 text-left ${
                           isSel ? 'bg-selected text-on-selected' : 'hover:bg-surface-2'
@@ -548,6 +565,7 @@ export function RepertoireScreen() {
             <Switch on={showBest} onToggle={switchBest} label="Best-move arrow" shortcut="A" swatch="#68217a" />
             <Switch on={showMoves} onToggle={switchMoves} label="Variation arrows" shortcut="V" swatch="#15781B" />
             {engineOn && !showLines && engine.error && <span className="text-xs text-danger">{engine.error}</span>}
+            <OpeningLabel opening={selected ? openingOf.get(selected) : null} className="ml-auto min-w-0 truncate text-xs" />
           </div>
           <div className="flex w-full justify-center gap-2">
             {engineOn && <EvalBar line={best} flipped={color === 'black'} />}

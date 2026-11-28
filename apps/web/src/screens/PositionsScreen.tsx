@@ -1,4 +1,4 @@
-import { START_FEN, answerProblem } from '@chess/chess-core';
+import { START_FEN, answerProblem, mainlineFrom, parseGame, positionKey } from '@chess/chess-core';
 import { useCallback, useEffect, useState } from 'react';
 import { type PositionCategory, type PositionSetSummary, type SavedPosition, api } from '../api.ts';
 import { MiniBoard } from '../components/MiniBoard.tsx';
@@ -13,6 +13,7 @@ import { undoToast, useWorkspace } from '../workspace.tsx';
 import { useAskText, useConfirm } from '../components/AskText.tsx';
 import { BoardEditor } from '../components/BoardEditor.tsx';
 import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
+import { OpeningLabel, useOpenings } from '../openings.tsx';
 
 const LIMIT = 60;
 
@@ -327,6 +328,30 @@ function PositionDetail({
     api.savedPosition(id).then(setSaved).catch((e: Error) => ws.toast(e.message, true));
   }, [id]);
 
+  // The opening it arose from: its game's moves up to it when it was saved from a game's main line,
+  // otherwise its own name if the position is a named one (a position set up by hand mostly is not).
+  const openings = useOpenings();
+  const [gameLine, setGameLine] = useState<string[] | null>(null);
+  const sourceGameId = saved?.sourceGameId;
+  const sourcePly = saved?.sourcePly;
+  const savedKey = saved ? positionKey(saved.fen) : '';
+  useEffect(() => {
+    setGameLine(null);
+    if (!sourceGameId || sourcePly == null) return;
+    let live = true;
+    api
+      .game(sourceGameId)
+      .then((detail) => {
+        const line = mainlineFrom(parseGame(detail.pgn).root).slice(0, sourcePly + 1);
+        if (live && line.length === sourcePly + 1 && positionKey(line.at(-1)!.fen) === savedKey) setGameLine(line.map((n) => n.fen));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [sourceGameId, sourcePly, savedKey]);
+  const opening = openings && saved ? ((gameLine && openings.classifyOpening(gameLine)) ?? openings.openingAt(saved.fen)) : null;
+
   if (!saved) return null;
 
   const update = async (changes: Parameters<typeof api.updateSavedPosition>[1]) => {
@@ -351,6 +376,7 @@ function PositionDetail({
         </button>
       </div>
       <MiniBoard fen={saved.fen} flipped={saved.sideToSolve === 'black'} coordinates />
+      <OpeningLabel opening={opening} className="block text-xs" />
       <p className="text-xs text-muted">
         {saved.sideToSolve === 'white' ? 'White' : 'Black'} to play
         {saved.sourceLabel && (
