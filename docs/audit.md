@@ -42,7 +42,7 @@ Built on 28 November 2026:
 Still open (not chosen for now):
 - Chess960 and null moves.
 - Positions inside variations indexed (only the main line is).
-- Training streaks, a session summary, and solving a set of positions on demand.
+- Training streaks and a summary at the end of a training session. (Solving a set on demand was built on 28 November 2026.)
 
 ## Final check, 28 November 2026
 

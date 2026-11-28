@@ -78,8 +78,10 @@ database path.
   its own idea. Notes are markdown: a FEN line becomes a board and moves like `1. e4 e5`
   become links that open the line.
 - **Sets**: ordered groups of saved positions, with **Present** (full screen, reveal the
-  idea when you choose), a printable **worksheet** (save it as PDF from the print dialog),
-  and PGN export. Single positions export as PNG or PGN.
+  idea when you choose), **Solve** (the positions one by one as puzzles, checked as in
+  training but as practice only, then a summary with the missed ones to try again), a
+  printable **worksheet** (save it as PDF from the print dialog), and PGN export. Single
+  positions export as PNG or PGN.
 - **Ctrl+K** jumps to any screen, game or saved position. Deleted items stay in
   Settings → Trash for 30 days.
 

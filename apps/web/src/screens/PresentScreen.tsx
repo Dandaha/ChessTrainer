@@ -36,7 +36,7 @@ export function PresentScreen({ setId }: { setId: string }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!items) return;
-      if (event.key === 'Escape') navigate(`positions`);
+      if (event.key === 'Escape') navigate(`positions?set=${setId}`);
       else if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'PageDown') {
         event.preventDefault();
         setIndex((i) => Math.min(i + 1, items.length - 1));

@@ -1,6 +1,6 @@
 import { type Color, type MoveNode, answerLine, createGame, displayComment, lineLabel, moveLabel, moveSpellings, playMove } from '@chess/chess-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type CardDetail, type QueueSummary, type TrainingStats, api } from '../api.ts';
+import { type CardDetail, type QueueSummary, type SavedPosition, type TrainingStats, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
 import { Markdown } from '../components/Markdown.tsx';
 import { Empty, PageHeader, buttonClass, primaryClass } from '../components/ui.tsx';
@@ -16,9 +16,29 @@ const GRADES: { grade: Grade; label: string }[] = [
   { grade: 4, label: 'Easy' },
 ];
 
+/** A saved position solved as practice (a set, on demand): no review card is behind it. */
+interface PracticeCard {
+  kind: 'saved_position';
+  card: null;
+  saved: SavedPosition;
+}
+
+type SessionCard = CardDetail | PracticeCard;
+
+/** How one position of a practice session went: right the first time, or not. */
+interface SolveResult {
+  saved: SavedPosition;
+  right: boolean;
+}
+
 /** The outcome of one card, before grading. */
 interface Outcome {
   correct: boolean;
+  /**
+   * Nothing could judge the move: no answer is saved and Stockfish gave no verdict. In practice the
+   * person then says whether they had it.
+   */
+  unjudged?: boolean;
   suggested: Grade;
   message: string;
   detail?: string;
@@ -51,6 +71,7 @@ export function TrainingScreen() {
   const route = useRoute();
   const repertoireId = route.params.get('repertoire') ?? undefined;
   const drill = route.params.get('drill');
+  const solveSet = route.params.get('set');
   const [summary, setSummary] = useState<QueueSummary | null>(null);
   const [stats, setStats] = useState<TrainingStats | null>(null);
   const [session, setSession] = useState<CardDetail[] | null>(null);
@@ -92,6 +113,8 @@ export function TrainingScreen() {
       />
     );
   }
+
+  if (solveSet) return <SetSolve key={solveSet} setId={solveSet} />;
 
   if (session) {
     return (
@@ -228,7 +251,17 @@ function at(fen: string, uci = '', ply = 0): MoveNode {
   return { ...createGame(fen).root, id: `${fen}|${uci}`, uci, ply };
 }
 
-function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
+function Session({
+  cards: initial,
+  onEnd,
+  practice,
+}: {
+  cards: SessionCard[];
+  /** With what each position came to, in practice (training records its grades as it goes). */
+  onEnd(results: SolveResult[]): void;
+  /** Solving a set as practice: nothing is scheduled, and Next takes the place of the grades. */
+  practice?: { name: string };
+}) {
   const ws = useWorkspace();
   // The session's cards; one graded Again joins the end to be asked again, as in Anki and Chessable.
   const [cards, setCards] = useState(initial);
@@ -237,6 +270,7 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [checking, setChecking] = useState(false);
   const [right, setRight] = useState(0);
+  const [results, setResults] = useState<SolveResult[]>([]);
   const [typed, setTyped] = useState('');
   // A card answered wrong stays wrong for scheduling, even when "Try again" then finds the move.
   const [failed, setFailed] = useState(false);
@@ -288,17 +322,30 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
 
   const grade = useCallback(
     async (g: Grade) => {
-      if (!card || !outcome) return;
+      if (!card || !outcome || card.card === null) return;
       const correct = outcome.correct && !failed;
       await api.review(card.card.id, g, correct).catch((e: Error) => ws.toast(e.message, true));
       if (correct) setRight((r) => r + 1);
-      const again = g === 1 && cards.filter((c) => c.card.id === card.card.id).length < 3;
+      const again = g === 1 && cards.filter((c) => c.card?.id === card.card.id).length < 3;
       // Reviewed now, so no longer new: it comes back to be answered, not shown (learn mode is once).
       if (again) setCards((list) => [...list, { ...card, card: { ...card.card, state: card.card.state === 0 ? 1 : card.card.state } }]);
-      if (index + 1 >= cards.length + (again ? 1 : 0)) onEnd();
+      if (index + 1 >= cards.length + (again ? 1 : 0)) onEnd([]);
       else setIndex(index + 1);
     },
     [card, outcome, failed, index, cards, onEnd, ws],
+  );
+
+  /** Practice: this position is done (`gotIt`: right the first time); on to the next, or the end. */
+  const next = useCallback(
+    (gotIt: boolean) => {
+      if (!card || card.kind !== 'saved_position') return;
+      const done = [...results, { saved: card.saved, right: gotIt }];
+      setResults(done);
+      if (gotIt) setRight((r) => r + 1);
+      if (index + 1 >= cards.length) onEnd(done);
+      else setIndex(index + 1);
+    },
+    [card, results, index, cards, onEnd],
   );
 
   /** Back to the position for another go; the card is already counted as missed. */
@@ -313,10 +360,23 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onEnd();
+      if (event.key === 'Escape') onEnd(results);
       if (!outcome) return;
-      if (!outcome.correct && event.key.toLowerCase() === 't') tryAgain();
-      if (!outcome.correct && event.key.toLowerCase() === 's' && outcome.solution) setShowSolution(true);
+      const key = event.key.toLowerCase();
+      if (outcome.unjudged) {
+        if (key === 'y') next(true);
+        if (key === 'n') next(false);
+        return;
+      }
+      if (!outcome.correct && key === 't') tryAgain();
+      if (!outcome.correct && key === 's' && outcome.solution) setShowSolution(true);
+      if (practice) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          next(outcome.correct && !failed);
+        }
+        return;
+      }
       const g = Number(event.key);
       if (g >= 1 && g <= 4) void grade(g as Grade);
       if (event.key === 'Enter' || event.key === ' ') {
@@ -326,7 +386,7 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [outcome, grade, onEnd, tryAgain]);
+  }, [outcome, grade, onEnd, tryAgain, next, practice, results, failed]);
 
   const onMove = async (from: string, to: string, promotion?: string) => {
     // While Stockfish checks the answer, the board waits: a second move would land on the card.
@@ -394,6 +454,16 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
     setChecking(true);
     try {
       const result = await api.checkMove(card.saved.fen, played.uci, card.saved.answer);
+      if (practice && !card.saved.answer?.trim() && !result.engine) {
+        setOutcome({
+          correct: false,
+          unjudged: true,
+          suggested: 1,
+          message: `You played ${result.san}.`,
+          detail: `No answer is saved for this position. ${engineVerdict(result, card.saved.fen)}`.trim(),
+        });
+        return;
+      }
       // Right when it is the written answer, or when Stockfish finds it as good: a second mate, or
       // another move that wins as much, counts, as on Lichess and ChessTempo.
       const engineGood = result.engine?.good === true;
@@ -486,7 +556,7 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
     return (
       <div className="mx-auto max-w-md p-10 text-center">
         <p className="mb-4 text-lg">Nothing due right now.</p>
-        <button type="button" className={primaryClass} onClick={onEnd}>
+        <button type="button" className={primaryClass} onClick={() => onEnd(results)}>
           Back
         </button>
       </div>
@@ -504,14 +574,14 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
   return (
     <div className="flex h-full flex-col" data-overlay>
       <div className="flex items-center gap-4 border-b border-line bg-surface px-5 py-2 text-sm">
-        <span className="font-semibold">Training</span>
+        <span className="font-semibold">{practice ? `Solving${practice.name ? ` “${practice.name}”` : ''}` : 'Training'}</span>
         <span className="tabular-nums text-muted">
           {index + 1} / {cards.length} · {right} right
         </span>
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
           <div className="h-full bg-accent" style={{ width: `${(index / cards.length) * 100}%` }} />
         </div>
-        <button type="button" className="text-muted hover:text-text" onClick={onEnd}>
+        <button type="button" className="text-muted hover:text-text" onClick={() => onEnd(results)}>
           Stop <kbd>Esc</kbd>
         </button>
       </div>
@@ -533,7 +603,9 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
             </>
           ) : (
             <>
-              <p className="text-sm text-muted">Saved position{card.card.state === 0 && ' · new'}</p>
+              <p className="text-sm text-muted">
+                {practice ? 'Practice: your review schedule is not changed.' : `Saved position${card.card?.state === 0 ? ' · new' : ''}`}
+              </p>
               <h2 className="text-xl font-semibold">{card.saved.title}</h2>
               <p>
                 {card.saved.sideToSolve === 'white' ? 'White' : 'Black'} to play.{' '}
@@ -572,11 +644,11 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
           )}
           {checking && <p className="text-sm text-muted">Checking with Stockfish…</p>}
           {outcome && (
-            <div className={`space-y-2 rounded-xl border p-4 ${outcome.correct ? 'border-accent' : 'border-danger'}`}>
-              <p className={`font-semibold ${outcome.correct ? 'text-accent' : 'text-danger'}`}>{outcome.message}</p>
+            <div className={`space-y-2 rounded-xl border p-4 ${outcome.unjudged ? 'border-line' : outcome.correct ? 'border-accent' : 'border-danger'}`}>
+              <p className={`font-semibold ${outcome.unjudged ? '' : outcome.correct ? 'text-accent' : 'text-danger'}`}>{outcome.message}</p>
               {outcome.detail && <p className="text-sm">{outcome.detail}</p>}
               {showSolution && outcome.solution && <p className="text-sm font-medium">{outcome.solution.text}</p>}
-              {!outcome.correct && (
+              {!outcome.correct && !outcome.unjudged && (
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className={buttonClass} onClick={tryAgain}>
                     Try again <kbd>T</kbd>
@@ -594,25 +666,161 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
                   {card.saved.notesMd && <Markdown text={card.saved.notesMd} fen={card.saved.fen} />}
                 </div>
               )}
-              <div className="flex flex-wrap gap-1 pt-1">
-                {GRADES.map(({ grade: g, label }) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => void grade(g)}
-                    className={g === outcome.suggested ? primaryClass : buttonClass}
-                    title={`${label} (${g})`}
-                  >
-                    {label} <span className="text-xs opacity-70">{g}</span>
+              {outcome.unjudged ? (
+                <div className="space-y-2 pt-1">
+                  <p className="text-sm font-medium">Did you have it?</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className={primaryClass} onClick={() => next(true)}>
+                      I had it <kbd>Y</kbd>
+                    </button>
+                    <button type="button" className={buttonClass} onClick={() => next(false)}>
+                      I missed it <kbd>N</kbd>
+                    </button>
+                  </div>
+                </div>
+              ) : practice ? (
+                <div className="pt-1">
+                  <button type="button" className={primaryClass} onClick={() => next(outcome.correct && !failed)}>
+                    {index + 1 >= cards.length ? 'Finish' : 'Next'} <kbd>Enter</kbd>
                   </button>
-                ))}
-              </div>
-              <p className="text-xs text-muted">
-                <kbd>Enter</kbd> accepts the highlighted grade.
-              </p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {GRADES.map(({ grade: g, label }) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => void grade(g)}
+                        className={g === outcome.suggested ? primaryClass : buttonClass}
+                        title={`${label} (${g})`}
+                      >
+                        {label} <span className="text-xs opacity-70">{g}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted">
+                    <kbd>Enter</kbd> accepts the highlighted grade.
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Solving a set on demand: its positions one after another in the set's order, each checked as in
+ * training (the written answer, or a move Stockfish finds as good), as practice: nothing is
+ * scheduled. The end says how it went and offers the missed positions again.
+ */
+function SetSolve({ setId }: { setId: string }) {
+  const [name, setName] = useState('');
+  const [all, setAll] = useState<SavedPosition[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // A round: the positions to solve this time (the whole set, or the ones missed), numbered so that
+  // each round starts afresh.
+  const [round, setRound] = useState<{ n: number; items: SavedPosition[] }>({ n: 0, items: [] });
+  const [results, setResults] = useState<SolveResult[] | null>(null);
+  const back = useCallback(() => navigate(`positions?set=${setId}`), [setId]);
+
+  useEffect(() => {
+    // The server lists up to 500 saves at a time; a set is not expected to be bigger.
+    api
+      .savedPositions({ setId, limit: 500 })
+      .then((d) => {
+        setAll(d.positions);
+        setRound({ n: 0, items: d.positions });
+      })
+      .catch((e: Error) => setError(e.message));
+    api
+      .sets()
+      .then((sets) => setName(sets.find((s) => s.id === setId)?.name ?? ''))
+      .catch(() => {});
+  }, [setId]);
+
+  const cards = useMemo<PracticeCard[]>(() => round.items.map((saved) => ({ kind: 'saved_position', card: null, saved })), [round]);
+  const again = (items: SavedPosition[]) => {
+    setResults(null);
+    setRound((r) => ({ n: r.n + 1, items }));
+  };
+
+  useEffect(() => {
+    if (!results) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') back();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [results, back]);
+
+  if (error || (all && all.length === 0)) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 p-10 text-center">
+        <p className="text-lg">{error ?? 'This set has no positions to solve yet.'}</p>
+        <button type="button" className={primaryClass} onClick={back}>
+          Back to the set
+        </button>
+      </div>
+    );
+  }
+  if (!all) return <p className="p-10 text-center text-muted">Loading the set…</p>;
+
+  if (!results) {
+    return (
+      <Session
+        key={round.n}
+        cards={cards}
+        practice={{ name }}
+        onEnd={(done) => (done.length ? setResults(done) : back())}
+      />
+    );
+  }
+
+  const firstTime = results.filter((r) => r.right).length;
+  const missed = results.filter((r) => !r.right).map((r) => r.saved);
+  return (
+    <div className="mx-auto max-w-lg space-y-5 p-10">
+      <div className="space-y-1">
+        <p className="text-sm text-muted">{name ? `Solving “${name}”` : 'Solving a set'}</p>
+        <h2 className="text-xl font-semibold">
+          {firstTime === results.length && results.length === round.items.length
+            ? results.length === 1
+              ? 'Right the first time.'
+              : `All ${results.length} right the first time.`
+            : `${firstTime} of ${results.length} right the first time.`}
+        </h2>
+        {results.length < round.items.length && (
+          <p className="text-sm text-muted">
+            Stopped after {results.length} of {round.items.length} positions.
+          </p>
+        )}
+      </div>
+      {missed.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Missed</p>
+          <ul className="list-disc space-y-0.5 pl-5 text-sm">
+            {missed.map((saved) => (
+              <li key={saved.id}>{saved.title}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {missed.length > 0 && (
+          <button type="button" autoFocus className={primaryClass} onClick={() => again(missed)}>
+            Again: the {missed.length === 1 ? 'one' : missed.length} missed
+          </button>
+        )}
+        <button type="button" autoFocus={missed.length === 0} className={missed.length ? buttonClass : primaryClass} onClick={() => again(all)}>
+          Again: the whole set
+        </button>
+        <button type="button" className={buttonClass} onClick={back}>
+          Back to the set <kbd>Esc</kbd>
+        </button>
       </div>
     </div>
   );

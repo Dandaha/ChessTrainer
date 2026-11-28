@@ -26,7 +26,11 @@ export function PositionsScreen() {
   const ws = useWorkspace();
   const route = useRoute();
   const [sets, setSets] = useState<PositionSetSummary[]>([]);
-  const [list, setList] = useState('all');
+  // `positions?set=<id>` opens a set (coming back from solving or presenting it).
+  const [list, setList] = useState(() => {
+    const set = route.params.get('set');
+    return set ? `set:${set}` : 'all';
+  });
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
   const [categories, setCategories] = useState<PositionCategory[]>([]);
@@ -108,6 +112,14 @@ export function PositionsScreen() {
           <>
             <button type="button" className={primaryClass} onClick={() => navigate(`present/${currentSet.id}`)}>
               Present
+            </button>
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => navigate(`training?set=${currentSet.id}`)}
+              title="Solve the set's positions one by one, as practice: your review schedule is not changed"
+            >
+              Solve
             </button>
             <button type="button" className={buttonClass} onClick={() => navigate(`print/${currentSet.id}`)}>
               Worksheet (print / PDF)
