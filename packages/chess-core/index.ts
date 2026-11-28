@@ -5,3 +5,4 @@ export * from './pgn.ts';
 export * from './board.ts';
 export * from './repertoire.ts';
 export * from './gameEnd.ts';
+export * from './timeControl.ts';

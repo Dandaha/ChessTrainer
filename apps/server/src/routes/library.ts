@@ -11,6 +11,7 @@ import {
   type ImportProgress,
   type ImportReport,
   importGamesInBatches,
+  timeControls,
   listGames,
   saveGame,
   updateGame,
@@ -44,6 +45,7 @@ import {
 import { type TagTarget, allTags } from '../../db/tags.ts';
 import { fetchChesscomGames, fetchLichessGames } from '../importers.ts';
 import { bodies, parseBody } from '../validate.ts';
+import { SPEEDS } from '@chess/chess-core';
 import { streamEvents, wantsEvents } from '../events.ts';
 import { backupDatabase, listBackups } from '../../db/backup.ts';
 
@@ -67,12 +69,15 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
       fen: q.fen,
       myColor: q.myColor as GameFilters['myColor'],
       source: q.source as GameFilters['source'],
+      speed: (SPEEDS as readonly string[]).includes(q.speed ?? '') ? (q.speed as GameFilters['speed']) : undefined,
+      timeControl: q.timeControl || undefined,
       sort: (GAME_SORTS as readonly string[]).includes(q.sort ?? '') ? (q.sort as GameFilters['sort']) : undefined,
       dir: q.dir === 'asc' || q.dir === 'desc' ? q.dir : undefined,
       limit: num(q.limit),
       offset: num(q.offset),
   });
   app.get('/api/games', async (req) => listGames(db, gameFilters(req.query as Query)));
+  app.get('/api/games/time-controls', async () => timeControls(db));
   // The whole filter or collection as one PGN file, or the games picked by id.
   app.get('/api/games/export', async (req) => exportGames(db, gameFilters(req.query as Query)));
   app.post('/api/games/export', async (req) => exportGames(db, { ids: parseBody(bodies.ids, req.body).ids }));

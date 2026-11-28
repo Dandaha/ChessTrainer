@@ -64,6 +64,13 @@
       "when": 1795856333035,
       "tag": "0008_game_position_hashes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795858678302,
+      "tag": "0009_game_speed",
+      "breakpoints": true
     }
   ]
 }

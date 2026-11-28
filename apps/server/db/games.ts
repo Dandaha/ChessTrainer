@@ -10,6 +10,8 @@ import {
   positionHash,
   positionKey,
   readPgnGames,
+  type Speed,
+  speedOf,
   writePgn,
 } from '@chess/chess-core';
 import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from 'drizzle-orm';
@@ -33,6 +35,8 @@ export interface GameSummary {
   openingName: string | null;
   myColor: 'white' | 'black' | null;
   source: GameSource;
+  timeControl: string | null;
+  speed: Speed | null;
   tags: string[];
   createdAt: string;
 }
@@ -58,6 +62,9 @@ export interface GameFilters {
   fen?: string;
   myColor?: 'white' | 'black';
   source?: GameSource;
+  speed?: Speed;
+  /** The TimeControl tag exactly, such as "180+2". */
+  timeControl?: string;
   /** A column to sort by; the newest first when none is given (a collection: its own order). */
   sort?: GameSort;
   dir?: 'asc' | 'desc';
@@ -95,6 +102,8 @@ const summaryColumns = {
   openingName: games.openingName,
   myColor: games.myColor,
   source: games.source,
+  timeControl: games.timeControl,
+  speed: games.speed,
   createdAt: games.createdAt,
 };
 
@@ -150,6 +159,8 @@ function columnsFor(game: Game) {
     result: game.result,
     date: header(game, 'Date') ?? header(game, 'UTCDate'),
     time: header(game, 'UTCTime') ?? header(game, 'Time'),
+    timeControl: header(game, 'TimeControl'),
+    speed: speedOf(header(game, 'TimeControl'), header(game, 'Event')),
     event: header(game, 'Event'),
     eco: header(game, 'ECO'),
     openingName: header(game, 'Opening'),
@@ -376,6 +387,8 @@ function conditions(db: Db, f: GameFilters): SQL[] | null {
   if (f.dateFrom) where.push(sql`${games.date} >= ${f.dateFrom.replace(/-/g, '.')}`);
   if (f.dateTo) where.push(sql`${games.date} <= ${`${f.dateTo.replace(/-/g, '.')}~`}`);
   if (f.myColor) where.push(eq(games.myColor, f.myColor));
+  if (f.speed) where.push(eq(games.speed, f.speed));
+  if (f.timeControl) where.push(eq(games.timeControl, f.timeControl));
   if (f.source) where.push(eq(games.source, f.source));
   if (f.collectionId) {
     where.push(
@@ -562,4 +575,16 @@ export function gamesAtPosition(
 export function softDeleteGames(db: Db, ids: string[]): void {
   if (!ids.length) return;
   db.update(games).set({ deletedAt: new Date().toISOString() }).where(inArray(games.id, ids)).run();
+}
+
+/** The time controls in the library, most played first, for the filter. */
+export function timeControls(db: Db): { timeControl: string; speed: Speed | null; games: number }[] {
+  return db
+    .select({ timeControl: games.timeControl, speed: games.speed, games: sql<number>`count(*)` })
+    .from(games)
+    .where(and(isNull(games.deletedAt), isNotNull(games.timeControl)))
+    .groupBy(games.timeControl)
+    .orderBy(sql`count(*) desc`)
+    .limit(40)
+    .all() as { timeControl: string; speed: Speed | null; games: number }[];
 }

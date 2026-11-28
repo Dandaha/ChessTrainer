@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 import { type BetterSQLite3Database, drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { backupDatabase, hasData, pendingMigrations } from './backup.ts';
-import { positionHash } from '@chess/chess-core';
+import { positionHash, speedOf } from '@chess/chess-core';
 import { fold } from './search.ts';
 import * as schema from './schema.ts';
 
@@ -34,6 +34,10 @@ export function openDatabase(path: string = databasePath()): { db: Db; close: ()
   sqlite.function('fold', { deterministic: true }, (value: unknown) => (typeof value === 'string' ? fold(value) : value));
   // The game index's hash of a position key (migration 0008 fills the index with it).
   sqlite.function('position_hash', { deterministic: true, safeIntegers: true }, (key: unknown) => positionHash(String(key)));
+  // How fast a game was played, from its time control (migration 0009 fills the column with it).
+  sqlite.function('game_speed', { deterministic: true }, (tc: unknown, event: unknown) =>
+    speedOf(typeof tc === 'string' ? tc : null, typeof event === 'string' ? event : null),
+  );
   return {
     db: drizzle(sqlite, { schema }),
     close: () => {

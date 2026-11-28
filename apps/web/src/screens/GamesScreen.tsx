@@ -1,3 +1,4 @@
+import { formatTimeControl } from '@chess/chess-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type CollectionSummary, type GameSort, type GameSummary, type ImportProgress, type ImportReport, api } from '../api.ts';
 import { Modal } from '../Dialogs.tsx';
@@ -18,9 +19,20 @@ interface Filters {
   dateTo: string;
   tag: string;
   myColor: string;
+  speed: string;
+  timeControl: string;
 }
 
-const EMPTY: Filters = { q: '', player: '', opening: '', result: '', dateFrom: '', dateTo: '', tag: '', myColor: '' };
+const EMPTY: Filters = { q: '', player: '', opening: '', result: '', dateFrom: '', dateTo: '', tag: '', myColor: '', speed: '', timeControl: '' };
+
+const SPEED_LABELS: Record<string, string> = {
+  ultrabullet: 'UltraBullet',
+  bullet: 'Bullet',
+  blitz: 'Blitz',
+  rapid: 'Rapid',
+  classical: 'Classical',
+  correspondence: 'Correspondence',
+};
 
 export function GamesScreen() {
   const ws = useWorkspace();
@@ -36,6 +48,7 @@ export function GamesScreen() {
   const [importing, setImporting] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [editing, setEditing] = useState<GameSummary | null>(null);
+  const [controls, setControls] = useState<{ timeControl: string; speed: string | null; games: number }[]>([]);
   // The row the keyboard is on: arrows move it, Enter opens, Space selects, E edits, Delete deletes.
   const [focusRow, setFocusRow] = useState(0);
   const rows = useRef<(HTMLTableRowElement | null)[]>([]);
@@ -45,6 +58,7 @@ export function GamesScreen() {
 
   useEffect(() => {
     api.collections().then(setCollections).catch(() => {});
+    api.timeControls().then(setControls).catch(() => {});
   }, [refresh]);
 
   useEffect(() => {
@@ -228,6 +242,26 @@ export function GamesScreen() {
               <option value="white">I had White</option>
               <option value="black">I had Black</option>
             </select>
+            <select aria-label="Speed" className={inputClass} value={filters.speed} onChange={(e) => setFilter('speed', e.target.value)}>
+              <option value="">Any speed</option>
+              {Object.entries(SPEED_LABELS).map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            {controls.length > 0 && (
+              <select aria-label="Time control" className={inputClass} value={filters.timeControl} onChange={(e) => setFilter('timeControl', e.target.value)}>
+                <option value="">Any time control</option>
+                {controls
+                  .filter((c) => !filters.speed || c.speed === filters.speed)
+                  .map((c) => (
+                    <option key={c.timeControl} value={c.timeControl}>
+                      {formatTimeControl(c.timeControl)} ({c.games})
+                    </option>
+                  ))}
+              </select>
+            )}
             <input aria-label="From date" type="date" className={inputClass} value={filters.dateFrom} onChange={(e) => setFilter('dateFrom', e.target.value)} />
             <input aria-label="To date" type="date" className={inputClass} value={filters.dateTo} onChange={(e) => setFilter('dateTo', e.target.value)} />
             <input aria-label="Tag" className={`${inputClass} w-28`} placeholder="Tag" value={filters.tag} onChange={(e) => setFilter('tag', e.target.value)} />
@@ -370,6 +404,11 @@ export function GamesScreen() {
                         {g.openingName}
                       </td>
                       <td className="max-w-48 truncate px-2 py-1.5 text-muted">
+                        {g.timeControl && formatTimeControl(g.timeControl) && (
+                          <span className="mr-1.5 tabular-nums" title={g.speed ? SPEED_LABELS[g.speed] : undefined}>
+                            {formatTimeControl(g.timeControl)}
+                          </span>
+                        )}
                         {g.event}
                         {g.tags.map((t) => (
                           <span key={t} className="ml-1 rounded bg-surface-2 px-1 text-xs">
