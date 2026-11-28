@@ -97,6 +97,8 @@ interface Draft {
   at?: string[];
   /** Which side is at the bottom, kept over a reload too. */
   orientation?: Color;
+  /** Saved as it is (not edited since it was opened or saved): still so after a restart. */
+  clean?: boolean;
 }
 
 function readSavedDraft(): Draft | null {
@@ -159,8 +161,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState<{ text: string; error: boolean; action?: ToastAction } | null>(null);
 
   useEffect(() => {
-    writeDraft(JSON.stringify({ pgn: writePgn(g.game), linked, at: g.path.slice(1).map((n) => n.san), orientation } satisfies Draft));
-  }, [g.game, g.version, linked, g.current.id, orientation]);
+    writeDraft(
+      JSON.stringify({ pgn: writePgn(g.game), linked, at: g.path.slice(1).map((n) => n.san), orientation, clean: !g.dirty } satisfies Draft),
+    );
+  }, [g.game, g.version, g.dirty, linked, g.current.id, orientation]);
 
   // After a reload, back to the move that was on the board.
   useEffect(() => {
@@ -171,6 +175,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       node = next;
     }
     if (node !== g.game.root) g.goTo(node.id);
+    // A game that was saved and not changed comes back saved, not with "unsaved changes".
+    if (draft.current?.clean) g.markClean();
     // Once, for the game read from the draft.
   }, []);
 

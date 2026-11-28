@@ -185,3 +185,15 @@ describe('redo on the board', () => {
     expect(await screen.findByText('Nd2 could be Nbd2 or Nfd2: say which piece.')).toBeTruthy();
   });
 });
+
+describe('after a restart', () => {
+  it('brings back a saved library game as saved, not with unsaved changes', async () => {
+    const { writeDraft } = await import('../src/storage.ts');
+    writeDraft(JSON.stringify({ pgn: '[White "Anna"]\n[Black "Bob"]\n\n1. e4 e5 *', linked: { id: 'g1', label: 'Anna – Bob' }, at: ['e4'], clean: true }));
+    startServer();
+    render(<App />);
+    go('#/board');
+    expect(await screen.findByText('· in library')).toBeTruthy();
+    localStorage.clear();
+  });
+});
