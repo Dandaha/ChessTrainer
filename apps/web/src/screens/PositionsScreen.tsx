@@ -49,6 +49,16 @@ export function PositionsScreen() {
     // A link that only opens a position (positions?open=…) keeps the list on screen.
     if (route.params.get('open') && fromRoute === 'all') return;
     setList((current) => (current === fromRoute ? current : fromRoute));
+    // Back to the address of a set deleted meanwhile: all positions, not a ghost of the set. Asked
+    // afresh, since a set made a moment ago is not in the list on screen yet.
+    if (fromRoute.startsWith('set:'))
+      api
+        .sets()
+        .then((all) => {
+          setSets(all);
+          if (!all.some((set) => `set:${set.id}` === fromRoute)) chooseList('all');
+        })
+        .catch(() => {});
   }, [route]);
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
@@ -500,7 +510,14 @@ function PositionDetail({
           <label className="block space-y-1">
             <span className="text-xs text-muted">Key idea</span>
             {showIdea || !saved.keyIdea ? (
-              <input aria-label="Key idea" className={field} defaultValue={saved.keyIdea ?? ''} onBlur={(e) => void update({ keyIdea: e.target.value || null })} />
+              <input
+                aria-label="Key idea"
+                className={field}
+                key={`idea-${saved.keyIdea ?? ''}-${fieldsKey}`}
+                defaultValue={saved.keyIdea ?? ''}
+                maxLength={10000}
+                onBlur={(e) => e.target.value !== (saved.keyIdea ?? '') && void update({ keyIdea: e.target.value || null })}
+              />
             ) : (
               <div className="rounded-md border border-dashed border-line px-2.5 py-1.5 text-xs text-muted">Hidden</div>
             )}
@@ -508,7 +525,13 @@ function PositionDetail({
           <label className="block space-y-1">
             <span className="text-xs text-muted">Answer: a move, or a line drilled move by move</span>
             {showIdea || !saved.answer ? (
-              <AnswerInput fen={saved.fen} initial={saved.answer ?? ''} className={field} onSave={(answer) => void update({ answer: answer || null })} />
+              <AnswerInput
+                key={`answer-${saved.answer ?? ''}-${fieldsKey}`}
+                fen={saved.fen}
+                initial={saved.answer ?? ''}
+                className={field}
+                onSave={(answer) => answer !== (saved.answer ?? '') && void update({ answer: answer || null })}
+              />
             ) : (
               <div className="rounded-md border border-dashed border-line px-2.5 py-1.5 text-xs text-muted">Hidden</div>
             )}

@@ -19,7 +19,7 @@ import {
   trainingCards,
 } from './schema.ts';
 import { ensurePositionCategory } from './categories.ts';
-import { dropTaggings, setTags, tagsFor } from './tags.ts';
+import { dropTaggings, setTags, tagsFor, cleanTagName } from './tags.ts';
 import { containsText } from './search.ts';
 
 /**
@@ -357,7 +357,7 @@ export function listSavedPositions(db: Db, f: SavedPositionFilters = {}): { tota
           .select({ id: taggings.targetId })
           .from(taggings)
           .innerJoin(tags, eq(tags.id, taggings.tagId))
-          .where(and(eq(taggings.targetType, 'saved_position'), eq(tags.name, f.tag.trim().toLowerCase()))),
+          .where(and(eq(taggings.targetType, 'saved_position'), eq(tags.name, cleanTagName(f.tag)))),
       ),
     );
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { openDatabase, runMigrations } from '../db/client.ts';
 import { createSavedPosition, emptyTrash, listTrash, restoreAll, softDelete } from '../db/library.ts';
-import { importGames, listGames } from '../db/games.ts';
+import { importGames, listGames, updateGame } from '../db/games.ts';
 import { buildApp } from '../src/app.ts';
 
 function freshDb() {
@@ -113,5 +113,26 @@ describe('my games and collections', () => {
     const { createCollection, listCollections } = await import('../db/library.ts');
     for (const name of ['Lesson 10', 'lesson 2', 'Écoles', 'Beta']) createCollection(db, { name });
     expect(listCollections(db).map((c) => c.name)).toEqual(['Beta', 'Écoles', 'lesson 2', 'Lesson 10']);
+  });
+});
+
+describe('second-round checks', () => {
+  it('stores tags without a leading #, finds them typed either way, and finds nothing for From after To', () => {
+    const db = freshDb();
+    const [id] = importGames(db, '[White "T"]\n[Date "2024.??.??"]\n\n1. e4 *\n', { source: 'file' }).gameIds;
+    updateGame(db, id!, { tags: ['#Blunder', ' ##Endgame '] });
+    expect(listGames(db).games[0]!.tags.sort()).toEqual(['blunder', 'endgame']);
+    expect(listGames(db, { tag: '#blunder' }).total).toBe(1);
+    expect(listGames(db, { dateFrom: '2024-05-01', dateTo: '2024-01-01' }).total).toBe(0);
+  });
+
+  it('marks my colour only for a name that is new, so a game set to Neither stays so', async () => {
+    const app = buildApp(freshDb());
+    const { gameIds } = (await app.inject({ method: 'POST', url: '/api/games/import', payload: { pgn: game('Me') } })).json();
+    await app.inject({ method: 'PUT', url: '/api/settings', payload: { lichessUsername: 'Me' } });
+    await app.inject({ method: 'PUT', url: `/api/games/${gameIds[0]}`, payload: { myColor: null } });
+    await app.inject({ method: 'PUT', url: '/api/settings', payload: { lichessUsername: 'Me', chesscomUsername: 'Other' } });
+    expect((await app.inject({ method: 'GET', url: `/api/games/${gameIds[0]}` })).json().myColor).toBeNull();
+    await app.close();
   });
 });

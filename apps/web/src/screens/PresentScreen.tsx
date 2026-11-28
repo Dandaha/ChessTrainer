@@ -75,7 +75,14 @@ export function PresentScreen({ setId }: { setId: string }) {
         <span className="shrink-0 whitespace-nowrap tabular-nums">
           {index + 1} / {items.length}
         </span>
-        <span className="ml-auto hidden shrink-0 lg:inline">
+        <button
+          type="button"
+          className="ml-auto shrink-0 rounded-md border border-line px-2.5 py-1 hover:bg-surface-2 lg:order-last"
+          onClick={() => navigate(`positions?set=${setId}`)}
+        >
+          Back to the set
+        </button>
+        <span className="hidden shrink-0 lg:inline">
           <kbd>←</kbd> <kbd>→</kbd> move between positions · <kbd>Enter</kbd> reveal · <kbd>R</kbd> reset · <kbd>Esc</kbd> leave
         </span>
       </div>

@@ -50,7 +50,9 @@ export async function askNewCategory(
     const name = text.trim();
     if (!name) return;
     if (pickExisting) {
-      const existing = (await calls.list()).find((c) => c.name.toLowerCase() === name.toLowerCase());
+      // Compared as the server compares names: no case, single spaces.
+      const same = (a: string) => a.toLowerCase().replace(/\s+/g, ' ');
+      const existing = (await calls.list()).find((c) => same(c.name) === same(name));
       if (existing) {
         done.category = existing;
         return;

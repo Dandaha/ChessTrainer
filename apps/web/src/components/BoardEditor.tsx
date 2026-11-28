@@ -162,7 +162,7 @@ export function BoardEditor({
   );
 
   return (
-    <Modal title="Set up a position" onClose={onClose}>
+    <Modal title="Set up a position" onClose={onClose} dirty={result !== fen}>
       <div className="flex flex-col gap-4 sm:flex-row">
         <div className="w-full max-w-80 shrink-0 space-y-2">
           <div className="flex flex-wrap gap-0.5">{PALETTE.slice(0, 6).map(paletteButton)}</div>

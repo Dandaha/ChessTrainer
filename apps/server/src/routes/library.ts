@@ -285,9 +285,14 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
   app.get('/api/settings', async () => getSettings(db));
   app.put('/api/settings', async (req) => {
     const changes = parseBody(bodies.settings, req.body);
+    const before = getSettings(db);
     const settings = updateSettings(db, changes);
-    // A name of mine set now marks the games already in the library that it played.
-    if (changes.lichessUsername || changes.chesscomUsername) fillMyColor(db, myNames());
+    // A name of mine set now marks the games already in the library that it played: only a new name,
+    // so saving Settings again never undoes a game marked "Neither" by hand.
+    const fresh = (['lichessUsername', 'chesscomUsername'] as const)
+      .map((key) => changes[key])
+      .filter((name, i): name is string => typeof name === 'string' && name.trim() !== '' && name !== before[(['lichessUsername', 'chesscomUsername'] as const)[i]!]);
+    if (fresh.length) fillMyColor(db, fresh);
     return settings;
   });
   app.get('/api/trash', async () => listTrash(db));

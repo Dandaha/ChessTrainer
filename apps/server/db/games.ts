@@ -18,7 +18,7 @@ import { classifyOpening } from '@chess/chess-core/openings';
 import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { collectionGames, collections, gamePositions, games, taggings, tags } from './schema.ts';
-import { setTags, tagsFor } from './tags.ts';
+import { setTags, tagsFor, cleanTagName } from './tags.ts';
 import { containsWords } from './search.ts';
 
 export type GameSource = 'file' | 'lichess' | 'chesscom' | 'manual';
@@ -407,6 +407,8 @@ function conditions(db: Db, f: GameFilters): SQL[] | null {
     );
   }
   if (f.result) where.push(eq(games.result, f.result));
+  // From after To: no day is in between, whatever the games' dates.
+  if (f.dateFrom && f.dateTo && f.dateFrom > f.dateTo) return null;
   // A date with unknown parts ("2024.??.??") is somewhere in its year: it matches when that could
   // fall in the range, its latest possible day on or after From, its earliest on or before To.
   if (f.dateFrom) where.push(sql`replace(${games.date}, '??', '99') >= ${f.dateFrom.replace(/-/g, '.')}`);
@@ -414,7 +416,9 @@ function conditions(db: Db, f: GameFilters): SQL[] | null {
   if (f.myColor) where.push(eq(games.myColor, f.myColor));
   if (f.speed) where.push(eq(games.speed, f.speed));
   if (f.importId) where.push(eq(games.importId, f.importId));
-  if (f.since) where.push(sql`${games.createdAt} >= ${f.since}`);
+  // The last import of a library from before imports had ids: games that came in since it started,
+  // not games saved from the board since then.
+  if (f.since) where.push(sql`${games.createdAt} >= ${f.since}`, sql`${games.source} <> 'manual'`);
   if (f.timeControl) where.push(eq(games.timeControl, f.timeControl));
   if (f.source) where.push(eq(games.source, f.source));
   if (f.collectionId) {
@@ -433,7 +437,7 @@ function conditions(db: Db, f: GameFilters): SQL[] | null {
           .select({ id: taggings.targetId })
           .from(taggings)
           .innerJoin(tags, eq(tags.id, taggings.tagId))
-          .where(and(eq(taggings.targetType, 'game'), eq(tags.name, f.tag.trim().toLowerCase()))),
+          .where(and(eq(taggings.targetType, 'game'), eq(tags.name, cleanTagName(f.tag)))),
       ),
     );
   }

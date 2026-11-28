@@ -12,6 +12,8 @@ import { readSessionView, writeSessionView } from '../storage.ts';
 import { OUTCOME_CLASS, formatPgnDate, myOutcome } from '../gameText.ts';
 
 const LIMIT = 50;
+/** A name kept apart from the text around it, whatever its writing direction (Hebrew, Arabic). */
+const isolate = (name: string) => `\u2068${name}\u2069`;
 /** Numbers as the import progress writes them: 13,041. */
 const count = (n: number) => n.toLocaleString('en');
 /** The sidebar entry for the games of the last import, beside the collections. */
@@ -878,7 +880,7 @@ function ImportGamesDialog({
   };
 
   return (
-    <Modal title="Import games" onClose={onClose}>
+    <Modal title="Import games" onClose={onClose} dirty={!!text.trim()}>
       <div className="mb-3 flex gap-1 text-sm" role="tablist">
         {(
           [
@@ -1092,7 +1094,7 @@ function GameDetailsDialog({ game, onClose, onSaved }: { game: GameSummary; onCl
   };
 
   return (
-    <Modal title={`${game.white ?? '?'} – ${game.black ?? '?'}`} onClose={onClose}>
+    <Modal title={`${isolate(game.white ?? '?')} – ${isolate(game.black ?? '?')}`} onClose={onClose}>
       <form
         className="space-y-3 text-sm"
         onSubmit={(e) => {
@@ -1161,8 +1163,9 @@ function DuplicatesDialog({ onClose, onRemoved }: { onClose(): void; onRemoved(i
     api.duplicates().then(setFound).catch((e: Error) => setError(e.message));
   }, []);
 
+  // Each name isolated (FSI … PDI), so a Hebrew or Arabic name does not turn the row around.
   const label = (g: GameSummary) =>
-    `${g.white ?? '?'} – ${g.black ?? '?'}, ${g.result === '1/2-1/2' ? '½-½' : g.result}${g.date ? `, ${g.date.replace(/\.\?\?/g, '')}` : ''}`;
+    `${isolate(g.white ?? '?')} – ${isolate(g.black ?? '?')}, ${g.result === '1/2-1/2' ? '½-½' : g.result}${g.date ? `, ${g.date.replace(/\.\?\?/g, '')}` : ''}`;
 
   const remove = async () => {
     if (!found) return;

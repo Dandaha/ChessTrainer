@@ -663,14 +663,16 @@ function Session({
   return (
     <div className="flex h-full flex-col" data-overlay>
       <div className="flex items-center gap-4 border-b border-line bg-surface px-5 py-2 text-sm">
-        <span className="font-semibold">{practice ? `Solving${practice.name ? ` “${practice.name}”` : ''}` : 'Training'}</span>
-        <span className="tabular-nums text-muted">
+        <span className="min-w-0 truncate font-semibold" title={practice?.name || undefined}>
+          {practice ? `Solving${practice.name ? ` “${practice.name}”` : ''}` : 'Training'}
+        </span>
+        <span className="shrink-0 whitespace-nowrap tabular-nums text-muted">
           {index + 1} / {cards.length} · {right} right
         </span>
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
           <div className="h-full bg-accent" style={{ width: `${(index / cards.length) * 100}%` }} />
         </div>
-        <button type="button" className="text-muted hover:text-text" onClick={() => stop()}>
+        <button type="button" className="shrink-0 whitespace-nowrap text-muted hover:text-text" onClick={() => stop()}>
           Stop <kbd>Esc</kbd>
         </button>
       </div>

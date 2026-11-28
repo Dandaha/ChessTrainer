@@ -48,7 +48,7 @@ function tables(kind: CategoryKind) {
 function cleanName(name: string): string {
   const clean = name.trim().replace(/\s+/g, ' ');
   if (!clean) throw new CategoryError('A category needs a name.');
-  if (clean.length > MAX_LENGTH) throw new CategoryError(`Keep the name under ${MAX_LENGTH} characters.`);
+  if (clean.length > MAX_LENGTH) throw new CategoryError(`The name is too long: at most ${MAX_LENGTH} characters.`);
   return clean;
 }
 

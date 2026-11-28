@@ -5,8 +5,13 @@ import { TAG_TARGETS, taggings, tags } from './schema.ts';
 export type TagTarget = (typeof TAG_TARGETS)[number];
 
 /** Tag names as people type them: trimmed, lower case, no duplicates, no empties. */
+/** Tags as stored: trimmed, lower case, without a leading "#" (the lists show one before each tag). */
 export function cleanTagNames(names: string[]): string[] {
-  return [...new Set(names.map((n) => n.trim().toLowerCase()).filter(Boolean))];
+  return [...new Set(names.map(cleanTagName).filter(Boolean))];
+}
+
+export function cleanTagName(name: string): string {
+  return name.trim().replace(/^#+/, '').trim().toLowerCase();
 }
 
 /** Replaces the tags on one item. */

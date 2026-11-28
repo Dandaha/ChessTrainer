@@ -70,10 +70,14 @@ export function Modal({
   onClose,
   children,
   size = 'lg',
+  dirty = false,
 }: {
   title: string;
   onClose(): void;
   children: ReactNode;
+  /** Changed in ways no typing shows (pieces placed on a board, a file dropped): a click outside then
+   * leaves it open too. */
+  dirty?: boolean;
   /** sm for a question or a name, md for a form, lg (the default) for a PGN or a board. */
   size?: 'sm' | 'md' | 'lg';
 }) {
@@ -91,7 +95,7 @@ export function Modal({
         pressedOutside.current = e.target === e.currentTarget;
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget && pressedOutside.current && !changed.current) onClose();
+        if (e.target === e.currentTarget && pressedOutside.current && !changed.current && !dirty) onClose();
       }}
       data-overlay
     >
