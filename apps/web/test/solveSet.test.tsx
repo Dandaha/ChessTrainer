@@ -11,8 +11,10 @@ beforeEach(() => {
   vi.stubEnv('STOCKFISH_PATH', '');
 });
 
-function type(move: string) {
-  const input = screen.getByLabelText('Type your move');
+// Buttons rather than keys after each result: a key pressed the moment a result shows can reach the
+// listener of the state before it (the training tests cover the keys).
+async function type(move: string) {
+  const input = await screen.findByLabelText('Type your move');
   fireEvent.change(input, { target: { value: move } });
   fireEvent.keyDown(input, { key: 'Enter' });
 }
@@ -38,23 +40,23 @@ describe('solving a set', () => {
 
     // Right, then Next.
     await screen.findByRole('heading', { name: 'First' });
-    type('Rd8#');
+    await type('Rd8#');
     expect(await screen.findByText('Right: Rd8# is your answer.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Good/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^Next/ }));
 
     // Wrong: Try again finds it, but it stays missed.
     await screen.findByRole('heading', { name: 'Second' });
-    type('g3');
+    await type('g3');
     expect(await screen.findByText('Your answer was 1. Rd8#; you played g3.')).toBeTruthy();
-    fireEvent.keyDown(window, { key: 't' });
-    type('Rd8#');
+    fireEvent.click(screen.getByRole('button', { name: /Try again/ }));
+    await type('Rd8#');
     expect(await screen.findByText('Right this time: Rd8#.')).toBeTruthy();
-    fireEvent.keyDown(window, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: /^Next/ }));
 
     // No answer and no engine: I say whether I had it.
     await screen.findByRole('heading', { name: 'No answer' });
-    type('g3');
+    await type('g3');
     expect(await screen.findByText('Did you have it?')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Try again/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /I had it/ }));
@@ -64,7 +66,7 @@ describe('solving a set', () => {
     expect(screen.getByRole('listitem').textContent).toBe('Second');
     fireEvent.click(screen.getByRole('button', { name: 'Again: the one missed' }));
     await screen.findByRole('heading', { name: 'Second' });
-    type('Rd8#');
+    await type('Rd8#');
     await screen.findByText('Right: Rd8# is your answer.');
     fireEvent.click(screen.getByRole('button', { name: /^Finish/ }));
     expect(await screen.findByRole('heading', { name: 'Right the first time.' })).toBeTruthy();
@@ -73,8 +75,8 @@ describe('solving a set', () => {
     const stats = (await app.inject({ method: 'GET', url: '/api/training/stats' })).json();
     expect(stats.positions.reviews).toBe(0);
 
-    // Escape goes back to the set.
-    fireEvent.keyDown(window, { key: 'Escape' });
+    // Back to the set.
+    fireEvent.click(screen.getByRole('button', { name: /Back to the set/ }));
     await waitFor(() => expect(window.location.hash).toBe(`#/positions?set=${setId}`));
     expect(await screen.findByRole('heading', { name: 'Mates' })).toBeTruthy();
   });
@@ -89,11 +91,11 @@ describe('solving a set', () => {
     window.location.hash = `#/training?set=${setId}`;
     render(<App />);
     await screen.findByRole('heading', { name: 'A' });
-    type('Rd8#');
+    await type('Rd8#');
     await screen.findByText('Right: Rd8# is your answer.');
-    fireEvent.keyDown(window, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: /^Next/ }));
     await screen.findByRole('heading', { name: 'B' });
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: /^Stop/ }));
     expect(await screen.findByText('Stopped after 1 of 2 positions.')).toBeTruthy();
     expect(screen.getByRole('heading', { name: '1 of 1 right the first time.' })).toBeTruthy();
 
