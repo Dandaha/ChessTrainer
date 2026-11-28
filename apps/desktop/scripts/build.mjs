@@ -74,7 +74,16 @@ writeFileSync(
 
 if (process.argv.includes('--install')) {
   console.log(`4/4 Installing the database driver for Electron ${electronVersion}`);
-  run('npm install --omit=dev --no-audit --no-fund --no-package-lock', stage, {
+  // From a committed lockfile, so the driver's own dependencies are the same in every build.
+  const lock = readJson(join(desktop, 'driver', 'package-lock.json'));
+  const locked = lock.packages['node_modules/better-sqlite3']?.version;
+  if (locked !== serverPkg.dependencies['better-sqlite3']) {
+    throw new Error(
+      `apps/desktop/driver/package-lock.json has better-sqlite3 ${locked}, the server uses ${serverPkg.dependencies['better-sqlite3']}: update the version in apps/desktop/driver/package.json and run npm install --package-lock-only there.`,
+    );
+  }
+  cpSync(join(desktop, 'driver', 'package-lock.json'), join(stage, 'package-lock.json'));
+  run('npm ci --omit=dev --no-audit --no-fund', stage, {
     npm_config_runtime: 'electron',
     npm_config_target: electronVersion,
     npm_config_disturl: 'https://electronjs.org/headers',
@@ -85,6 +94,8 @@ if (process.argv.includes('--install')) {
     `node ${JSON.stringify(join(stage, 'node_modules', 'prebuild-install', 'bin.js'))} --runtime=electron --target=${electronVersion} --arch=${process.arch} --verbose`,
     join(stage, 'node_modules', 'better-sqlite3'),
   );
+  // Packaging then sees the folder exactly as before the lockfile was used.
+  rmSync(join(stage, 'package-lock.json'));
 } else {
   console.log('4/4 Skipped installing the database driver (pass --install for the installer)');
 }

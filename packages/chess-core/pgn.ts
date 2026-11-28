@@ -114,7 +114,9 @@ class Lexer {
         const match = /^\$(\d+)/.exec(text.slice(this.pos, this.pos + 6));
         if (!match) throw new PgnParseError('"$" must be followed by a NAG number', this.line);
         this.pos += match[0].length;
-        return { kind: 'nag', nag: Number(match[1]), line: this.line };
+        // NAGs run from 1 to 255 ($0 means none); anything else is dropped.
+        const nag = Number(match[1]);
+        if (nag >= 1 && nag <= 255) return { kind: 'nag', nag, line: this.line };
       } else {
         const start = this.pos;
         while (this.pos < text.length && !WORD_END.test(text[this.pos]!)) this.pos += 1;
@@ -400,8 +402,13 @@ function writeHeaders(game: Game): string {
     if (name === 'Result') value = game.result;
     lines.push(tagLine(name, value));
   }
+  // A game from a set-up position says so: SetUp "1" and then the FEN, as the standard asks.
+  const fen = byName.get('FEN') ?? (game.root.fen === START_FEN ? undefined : game.root.fen);
+  if (fen) lines.push(tagLine('SetUp', '1'), tagLine('FEN', fen));
   for (const h of game.headers) {
-    if (!(SEVEN_TAG_ROSTER as readonly string[]).includes(h.name)) lines.push(tagLine(h.name, h.value));
+    if (!(SEVEN_TAG_ROSTER as readonly string[]).includes(h.name) && h.name !== 'SetUp' && h.name !== 'FEN') {
+      lines.push(tagLine(h.name, h.value));
+    }
   }
   return lines.join('\n');
 }

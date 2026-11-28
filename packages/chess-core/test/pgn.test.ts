@@ -229,6 +229,20 @@ describe('writePgn', () => {
   });
 });
 
+describe('tags and NAGs the standard limits', () => {
+  it('writes SetUp "1" before the FEN of a game from a set-up position', () => {
+    const game = parseGame('[FEN "8/8/8/4k3/8/8/4P3/4K3 w - - 0 1"]\n\n1. e4+ *');
+    const tags = writePgn(game).split('\n').filter((l) => l.startsWith('['));
+    expect(tags.slice(7)).toEqual(['[SetUp "1"]', '[FEN "8/8/8/4k3/8/8/4P3/4K3 w - - 0 1"]']);
+    expect(writePgn(parseGame('1. e4 *'))).not.toContain('SetUp');
+  });
+
+  it('drops NAGs outside 1 to 255', () => {
+    const game = parseGame('1. e4 $0 $256 $1 $999 $255 *');
+    expect(mainlineFrom(game.root)[1]!.nags).toEqual([1, 255]);
+  });
+});
+
 describe('a broken game in a file', () => {
   it('costs only that game: a broken tag does not leave the rest of its header behind as a game', () => {
     const text = [

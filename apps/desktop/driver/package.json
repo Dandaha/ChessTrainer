@@ -1,0 +1,9 @@
+{
+  "name": "chess-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Only for package-lock.json beside it: the exact database driver, and its dependencies, the installer ships. After changing better-sqlite3's version in apps/server/package.json, set it here too and run npm install --package-lock-only in this folder.",
+  "dependencies": {
+    "better-sqlite3": "12.11.1"
+  }
+}
