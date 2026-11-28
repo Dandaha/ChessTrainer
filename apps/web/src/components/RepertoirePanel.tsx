@@ -26,6 +26,8 @@ export function RepertoireTab({
   const [here, setHere] = useState<Awaited<ReturnType<typeof api.repertoiresAt>> | null>(null);
   const [checks, setChecks] = useState<{ repertoire: RepertoireSummary; result: RepertoireCheck; message: string }[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The repertoires of the side the board faces, as the game check below.
+  const shown = here && myColor ? here.filter((h) => h.repertoire.color === myColor) : here;
 
   useEffect(() => {
     let live = true;
@@ -72,12 +74,15 @@ export function RepertoireTab({
           ))}
         </div>
       )}
-      {here && here.length === 0 && (
+      {shown && shown.length === 0 && (
         <p className="text-muted">
-          This position is not in a repertoire. Press <kbd>R</kbd> to add the line that leads here.
+          {here && here.length > 0
+            ? `This position is only in your ${myColor === 'white' ? 'Black' : 'White'} repertoires: flip the board (F) to see them.`
+            : 'This position is not in a repertoire.'}{' '}
+          Press <kbd>R</kbd> to add the line that leads here.
         </p>
       )}
-      {here?.map(({ repertoire, moves, reached }) => (
+      {shown?.map(({ repertoire, moves, reached }) => (
         <div key={repertoire.id} className="space-y-1">
           <div className="flex items-baseline justify-between">
             <span className="font-medium">

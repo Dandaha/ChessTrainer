@@ -66,7 +66,11 @@ function SettingInput({
   const saved = useRef(initial);
   const id = useId();
   const commit = () => {
-    if (value.trim() === saved.current.trim()) return;
+    if (value.trim() === saved.current.trim()) {
+      // Back to what is saved: nothing to save, and nothing wrong any more.
+      if (status?.kind === 'error') void run(() => Promise.resolve());
+      return;
+    }
     const problem = check(value.trim());
     if (problem) return void run(() => Promise.reject(new Error(problem)));
     void run(async () => {
@@ -238,7 +242,7 @@ export function SettingsScreen() {
               </div>
             )}
           </div>
-          <p className="text-sm text-muted">Deleted games, positions, sets and collections stay here for 30 days.</p>
+          <p className="text-sm text-muted">Deleted games, positions, sets, collections, repertoires and concepts stay here for 30 days.</p>
           {trash && trash.length === 0 && <Empty>The trash is empty.</Empty>}
           <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
             {trash?.map((item) => (
@@ -382,6 +386,8 @@ function CoachSettings({ onSave, keyLocation }: { onSave(values: SettingsUpdate)
           </button>
         </div>
       ) : (
+        <>
+        <p className="text-sm">Coach not connected: paste a Claude API key here to turn it on.</p>
         <form
           className="flex flex-wrap gap-2"
           onSubmit={async (e) => {
@@ -409,6 +415,7 @@ function CoachSettings({ onSave, keyLocation }: { onSave(values: SettingsUpdate)
             Save key
           </button>
         </form>
+        </>
       )}
       <div className="grid grid-cols-[12rem_1fr] items-center gap-3 text-sm">
         <span className="text-muted">Quick questions</span>

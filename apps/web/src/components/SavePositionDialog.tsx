@@ -26,6 +26,7 @@ export function SavePositionDialog({
   const [tags, setTags] = useState('');
   const [keyIdea, setKeyIdea] = useState('');
   const [answer, setAnswer] = useState(defaults.answer ?? '');
+  const details = useRef<HTMLDivElement>(null);
   const [notes, setNotes] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [inTraining, setInTraining] = useState(false);
@@ -116,11 +117,19 @@ export function SavePositionDialog({
         {defaults.sourceLabel && <p className="text-xs text-muted">From {defaults.sourceLabel}</p>}
 
         {!more ? (
-          <button type="button" className="text-sm text-accent" onClick={() => setMore(true)}>
+          <button
+            type="button"
+            className="text-sm text-accent"
+            onClick={() => {
+              setMore(true);
+              // The button goes away: focus moves on to the first of the fields it opens.
+              requestAnimationFrame(() => details.current?.querySelector<HTMLElement>('select, input, textarea')?.focus());
+            }}
+          >
             More details (optional)…
           </button>
         ) : (
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div ref={details} className="grid grid-cols-2 gap-2 text-sm">
             <label className="space-y-1">
               <span className="text-muted">Category</span>
               <CategorySelect value={category} onChange={setCategory} allowNew className={field} />

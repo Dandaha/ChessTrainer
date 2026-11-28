@@ -13,6 +13,7 @@ import {
   playMove,
   positionKey,
   repertoireTree,
+  splitComment,
   toggledNags,
 } from '@chess/chess-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -246,11 +247,17 @@ export function RepertoireScreen() {
     );
   }
 
-  const shapes: DrawShape[] = movesHere.map((e) => ({
-    orig: e.uci.slice(0, 2) as DrawShape['orig'],
-    dest: e.uci.slice(2, 4) as DrawShape['orig'],
-    brush: e.isMyMove ? (e.isMain ? 'green' : 'blue') : 'yellow',
-  }));
+  const drawn = current?.edge.comment ? splitComment(current.edge.comment) : null;
+  const shapes: DrawShape[] = [
+    ...movesHere.map((e) => ({
+      orig: e.uci.slice(0, 2) as DrawShape['orig'],
+      dest: e.uci.slice(2, 4) as DrawShape['orig'],
+      brush: e.isMyMove ? (e.isMain ? 'green' : 'blue') : 'yellow',
+    })),
+    // Arrows and circles the move's comment carries ([%cal] [%csl], from a PGN).
+    ...(drawn?.arrows ?? []).map((a) => ({ orig: a.from as DrawShape['orig'], dest: a.to as DrawShape['orig'], brush: a.color })),
+    ...(drawn?.highlights ?? []).map((h) => ({ orig: h.square as DrawShape['orig'], brush: h.color })),
+  ];
   const firstSeen = current?.transposition ? findNode(tree, (n) => n.edge.toKey === current.edge.toKey && !n.transposition) : undefined;
 
   return (
@@ -295,6 +302,7 @@ export function RepertoireScreen() {
           onClick={async () => {
             if (!repertoire) return;
             await api.deleteRepertoire(repertoire.id);
+            setList((all) => all?.filter((r) => r.id !== repertoire.id) ?? all);
             select(null);
             navigate('repertoire');
             reload();
@@ -340,8 +348,10 @@ export function RepertoireScreen() {
         </button>
       </PageHeader>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row">
-        <div ref={treeRef} className="min-h-[16rem] overflow-y-auto rounded-xl border border-line bg-surface p-2 text-sm md:w-[20rem] md:shrink-0 xl:w-[26rem]" aria-label="Repertoire tree">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:overflow-hidden">
+        {/* The tree, and under it the selected move's editor, beside the board: annotating needs no scrolling. */}
+        <div className="flex min-h-0 flex-col gap-3 md:h-full md:w-[20rem] md:shrink-0 md:overflow-y-auto xl:w-[26rem]">
+        <div ref={treeRef} className="min-h-[16rem] flex-1 overflow-y-auto rounded-xl border border-line bg-surface p-2 text-sm" aria-label="Repertoire tree">
           {branches.size > 0 && (
             <div className="mb-1 flex justify-end gap-3 px-1 text-xs">
               <button type="button" className="text-muted hover:text-text" onClick={() => setCollapsed(new Set())}>
@@ -397,10 +407,10 @@ export function RepertoireScreen() {
                         }`}
                       >
                         <span className={node.edge.isMyMove ? 'font-semibold' : isSel ? '' : 'text-muted'}>{inlineLabel(node, i === 0)}</span>
-                        {!node.edge.isMain && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>side</span>}
                         {node.edge.nags.some((n) => n > 6) && (
                           <span className={isSel ? '' : 'text-muted'}>{node.edge.nags.filter((n) => n > 6).map(nagGlyph).join(' ')}</span>
                         )}
+                        {!node.edge.isMain && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>side</span>}
                         {node.edge.priority === 'nice' && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>nice</span>}
                         {node.edge.comment && <span title={displayComment(node.edge.comment)}>✎</span>}
                         {node.transposition && (
@@ -418,7 +428,36 @@ export function RepertoireScreen() {
           })}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-3">
+        {current && (
+              <MoveEditor
+                key={current.edge.id}
+                node={current}
+                onChanged={reload}
+                onDeleted={(n) => {
+                  ws.toast(`Deleted ${n} move${n === 1 ? '' : 's'}.`);
+                  select(null);
+                  reload();
+                }}
+                onOpenBoard={() => {
+                  const path: string[] = [];
+                  const walk = (nodes: RepTreeNode[], trail: string[]): boolean => {
+                    for (const n of nodes) {
+                      if (n === current || walk(n.children, [...trail, n.edge.san])) {
+                        if (n === current) path.push(...trail, n.edge.san);
+                        return true;
+                      }
+                    }
+                    return false;
+                  };
+                  walk(tree, []);
+                  ws.openLine(START_FEN, path);
+                  ws.setOrientation(color);
+                }}
+              />
+            )}
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col items-center gap-3 md:h-full md:overflow-y-auto">
           <Board
             node={boardNode(fen, current?.edge.uci ?? '', ply)}
             orientation={color}
@@ -475,33 +514,6 @@ export function RepertoireScreen() {
                 <span className="text-muted">Opponent to move: play the replies you expect to add them.</span>
               )}
             </p>
-            {current && (
-              <MoveEditor
-                key={current.edge.id}
-                node={current}
-                onChanged={reload}
-                onDeleted={(n) => {
-                  ws.toast(`Deleted ${n} move${n === 1 ? '' : 's'}.`);
-                  select(null);
-                  reload();
-                }}
-                onOpenBoard={() => {
-                  const path: string[] = [];
-                  const walk = (nodes: RepTreeNode[], trail: string[]): boolean => {
-                    for (const n of nodes) {
-                      if (n === current || walk(n.children, [...trail, n.edge.san])) {
-                        if (n === current) path.push(...trail, n.edge.san);
-                        return true;
-                      }
-                    }
-                    return false;
-                  };
-                  walk(tree, []);
-                  ws.openLine(START_FEN, path);
-                  ws.setOrientation(color);
-                }}
-              />
-            )}
             {firstSeen && (
               <p className="rounded-md bg-accent-soft px-3 py-2">
                 This position is also reached by another move order.{' '}
@@ -602,8 +614,13 @@ function MoveEditor({
       <textarea
         aria-label="Comment"
         rows={2}
-        defaultValue={e.comment ?? ''}
-        onBlur={(ev) => ev.target.value !== (e.comment ?? '') && void update({ comment: ev.target.value })}
+        defaultValue={displayComment(e.comment ?? '')}
+        onBlur={(ev) => {
+          // The words are edited; drawing commands ([%cal] …) stay attached, out of sight.
+          const commands = (e.comment ?? '').match(/\[%[^\]]*\]/g) ?? [];
+          const next = [...commands, ev.target.value.trim()].join(' ').trim();
+          if (next !== (e.comment ?? '').trim()) void update({ comment: next || null });
+        }}
         placeholder="Why this move, what to remember…"
         className={`${inputClass} w-full`}
       />

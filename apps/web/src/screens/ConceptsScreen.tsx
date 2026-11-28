@@ -304,6 +304,7 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
         keySigns: keySigns.split('\n'),
         bodyMd: body.trim() || null,
       });
+      ws.dismissMessage(); // an earlier "needs a title" no longer applies
       onDone(next);
     } catch (e) {
       ws.toast((e as Error).message, true);
