@@ -1,5 +1,5 @@
 import { type Color, type MoveNode, answerLine, createGame, displayComment, lineLabel, moveLabel, moveSpellings, playMove } from '@chess/chess-core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type CardDetail, type QueueSummary, type SavedPosition, type TrainingStats, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
 import { Markdown } from '../components/Markdown.tsx';
@@ -358,7 +358,9 @@ function Session({
     setNode(card.kind === 'saved_position' && multi ? positionBefore(progress) : at(card.kind === 'saved_position' ? card.saved.fen : card.fen));
   }, [card, multi, progress]);
 
-  useEffect(() => {
+  // A layout effect: the listener for a new state is in place when the state shows, so a key pressed
+  // the moment a result appears reaches it, not the listener of the state before.
+  useLayoutEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onEnd(results);
       if (!outcome) return;
@@ -748,7 +750,7 @@ function SetSolve({ setId }: { setId: string }) {
     setRound((r) => ({ n: r.n + 1, items }));
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!results) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') back();

@@ -60,6 +60,7 @@ describe('position categories', () => {
     fireEvent.click(within(await screen.findByRole('dialog', { name: /Remove the category/ })).getByRole('button', { name: 'Remove category' }));
     expect(await screen.findByText('Removed the category “First principles”. Its position stays saved, without a category.')).toBeTruthy();
     await waitFor(() => expect(within(categories()).queryByRole('button', { name: /First principles/ })).toBeNull());
-    expect(screen.getByRole('button', { name: 'Open Opening principles' })).toBeTruthy();
+    // The list reloads without the category's filter; on a slow machine that takes a moment.
+    expect(await screen.findByRole('button', { name: 'Open Opening principles' })).toBeTruthy();
   });
 });
