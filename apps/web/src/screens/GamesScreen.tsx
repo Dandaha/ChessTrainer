@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { type CollectionSummary, type GameSummary, type ImportReport, api } from '../api.ts';
+import { type CollectionSummary, type GameSort, type GameSummary, type ImportReport, api } from '../api.ts';
 import { Modal } from '../Dialogs.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { useWorkspace } from '../workspace.tsx';
@@ -26,6 +26,8 @@ export function GamesScreen() {
   const [collectionId, setCollectionId] = useState('');
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [offset, setOffset] = useState(0);
+  // A column to sort by; none means the newest first (a collection: its own order).
+  const [sort, setSort] = useState<{ key: GameSort; dir: 'asc' | 'desc' } | null>(null);
   const [data, setData] = useState<{ total: number; games: GameSummary[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -46,6 +48,8 @@ export function GamesScreen() {
         .games({
           ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
           collectionId: collectionId || undefined,
+          sort: sort?.key,
+          dir: sort?.dir,
           limit: LIMIT,
           offset,
         })
@@ -60,7 +64,7 @@ export function GamesScreen() {
       live = false;
       clearTimeout(timer);
     };
-  }, [filters, collectionId, offset, refresh]);
+  }, [filters, collectionId, offset, refresh, sort]);
 
   // A selection belongs to the rows on screen: a new filter, collection or page starts afresh, so a
   // bulk action can never reach games that are no longer visible.
@@ -249,12 +253,17 @@ export function GamesScreen() {
                         }
                       />
                     </th>
-                    <th className="px-2 py-2">Date</th>
-                    <th className="px-2 py-2">White</th>
-                    <th className="px-2 py-2">Black</th>
-                    <th className="px-2 py-2">Result</th>
-                    <th className="px-2 py-2">Opening</th>
-                    <th className="px-2 py-2">Event</th>
+                    {COLUMNS.map((column) => (
+                      <SortHeader
+                        key={column.key}
+                        column={column}
+                        sort={sort}
+                        onSort={(next) => {
+                          setSort(next);
+                          setOffset(0);
+                        }}
+                      />
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -471,5 +480,42 @@ function ImportGamesDialog({
         </p>
       )}
     </Modal>
+  );
+}
+
+/** The list's columns; a click sorts by one, a second click turns the order round. */
+const COLUMNS: { key: GameSort; label: string; first: 'asc' | 'desc' }[] = [
+  { key: 'date', label: 'Date', first: 'desc' },
+  { key: 'white', label: 'White', first: 'asc' },
+  { key: 'black', label: 'Black', first: 'asc' },
+  { key: 'result', label: 'Result', first: 'asc' },
+  { key: 'eco', label: 'Opening', first: 'asc' },
+  { key: 'event', label: 'Event', first: 'asc' },
+];
+
+function SortHeader({
+  column,
+  sort,
+  onSort,
+}: {
+  column: (typeof COLUMNS)[number];
+  sort: { key: GameSort; dir: 'asc' | 'desc' } | null;
+  onSort(next: { key: GameSort; dir: 'asc' | 'desc' }): void;
+}) {
+  const active = sort?.key === column.key || (!sort && column.key === 'date');
+  const dir = sort?.key === column.key ? sort.dir : !sort && column.key === 'date' ? 'desc' : null;
+  return (
+    <th className="px-2 py-2" aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'}>
+      <button
+        type="button"
+        className={`inline-flex items-center gap-1 hover:text-text ${active ? 'text-text' : ''}`}
+        onClick={() => onSort({ key: column.key, dir: dir ? (dir === 'asc' ? 'desc' : 'asc') : column.first })}
+      >
+        {column.label}
+        <span aria-hidden className="w-2 text-[10px]">
+          {dir === 'asc' ? '▲' : dir === 'desc' ? '▼' : ''}
+        </span>
+      </button>
+    </th>
   );
 }

@@ -5,6 +5,7 @@ import {
   type GameFilters,
   gamesAtPosition,
   getGame,
+  GAME_SORTS,
   importGamesInBatches,
   listGames,
   saveGame,
@@ -63,7 +64,8 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
       fen: q.fen,
       myColor: q.myColor as GameFilters['myColor'],
       source: q.source as GameFilters['source'],
-      sort: q.sort as GameFilters['sort'],
+      sort: (GAME_SORTS as readonly string[]).includes(q.sort ?? '') ? (q.sort as GameFilters['sort']) : undefined,
+      dir: q.dir === 'asc' || q.dir === 'desc' ? q.dir : undefined,
       limit: num(q.limit),
       offset: num(q.offset),
     };

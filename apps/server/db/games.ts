@@ -56,7 +56,9 @@ export interface GameFilters {
   fen?: string;
   myColor?: 'white' | 'black';
   source?: GameSource;
-  sort?: 'date' | 'added';
+  /** A column to sort by; the newest first when none is given (a collection: its own order). */
+  sort?: GameSort;
+  dir?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
 }
@@ -145,6 +147,7 @@ function columnsFor(game: Game) {
     blackElo: elo(game, 'BlackElo'),
     result: game.result,
     date: header(game, 'Date') ?? header(game, 'UTCDate'),
+    time: header(game, 'UTCTime') ?? header(game, 'Time'),
     event: header(game, 'Event'),
     eco: header(game, 'ECO'),
     openingName: header(game, 'Opening'),
@@ -399,12 +402,42 @@ function withTags<T extends { id: string }>(db: Db, rows: T[]): (T & { tags: str
   return rows.map((r) => ({ ...r, tags: byId.get(r.id) ?? [] }));
 }
 
+export const GAME_SORTS = ['date', 'added', 'white', 'black', 'whiteElo', 'blackElo', 'result', 'eco', 'event'] as const;
+export type GameSort = (typeof GAME_SORTS)[number];
+
+/** The ORDER BY for a column, empty values last whichever way; ties fall back to the newest first. */
+function sortOrder(sort: GameSort, dir: 'asc' | 'desc'): SQL[] {
+  const way = dir === 'asc' ? sql`asc` : sql`desc`;
+  const by = (expr: SQL) => sql`${expr} ${way} nulls last`;
+  const newest = [sql`${games.date} desc nulls last`, sql`${games.time} desc nulls last`, desc(games.createdAt)];
+  switch (sort) {
+    case 'date':
+      return [by(sql`${games.date}`), by(sql`${games.time}`), dir === 'asc' ? asc(games.createdAt) : desc(games.createdAt)];
+    case 'added':
+      return [dir === 'asc' ? asc(games.createdAt) : desc(games.createdAt)];
+    case 'white':
+      return [by(sql`fold(${games.white})`), ...newest];
+    case 'black':
+      return [by(sql`fold(${games.black})`), ...newest];
+    case 'whiteElo':
+      return [by(sql`${games.whiteElo}`), ...newest];
+    case 'blackElo':
+      return [by(sql`${games.blackElo}`), ...newest];
+    case 'result':
+      return [by(sql`${games.result}`), ...newest];
+    case 'eco':
+      return [by(sql`${games.eco}`), by(sql`fold(${games.openingName})`), ...newest];
+    case 'event':
+      return [by(sql`fold(${games.event})`), ...newest];
+  }
+}
+
 export function listGames(db: Db, f: GameFilters = {}): { total: number; games: GameSummary[] } {
   const where = conditions(db, f);
   if (!where) return { total: 0, games: [] };
   const total = db.select({ n: sql<number>`count(*)` }).from(games).where(and(...where)).get()?.n ?? 0;
-  let order: SQL[] = f.sort === 'added' ? [desc(games.createdAt)] : [desc(games.date), desc(games.createdAt)];
-  if (f.collectionId) {
+  let order = sortOrder(f.sort ?? 'date', f.dir ?? 'desc');
+  if (f.collectionId && !f.sort) {
     // A collection keeps its own order.
     order = [
       asc(

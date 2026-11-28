@@ -39,13 +39,18 @@ describe('backups', () => {
     const folder = temp();
     const { db, close } = library(folder);
     const backups = join(folder, 'backups');
-    // Pretend the last migration has not run yet.
-    db.$client.exec('delete from __drizzle_migrations where created_at = (select max(created_at) from __drizzle_migrations); drop table position_categories;');
+    // Nothing pending: no backup.
     runMigrations(db, { backupFolder: backups });
+    expect(listBackups(backups)).toHaveLength(0);
+    // Pretend the newest migration has not run yet. The backup comes before it runs, whatever the
+    // migration then does (here it would fail, as its change is already there).
+    db.$client.exec('delete from __drizzle_migrations where created_at = (select max(created_at) from __drizzle_migrations)');
+    try {
+      runMigrations(db, { backupFolder: backups });
+    } catch {
+      // Expected: the migration's change is already in place.
+    }
     expect(listBackups(backups).map((b) => b.name)).toEqual([expect.stringMatching(/-before-update\.db$/)]);
-    // Nothing pending: no second backup.
-    runMigrations(db, { backupFolder: backups });
-    expect(listBackups(backups)).toHaveLength(1);
 
     expect(backupIfDue(db, backups)).toBeNull();
     const nextWeek = new Date(Date.now() + 8 * 86_400_000);

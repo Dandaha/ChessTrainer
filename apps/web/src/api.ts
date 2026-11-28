@@ -1,4 +1,4 @@
-import type { GameDetail, GameFilters, GameSummary, ImportReport, MoveStat } from '@chess/server/db/games.ts';
+import type { GameDetail, GameFilters, GameSort, GameSummary, ImportReport, MoveStat } from '@chess/server/db/games.ts';
 import type { Color, Priority, RepEdge, RepertoireCheck } from '@chess/chess-core';
 import type { RepertoireSummary } from '@chess/server/db/repertoire.ts';
 import type { CardDetail, QueueSummary, TrainingStats } from '@chess/server/db/training.ts';
@@ -24,6 +24,7 @@ import type {
 export type SettingsUpdate = { [K in keyof Settings]?: Settings[K] | null };
 
 export type {
+  GameSort,
   Backup,
   PositionCategory,
   Annotations,

@@ -34,6 +34,8 @@ export const games = sqliteTable('games', {
   result: text('result'),
   /** As PGN writes it: YYYY.MM.DD, with ?? for unknown parts. */
   date: text('date'),
+  /** HH:MM:SS from the UTCTime (or Time) tag, so games of one day keep their order. */
+  time: text('time'),
   event: text('event'),
   eco: text('eco'),
   openingName: text('opening_name'),
