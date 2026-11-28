@@ -156,7 +156,19 @@ export function moveSpellings(typed: string): string[] {
  * and f3 is ["Nbd2", "Nfd2"]. Empty when it is not such a move.
  */
 export function ambiguousMoves(fen: string, typed: string): string[] {
-  const m = /^([KQRBN])x?([a-h][1-8])[+#]?$/i.exec(typed.trim());
+  const text = typed.trim();
+  // A promotion without its piece ("c8", "cxd8", "c7c8"): the four pieces it could become.
+  const promotion = /^([a-h])(?:x?([a-h]))?([18])[+#]?$/i.exec(text) ?? /^([a-h])[27]([a-h])([18])$/i.exec(text);
+  if (promotion) {
+    const fromFile = promotion[1]!.toLowerCase();
+    const to = `${(promotion[2] ?? promotion[1])!.toLowerCase()}${promotion[3]}`;
+    const choices = new Chess(fen)
+      .moves({ verbose: true })
+      .filter((move) => move.piece === 'p' && move.promotion && move.from[0] === fromFile && move.to === to)
+      .map((move) => move.san);
+    if (choices.length) return choices;
+  }
+  const m = /^([KQRBN])x?([a-h][1-8])[+#]?$/i.exec(text);
   if (!m) return [];
   const piece = m[1]!.toLowerCase();
   const to = m[2]!.toLowerCase();
@@ -179,6 +191,10 @@ export function playMove(from: MoveNode, input: MoveInput): MoveNode {
   } catch {
     throw new IllegalMoveError(label, from.fen);
   }
+  // A pawn reaching the last rank without the piece named ("cxd8", "c7c8"): chess.js would pick one
+  // itself (a knight). Refused, so the person says which piece (ambiguousMoves lists them).
+  const named = typeof input === 'string' ? /=?[QRBN][+#!?]*$/i.test(input.trim()) && /[18]=?[QRBN]/i.test(input) : !!input.promotion;
+  if (move.promotion && !named) throw new IllegalMoveError(label, from.fen);
   return emptyNode({ ply: from.ply + 1, san: move.san, uci: move.lan, fen: move.after });
 }
 

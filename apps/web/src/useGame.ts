@@ -28,6 +28,8 @@ interface Snapshot {
   currentId: string;
   /** Only for a load (the game replaced): what was open before, given back when the load is undone. */
   context?: { value: unknown };
+  /** The game was saved as it is here (no "unsaved changes"): undoing or redoing back to it is clean again. */
+  clean: boolean;
 }
 
 export interface GameApi {
@@ -89,13 +91,12 @@ export function useGame(
   const [version, bump] = useReducer((n: number) => n + 1, 0);
   const [cleanVersion, setCleanVersion] = useState(-1);
   const [restores, bumpRestores] = useReducer((n: number) => n + 1, 0);
-  // How deep the undo stack was when the game was last clean (loaded clean or saved): undoing back to
-  // that depth makes it clean again. Null once that state can no longer be reached by undoing.
+  // Each step back remembers whether its state was saved as it is; a save makes every older step
+  // unsaved (the library now holds the newer game).
   const undoStack = useRef<Snapshot[]>([]);
   // What undo took back, newest last, for redo; a new change empties it.
   const redoStack = useRef<Snapshot[]>([]);
   const redoBefore = useRef<Snapshot[] | null>(null);
-  const cleanDepth = useRef<number | null>(null);
   const contextRef = useRef(context);
   contextRef.current = context;
 
@@ -109,21 +110,17 @@ export function useGame(
    */
   const snapshot = useCallback(
     (replacing = false) => {
-      // An edit made after undoing past the clean state: that state cannot come back by undoing.
-      if (cleanDepth.current !== null && undoStack.current.length < cleanDepth.current) cleanDepth.current = null;
       redoBefore.current = redoStack.current;
       redoStack.current = [];
       undoStack.current.push({
         game: structuredClone(game),
         currentId,
         ...(replacing ? { context: { value: contextRef.current?.current() } } : {}),
+        clean: version === cleanVersion,
       });
-      if (undoStack.current.length > 100) {
-        undoStack.current.shift();
-        if (cleanDepth.current !== null) cleanDepth.current = cleanDepth.current > 0 ? cleanDepth.current - 1 : null;
-      }
+      if (undoStack.current.length > 100) undoStack.current.shift();
     },
-    [game, currentId],
+    [game, currentId, version, cleanVersion],
   );
   /** A snapshot that turned out not to be a change (stepping into a move already there): dropped, and
    * what redo had is kept. */
@@ -137,6 +134,7 @@ export function useGame(
     game: structuredClone(game),
     currentId,
     ...(withContext ? { context: { value: contextRef.current?.current() } } : {}),
+    clean: version === cleanVersion,
   });
   // Typing a comment is one change per move, not one per key.
   const commentEdit = useRef<{ id: string; at: number } | null>(null);
@@ -153,7 +151,7 @@ export function useGame(
     dirty: version !== cleanVersion,
     markClean: () => {
       setCleanVersion(version);
-      cleanDepth.current = undoStack.current.length;
+      for (const step of [...undoStack.current, ...redoStack.current]) step.clean = false;
     },
     goTo,
     back: () => {
@@ -263,7 +261,7 @@ export function useGame(
       bumpRestores();
       // load() itself is one edit; a clean load is clean after it.
       setCleanVersion(options.clean ? version + 1 : -1);
-      cleanDepth.current = options.clean ? undoStack.current.length : null;
+
     },
     undo: () => {
       const last = undoStack.current.pop();
@@ -274,8 +272,8 @@ export function useGame(
       if (last.context) contextRef.current?.restore(last.context.value);
       bump();
       bumpRestores();
-      // Back to how it was when saved: no longer "unsaved changes".
-      if (cleanDepth.current !== null && undoStack.current.length === cleanDepth.current) setCleanVersion(version + 1);
+      // Back to how it was when saved: no longer "unsaved changes" (and the other way round).
+      setCleanVersion(last.clean ? version + 1 : -1);
     },
     redo: () => {
       const next = redoStack.current.pop();
@@ -286,7 +284,7 @@ export function useGame(
       if (next.context) contextRef.current?.restore(next.context.value);
       bump();
       bumpRestores();
-      if (cleanDepth.current !== null && undoStack.current.length === cleanDepth.current) setCleanVersion(version + 1);
+      setCleanVersion(next.clean ? version + 1 : -1);
     },
   };
 }

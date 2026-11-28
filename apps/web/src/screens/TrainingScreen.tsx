@@ -8,6 +8,7 @@ import { Empty, PageHeader, buttonClass, primaryClass } from '../components/ui.t
 import { navigate, useRoute } from '../router.ts';
 import { LineDrill } from '../components/LineDrill.tsx';
 import { useWorkspace } from '../workspace.tsx';
+import { typedMoveProblem } from '../moveText.ts';
 
 type Grade = 1 | 2 | 3 | 4;
 const GRADES: { grade: Grade; label: string }[] = [
@@ -729,7 +730,7 @@ function Session({
                     // try the next spelling
                   }
                 }
-                ws.toast(`${text} is not a legal move here.`, true);
+                ws.toast(typedMoveProblem(node.fen, text), true);
               }}
               placeholder="Or type it, e.g. Nf3"
               className="w-full rounded-md border border-field bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent"

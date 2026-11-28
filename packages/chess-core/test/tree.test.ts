@@ -144,3 +144,17 @@ describe('ambiguousMoves', () => {
     expect(ambiguousMoves(fen, 'e4')).toEqual([]);
   });
 });
+
+describe('promotion without a piece', () => {
+  it('is refused, and the pieces it could be are named', async () => {
+    const { ambiguousMoves, createGame, playMove } = await import('../tree.ts');
+    const fen = '1n1nk3/2P5/8/8/8/8/8/4K3 w - - 0 1';
+    const root = createGame(fen).root;
+    expect(() => playMove(root, 'cxd8')).toThrow();
+    expect(() => playMove(root, { from: 'c7', to: 'c8' })).toThrow();
+    expect(playMove(root, 'cxd8=Q').san).toBe('cxd8=Q+');
+    expect(playMove(root, { from: 'c7', to: 'c8', promotion: 'r' }).san).toBe('c8=R');
+    expect(ambiguousMoves(fen, 'cxd8')).toHaveLength(4);
+    expect(ambiguousMoves(fen, 'c7c8')).toHaveLength(4);
+  });
+});

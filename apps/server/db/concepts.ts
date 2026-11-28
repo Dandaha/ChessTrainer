@@ -60,8 +60,8 @@ function toSummaries(db: Db, rows: { id: string; title: string; aliases: string;
 
 export function listConcepts(db: Db, f: { q?: string; category?: ConceptCategory; tag?: string } = {}): ConceptSummary[] {
   const where: SQL[] = [isNull(concepts.deletedAt)];
-  if (f.q) {
-    const q = f.q;
+  // Every word typed, each somewhere in the concept, in any order.
+  for (const q of (f.q ?? '').split(/\s+/).filter(Boolean)) {
     where.push(or(containsText(concepts.title, q), containsText(concepts.aliases, q), containsText(concepts.bodyMd, q), containsText(concepts.keySigns, q))!);
   }
   if (f.category) where.push(sql`lower(${concepts.category}) = lower(${f.category})`);

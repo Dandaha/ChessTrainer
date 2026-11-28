@@ -1,4 +1,4 @@
-import { type GameEnd, type MoveNode, ambiguousMoves, describeGameEnd, gameEnd, materialBalance, moveSpellings, normalizeFen, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, materialBalance, moveSpellings, normalizeFen, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
 import { fenProblem } from '../loadText.ts';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
@@ -19,6 +19,7 @@ import { MoveList } from '../MoveList.tsx';
 import { BoardEditor } from '../components/BoardEditor.tsx';
 import { GameTagsDialog } from '../components/GameTagsDialog.tsx';
 import { gameLabel, useWorkspace } from '../workspace.tsx';
+import { typedMoveProblem } from '../moveText.ts';
 
 type Dialog = 'import' | 'export' | 'shortcuts' | 'save' | 'repertoire' | 'editor' | 'tags' | null;
 export type BoardTab = 'notes' | 'games' | 'saved';
@@ -140,10 +141,14 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 
   const playTyped = () => {
     if (!typed.trim()) return;
-    if (moveSpellings(typed).some((move) => g.play(move))) return setTyped('');
-    // "Nd2" when both knights can go there: say which ones, not that the move is illegal.
-    const which = ambiguousMoves(current.fen, typed.trim());
-    ws.toast(which.length > 1 ? `${typed.trim()} could be ${which.join(' or ')}: say which piece.` : `${typed.trim()} is not a legal move here.`, true);
+    if (moveSpellings(typed).some((move) => g.play(move))) {
+      setTyped('');
+      // A message about an earlier try no longer applies.
+      if (ws.message?.error) ws.dismissMessage();
+      return;
+    }
+    // "Nd2" when both knights can go there, "cxd8" without its piece: say so, not that it is illegal.
+    ws.toast(typedMoveProblem(current.fen, typed), true);
   };
 
   const keys = useRef<(event: KeyboardEvent) => void>(() => {});
@@ -296,7 +301,9 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:justify-center">
         <section className="analysis-board flex min-w-0 flex-col items-center gap-3 md:flex-1 md:items-end">
           <div className="flex w-full justify-center gap-2 md:justify-end">
-            {engineOn && (!engine.error || end) && (
+            {/* In threat mode the engine looks at the other side's move: the bar shows the position's own
+                score when it has one, and is hidden rather than shown empty when it has not. */}
+            {engineOn && (!engine.error || end) && (barLine || !threatFen || end) && (
               // Level with the board, not with the strips above and below it. None for an engine that
               // could not start: an empty bar would read as an even position.
               <div className="flex py-6">

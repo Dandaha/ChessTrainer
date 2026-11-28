@@ -135,9 +135,10 @@ export function CommandPalette({
 /** Screens add their own results here (concepts); repertoires are found by name below. */
 export const paletteSources: ((q: string) => Promise<Item[]>)[] = [
   async (q) => {
-    const words = q.toLowerCase();
+    // Every word typed, in any order ("queen gambit" finds "…Queen's Gambit…").
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     return (await api.repertoires())
-      .filter((r) => r.name.toLowerCase().includes(words))
+      .filter((r) => words.every((word) => r.name.toLowerCase().includes(word)))
       .slice(0, 6)
       .map((r) => ({
         key: `r${r.id}`,

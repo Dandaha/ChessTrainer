@@ -324,8 +324,8 @@ export function getSavedPosition(db: Db, id: string): SavedPosition | undefined 
 
 export function listSavedPositions(db: Db, f: SavedPositionFilters = {}): { total: number; positions: SavedPosition[] } {
   const where: SQL[] = [isNull(savedPositions.deletedAt)];
-  if (f.q) {
-    const q = f.q;
+  // Every word typed, each in the title, notes, key idea, source or a tag, in any order.
+  for (const q of (f.q ?? '').split(/\s+/).filter(Boolean)) {
     where.push(
       or(
         containsText(savedPositions.title, q),

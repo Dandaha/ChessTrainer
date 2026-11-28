@@ -197,3 +197,29 @@ describe('after a restart', () => {
     localStorage.clear();
   });
 });
+
+describe('second round on the board', () => {
+  it('asks which piece for a promotion typed without one, and plays nothing', async () => {
+    startServer();
+    render(<App />);
+    go('#/board');
+    await openPgn('1n1nk3/2P5/8/8/8/8/8/4K3 w - - 0 1');
+    play('cxd8');
+    expect(await screen.findByText('cxd8: say which piece to promote to, e.g. cxd8=Q.')).toBeTruthy();
+    play('cxd8=Q');
+    await waitFor(() => expect(screen.getAllByText(/cxd8=Q/).length).toBeGreaterThan(0));
+  });
+
+  it('brings a saved game back as saved when New is undone', async () => {
+    startServer();
+    render(<App />);
+    go('#/board');
+    await openPgn('[White "Anna"]\n[Black "Bob"]\n\n1. e4 e5 *');
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    await screen.findByText('· in library');
+    fireEvent.click(screen.getByRole('button', { name: 'New' }));
+    await screen.findByText('Analysis');
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(await screen.findByText('· in library')).toBeTruthy();
+  });
+});

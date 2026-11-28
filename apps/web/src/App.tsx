@@ -183,7 +183,7 @@ function Shell() {
         // Bottom right, clear of the board's FEN row and buttons; it can be closed at once.
         <div
           role={ws.message.error ? 'alert' : 'status'}
-          className={`fixed right-4 bottom-4 z-50 flex max-w-[min(26rem,calc(100vw-2rem))] items-start gap-3 rounded-lg border bg-surface px-4 py-2 text-sm shadow-panel [overflow-wrap:anywhere] print:hidden ${
+          className={`fixed right-4 bottom-4 z-50 flex max-w-[min(20rem,calc(100vw-2rem))] items-start gap-3 rounded-lg border bg-surface px-4 py-2 text-sm shadow-panel [overflow-wrap:anywhere] print:hidden ${
             ws.message.error ? 'border-danger text-danger' : 'border-line'
           }`}
         >

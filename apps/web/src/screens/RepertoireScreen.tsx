@@ -36,6 +36,7 @@ import { useEngine } from '../useEngine.ts';
 import { OpeningLabel, type OpeningName, useOpenings } from '../openings.tsx';
 import { type EngineSettings, readEngineSettings, readFlag, writeEngineSettings, writeFlag } from '../storage.ts';
 import { isTyping } from './BoardScreen.tsx';
+import { typedMoveProblem } from '../moveText.ts';
 
 /**
  * A row of the explorer: moves that follow one another without a choice, written on one line like a
@@ -209,6 +210,10 @@ export function RepertoireScreen() {
   const threatFen = useMemo(() => (showLines && threat ? passTurn(fen) : null), [showLines, threat, fen]);
   const engine = useEngine(threatFen ?? fen, engineOn, engineSettings);
   const best = engine.analysis?.fen === fen ? engine.analysis.lines[0] : undefined;
+  // The position's own score, kept while threat mode analyses the other side's move instead.
+  const lastBest = useRef<{ fen: string; line: NonNullable<typeof best> } | null>(null);
+  if (best) lastBest.current = { fen, line: best };
+  const barLine = best ?? (threatFen && lastBest.current?.fen === fen ? lastBest.current.line : undefined);
   const threatLine = threatFen && engine.analysis?.fen === threatFen ? engine.analysis.lines[0] : undefined;
   const switchLines = () => {
     writeFlag('repertoire-engine-lines', !showLines);
@@ -271,7 +276,7 @@ export function RepertoireScreen() {
         // the next spelling
       }
     }
-    if (!san) return ws.toast(`${text} is not a legal move here.`, true);
+    if (!san) return ws.toast(typedMoveProblem(fen, text), true);
     // The box keeps the move if it could not be added (the library out of reach).
     if (await addSan(san)) setTyped('');
   };
@@ -629,7 +634,7 @@ export function RepertoireScreen() {
             {/* As tall as the board, so the eval bar beside it is too. */}
             <div className="flex h-fit w-full justify-center gap-2 md:w-auto">
               {/* No bar for an engine that could not start: an empty bar would read as an even position. */}
-              {engineOn && !engine.error && <EvalBar line={best} flipped={color === 'black'} />}
+              {engineOn && !engine.error && (barLine || !threatFen) && <EvalBar line={barLine} flipped={color === 'black'} />}
               <Board
                 node={boardNode(fen, current?.edge.uci ?? '', ply)}
                 orientation={color}
@@ -826,7 +831,14 @@ function MoveEditor({
   };
   const saveOnLeave = useRef(saveComment);
   saveOnLeave.current = saveComment;
-  useEffect(() => () => saveOnLeave.current(), []);
+  const pause = useRef<number | undefined>(undefined);
+  useEffect(
+    () => () => {
+      window.clearTimeout(pause.current);
+      saveOnLeave.current();
+    },
+    [],
+  );
   return (
     <div className="space-y-2 rounded-xl border border-line bg-surface p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -875,6 +887,9 @@ function MoveEditor({
         defaultValue={displayComment(e.comment ?? '')}
         onChange={(ev) => {
           typed.current = ev.target.value;
+          // Saved a moment after typing stops too, so a reload or closing the app keeps it.
+          window.clearTimeout(pause.current);
+          pause.current = window.setTimeout(() => saveOnLeave.current(), 800);
         }}
         onBlur={saveComment}
         placeholder="Why this move, what to remember…"
@@ -940,8 +955,17 @@ function ImportRepertoire({ repertoire, onClose, onDone }: { repertoire: Reperto
             try {
               const r = await api.importRepertoire(repertoire.id, text);
               // Nothing came in: the reasons in the dialog say it all, without a toast beside them.
-              if (r.added || r.existing || !r.errors.length)
-                ws.toast(`Added ${r.added} move${r.added === 1 ? '' : 's'} (${r.existing} already there) from ${r.games} game${r.games === 1 ? '' : 's'}.`);
+              // No moves in it at all: said in the dialog, which stays open with the text.
+              if (!r.added && !r.existing && !r.errors.length) {
+                setProblems(['There are no moves in this PGN to add.']);
+                return;
+              }
+              if (r.added || r.existing)
+                ws.toast(
+                  r.added
+                    ? `Added ${r.added} move${r.added === 1 ? '' : 's'} (${r.existing} already there) from ${r.games} game${r.games === 1 ? '' : 's'}.`
+                    : `All ${r.existing} move${r.existing === 1 ? ' was' : 's were'} already in the repertoire.`,
+                );
               onDone();
               if (r.errors.length) {
                 setProblems(r.errors.map((e) => (e.message.startsWith('Game ') ? e.message : `Game ${e.gameIndex + 1}${e.line ? `, line ${e.line}` : ''}: ${e.message}`)));
