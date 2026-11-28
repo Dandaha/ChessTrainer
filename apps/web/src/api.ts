@@ -262,5 +262,8 @@ export const api = {
     ),
   restore: (kind: TrashKind, id: string) => call('POST', '/api/trash/restore', { kind, id }),
   backups: () => call<{ folder: string; backups: Backup[] }>('GET', '/api/backups'),
+  lichessToken: () => call<{ connected: boolean }>('GET', '/api/lichess/token'),
+  setLichessToken: (token: string) => call<{ connected: boolean; username: string | null }>('PUT', '/api/lichess/token', { token }),
+  removeLichessToken: () => call<{ connected: boolean }>('DELETE', '/api/lichess/token'),
   backUp: () => call<{ backup: Backup; folder: string; backups: Backup[] }>('POST', '/api/backups'),
 };

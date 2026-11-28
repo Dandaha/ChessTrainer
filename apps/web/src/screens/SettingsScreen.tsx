@@ -78,6 +78,8 @@ export function SettingsScreen() {
           )}
         </section>
 
+        <LichessSettings keyLocation={system ? system.envFile : 'apps/server/.env'} />
+
         <EngineSettings settings={settings} onSave={save} />
 
         <CoachSettings onSave={save} keyLocation={system ? system.envFile : 'apps/server/.env'} />
@@ -396,6 +398,80 @@ function BackupSettings() {
             </li>
           ))}
         </ul>
+      )}
+    </section>
+  );
+}
+
+/** The personal Lichess token the opening explorer needs (Find gaps, opening statistics). */
+function LichessSettings({ keyLocation }: { keyLocation: string }) {
+  const ws = useWorkspace();
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api
+      .lichessToken()
+      .then((r) => setConnected(r.connected))
+      .catch(() => setConnected(null));
+  }, []);
+  if (connected === null) return null;
+  return (
+    <section className="space-y-3">
+      <h2 className="font-semibold">Lichess</h2>
+      <p className="text-sm text-muted">
+        Find gaps and the opening statistics use the Lichess opening explorer, which needs a personal token. Create one at{' '}
+        <a className="text-accent hover:underline" href="https://lichess.org/account/oauth/token" target="_blank" rel="noreferrer">
+          lichess.org/account/oauth/token
+        </a>{' '}
+        with no permissions ticked, and paste it here. It is stored only in <code className="break-all">{keyLocation}</code>.
+      </p>
+      {connected ? (
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-accent">Connected.</span>
+          <button
+            type="button"
+            className={buttonClass}
+            onClick={async () => {
+              await api.removeLichessToken();
+              setConnected(false);
+              ws.toast('Removed the Lichess token.');
+            }}
+          >
+            Remove the token
+          </button>
+        </div>
+      ) : (
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            try {
+              const result = await api.setLichessToken(token);
+              setToken('');
+              setConnected(true);
+              ws.toast(result.username ? `Connected to Lichess as ${result.username}.` : 'Connected to Lichess.');
+            } catch (error) {
+              ws.toast((error as Error).message, true);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <input
+            aria-label="Lichess token"
+            type="password"
+            autoComplete="off"
+            className={`${inputClass} min-w-0 flex-1`}
+            placeholder="lip_…"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+          />
+          <button type="submit" className={buttonClass} disabled={!token.trim() || busy}>
+            {busy ? 'Checking…' : 'Save token'}
+          </button>
+        </form>
       )}
     </section>
   );

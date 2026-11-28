@@ -1,6 +1,6 @@
 /**
  * The Lichess opening explorer: how often each move is played from a position.
- * It needs a personal Lichess API token (LICHESS_TOKEN in apps/server/.env).
+ * It needs a personal Lichess API token (Settings → Lichess; LICHESS_TOKEN in the .env file).
  */
 
 import { ImportSourceError } from './importers.ts';
@@ -28,7 +28,7 @@ export async function explore(fen: string, options: { ratings?: number[] } = {})
   const token = explorerToken();
   if (!token) {
     throw new ImportSourceError(
-      'The Lichess opening explorer needs a personal Lichess token. Create one at lichess.org/account/oauth/token (no scopes needed) and put LICHESS_TOKEN=... in apps/server/.env, then restart.',
+      'The Lichess opening explorer needs a personal Lichess token: add one in Settings → Lichess.',
       400,
     );
   }
@@ -49,7 +49,7 @@ export async function explore(fen: string, options: { ratings?: number[] } = {})
   } catch {
     throw new ImportSourceError('Could not reach the Lichess opening explorer.', 502);
   }
-  if (response.status === 401) throw new ImportSourceError('Lichess did not accept the token in LICHESS_TOKEN.', 400);
+  if (response.status === 401) throw new ImportSourceError('Lichess no longer accepts the token in Settings → Lichess: add a new one.', 400);
   if (response.status === 429) throw new ImportSourceError('The opening explorer asks us to slow down. Try again in a minute.', 429);
   if (!response.ok) throw new ImportSourceError(`The opening explorer answered ${response.status}.`, 502);
   return (await response.json()) as ExplorerResult;

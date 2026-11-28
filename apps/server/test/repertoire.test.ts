@@ -137,7 +137,7 @@ describe('the repertoire API', () => {
     await app.inject({ method: 'POST', url: `/api/repertoires/${id}/line`, payload: { sans: ['e4'] } });
     const response = await app.inject({ method: 'GET', url: `/api/repertoires/${id}/gaps` });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error).toMatch(/LICHESS_TOKEN/);
+    expect(response.json().error).toMatch(/Settings → Lichess/);
     await app.close();
   });
 

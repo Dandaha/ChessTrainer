@@ -118,5 +118,6 @@ export const bodies = {
     answer: z.string().max(1000).nullable().optional(),
   }),
   coachKey: z.object({ apiKey: z.string().max(500) }),
+  lichessToken: z.object({ token: z.string().max(200) }),
   coachReview: z.object({ startFen: fen, moves: z.array(z.string().max(20)).max(1000), myColor: color.optional() }),
 };

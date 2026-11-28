@@ -6,6 +6,7 @@ import { countPositions } from '../db/positions.ts';
 import { ImportSourceError } from './importers.ts';
 import { libraryRoutes } from './routes/library.ts';
 import { repertoireRoutes } from './routes/repertoire.ts';
+import { lichessRoutes } from './routes/lichess.ts';
 import { engineRoutes } from './routes/engine.ts';
 import { conceptRoutes } from './routes/concepts.ts';
 import { coachRoutes } from './routes/coach.ts';
@@ -58,6 +59,7 @@ export function buildApp(
 
   libraryRoutes(app, db, { backupFolder: options.backupFolder ?? backupFolderFor(databasePath()) });
   repertoireRoutes(app, db);
+  lichessRoutes(app);
   engineRoutes(app, db, engines);
   conceptRoutes(app, db);
   coachRoutes(app, db, engines, coachClient);
