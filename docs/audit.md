@@ -23,18 +23,12 @@ All ten fixed on 28 November 2026 (coach stream, local-API lock-down, secrets ke
 - Replaying a move that already exists marks the game unsaved (`useGame.ts:110`).
 
 ### Positions and training
-- A second winning move is marked wrong, and "2. ... Qh4#" in an answer is misread (`TrainingScreen.tsx:280`, `routes/engine.ts:69`).
-- The answer is prefilled with the game's next move, often the blunder itself (`BoardScreen.tsx:408`).
 - The worksheet prints only its first page: the app shell scrolls inside a 100%-height box and there is no print stylesheet.
 - Present mode cuts the top of the board off in windows narrower than 1024 px (`PresentScreen.tsx:71`).
-- A second move during "Checking with Stockfish…" is played and sent, and the server answers 500.
 - The summary counts cards due by end of day, the queue only those due now; a card graded Again is never asked again in the session.
 - New saved positions never reach the mixed queue: repertoire cards fill all the new slots (`training.ts:252`).
-- The daily limit of new cards leaks: only `reps = 1` counts as new today (`training.ts:118`). Found by three agents.
 - Reordering a filtered set scrambles the full order (`PositionsScreen.tsx:90`, `library.ts:352`).
-- The stats chart is a day off east of UTC (Israel): days are cut at local midnight but grouped by UTC date (`training.ts:283`).
 - A move that transposes into the repertoire is marked wrong in training.
-- "Gives away the win" is said for a move that is still winning; judge by win percentage, as Lichess does.
 
 ### Repertoire
 - Export then import loses "nice to know", and the transposition note doubles on every round (`repertoire.ts:128` writes them as comment text).
@@ -44,10 +38,6 @@ All ten fixed on 28 November 2026 (coach stream, local-API lock-down, secrets ke
 - Repertoires can't be renamed or deleted in the app (the API exists).
 
 ### Games and imports
-- Searching for a name with `_` or `%` finds nothing: the LIKE has no `ESCAPE` clause (`games.ts:271`, `library.ts:26`, `concepts.ts:44`).
-- Case-insensitive search works only for ASCII (Каспаров, MÜLLER).
-- Lichess imports bring in variant games; a three-check game imports as standard chess (`importers.ts:40`).
-- Importing another player's games makes them your username and your colour (`routes/library.ts:104`).
 - A broken header tag produces an extra headless game (`pgn.ts:132`).
 - Latin-1 PGN files turn to mojibake (`GamesScreen.tsx:402` always reads UTF-8).
 
