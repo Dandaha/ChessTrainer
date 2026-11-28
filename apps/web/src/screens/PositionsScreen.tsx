@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { type PositionCategory, type PositionSetSummary, type SavedPosition, api } from '../api.ts';
 import { MiniBoard } from '../components/MiniBoard.tsx';
 import { CategoryList, CategorySelect } from '../components/CategorySelect.tsx';
-import { Empty, PageHeader, Pager, SideHeading, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
+import { Empty, PageHeader, Pager, SideHeading, SideList, Toggle, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { savedToPgn } from '../exporters.ts';
 import { Markdown } from '../components/Markdown.tsx';
 import { LinkedConcepts } from '../components/ConceptPicker.tsx';
@@ -556,10 +556,9 @@ function PositionDetail({
           <span className="text-xs text-muted">Concepts</span>
           <LinkedConcepts targetType="saved_position" targetId={saved.id} />
         </div>
-        <label className="col-span-2 flex items-center gap-2">
-          <input type="checkbox" checked={saved.inTraining} onChange={(e) => void update({ inTraining: e.target.checked })} />
-          In training
-        </label>
+        <div className="col-span-2 -ml-1">
+          <Toggle on={saved.inTraining} onToggle={() => void update({ inTraining: !saved.inTraining })} label="In training" />
+        </div>
         {sets.length > 0 && (
           <fieldset className="col-span-2 space-y-1">
             <legend className="text-xs text-muted">Sets</legend>

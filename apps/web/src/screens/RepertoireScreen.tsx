@@ -24,7 +24,7 @@ import { type RepertoireSummary, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
 import { Modal, dialogOpen } from '../Dialogs.tsx';
 import { LinkedConcepts } from '../components/ConceptPicker.tsx';
-import { Empty, FileButton, PageHeader, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
+import { Empty, FileButton, PageHeader, Toggle, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { readTextFile } from '../files.ts';
 import { download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
@@ -624,9 +624,9 @@ export function RepertoireScreen() {
 
         <div className="repertoire-board flex min-w-0 flex-1 flex-col items-center gap-3 md:h-full md:overflow-y-auto">
           <div role="group" aria-label="Board display" className="flex w-full shrink-0 flex-wrap items-center gap-2 text-sm">
-            <Switch on={showLines} onToggle={switchLines} label="Engine lines" shortcut="E" />
-            <Switch on={showBest} onToggle={switchBest} label="Best-move arrow" shortcut="A" swatch="#68217a" />
-            <Switch on={showMoves} onToggle={switchMoves} label="Variation arrows" shortcut="V" swatch="#15781B" />
+            <Toggle on={showLines} onToggle={switchLines} label="Engine lines" shortcut="E" />
+            <Toggle on={showBest} onToggle={switchBest} label="Best-move arrow" shortcut="A" swatch="#68217a" />
+            <Toggle on={showMoves} onToggle={switchMoves} label="Variation arrows" shortcut="V" swatch="#15781B" />
             {engineOn && !showLines && engine.error && <span className="text-xs text-danger">{engine.error}</span>}
             <OpeningLabel opening={selected ? openingOf.get(selected) : null} className="ml-auto min-w-0 truncate text-xs" />
           </div>
@@ -736,24 +736,6 @@ export function RepertoireScreen() {
         />
       )}
     </div>
-  );
-}
-
-/** An on/off switch above the board, with its key and, for an arrow, the arrow's colour. */
-function Switch({ on, onToggle, label, shortcut, swatch }: { on: boolean; onToggle(): void; label: string; shortcut: string; swatch?: string }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onToggle}
-      title={`${label}: ${on ? 'on' : 'off'} (${shortcut})`}
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 ${on ? 'border-accent bg-accent-soft font-medium' : 'border-line text-muted hover:bg-surface-2'}`}
-    >
-      <span aria-hidden className={`h-2 w-2 rounded-full ${on ? 'bg-accent' : 'border border-field'}`} />
-      {swatch && <span aria-hidden className="h-0.5 w-3 rounded" style={{ backgroundColor: swatch }} />}
-      {label}
-      <kbd>{shortcut}</kbd>
-    </button>
   );
 }
 

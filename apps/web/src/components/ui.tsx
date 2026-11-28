@@ -62,6 +62,48 @@ export function FileButton({ children, accept, onFile, className }: { children: 
   );
 }
 
+/**
+ * An on/off switch: a knob that slides along a track, green when on. Screen readers hear a switch
+ * with its state. `shortcut` shows the key that flips it too; `swatch` the colour of what it shows
+ * (an arrow's colour).
+ */
+export function Toggle({
+  on,
+  onToggle,
+  label,
+  shortcut,
+  swatch,
+}: {
+  on: boolean;
+  onToggle(): void;
+  label: string;
+  shortcut?: string;
+  swatch?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      title={`${label}: ${on ? 'on' : 'off'}${shortcut ? ` (${shortcut})` : ''}`}
+      className="inline-flex items-center gap-2 rounded-full py-1 pr-2.5 pl-1 text-sm hover:bg-surface-2"
+    >
+      <span
+        aria-hidden
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${on ? 'bg-accent' : 'bg-field'}`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 motion-reduce:transition-none ${on ? 'translate-x-4' : ''}`}
+        />
+      </span>
+      {swatch && <span aria-hidden className="h-0.5 w-3 rounded" style={{ backgroundColor: swatch }} />}
+      <span className={on ? 'font-medium text-text' : 'text-muted'}>{label}</span>
+      {shortcut && <kbd>{shortcut}</kbd>}
+    </button>
+  );
+}
+
 /** A list in a side column: All, collections, sets... */
 export function SideList({
   items,

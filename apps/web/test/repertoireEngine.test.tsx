@@ -28,8 +28,8 @@ beforeEach(() => {
   window.location.hash = '#/board';
 });
 
-const switchFor = (name: RegExp) => screen.getByRole('button', { name });
-const pressed = (name: RegExp) => switchFor(name).getAttribute('aria-pressed');
+const switchFor = (name: RegExp) => screen.getByRole('switch', { name });
+const pressed = (name: RegExp) => switchFor(name).getAttribute('aria-checked');
 const treeText = () => [...screen.getByLabelText('Repertoire tree').querySelectorAll('[data-line]')].map((l) => l.textContent);
 
 describe('the repertoire board with the engine', () => {

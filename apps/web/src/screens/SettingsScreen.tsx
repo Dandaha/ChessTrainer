@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { type Backup, type EngineStatus, type Settings, type SettingsUpdate, type TrashItem, type UpdateInfo, api } from '../api.ts';
-import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
+import { Empty, PageHeader, Toggle, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { useConfirm } from '../components/AskText.tsx';
 import { type Theme, applyTheme, useTheme } from '../storage.ts';
 import { useWorkspace } from '../workspace.tsx';
@@ -616,26 +616,24 @@ function UpdateSettings() {
         )}
       </div>
       {status.state !== 'unavailable' && (
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={info.testVersions}
-            onChange={async (e) => {
-              try {
-                setInfo(await api.setTestVersions(e.target.checked));
-              } catch (error) {
-                ws.toast((error as Error).message, true);
-              }
-            }}
-          />
-          <span>
-            Test versions
-            <span className="block text-xs text-muted">
-              Every new build as soon as it is made, to try changes out. Off, the app takes only the versions released as stable.
-            </span>
-          </span>
-        </label>
+        <div className="space-y-1">
+          <div className="-ml-1">
+            <Toggle
+              on={info.testVersions}
+              label="Test versions"
+              onToggle={async () => {
+                try {
+                  setInfo(await api.setTestVersions(!info.testVersions));
+                } catch (error) {
+                  ws.toast((error as Error).message, true);
+                }
+              }}
+            />
+          </div>
+          <p className="text-xs text-muted">
+            Every new build as soon as it is made, to try changes out. Off, the app takes only the versions released as stable.
+          </p>
+        </div>
       )}
     </section>
   );

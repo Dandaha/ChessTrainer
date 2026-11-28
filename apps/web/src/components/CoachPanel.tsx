@@ -11,7 +11,7 @@ import {
   api,
 } from '../api.ts';
 import { Markdown } from './Markdown.tsx';
-import { buttonClass, inputClass, primaryClass } from './ui.tsx';
+import { Toggle, buttonClass, inputClass, primaryClass } from './ui.tsx';
 
 /**
  * The coach next to the board: quick buttons, a free question, the answer
@@ -195,9 +195,7 @@ export const CoachPanel = forwardRef<
           }}
         />
         <div className="flex items-center justify-between">
-          <label className="flex items-center gap-1 text-xs text-muted">
-            <input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} /> Think deeper (slower model)
-          </label>
+          <Toggle on={deep} onToggle={() => setDeep(!deep)} label="Think deeper (slower)" />
           <button type="submit" className={primaryClass} disabled={busy || !question.trim()}>
             Ask <kbd>Enter</kbd>
           </button>
