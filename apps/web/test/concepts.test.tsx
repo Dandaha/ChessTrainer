@@ -66,8 +66,11 @@ describe('concepts', () => {
     // The concept list reloads a moment later than the category list.
     expect(await screen.findByText('Tactical motifs', { selector: 'div' })).toBeTruthy();
     fireEvent.click(side);
-    await waitFor(() => expect(screen.queryByRole('link', { name: 'Fork' })).toBeNull());
-    expect(screen.getByRole('link', { name: 'Arabian mate' })).toBeTruthy();
+    // Both at once: while the filtered list loads it is briefly empty, Fork gone and Arabian mate not yet back.
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Fork' })).toBeNull();
+      expect(screen.getByRole('link', { name: 'Arabian mate' })).toBeTruthy();
+    });
 
     // Renamed, it is renamed on the concept too.
     fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
