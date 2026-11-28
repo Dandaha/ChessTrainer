@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { type Backup, type EngineStatus, type Settings, type SettingsUpdate, type TrashItem, api } from '../api.ts';
-import { Empty, PageHeader, buttonClass, inputClass } from '../components/ui.tsx';
+import { Empty, PageHeader, buttonClass, dangerClass, inputClass } from '../components/ui.tsx';
+import { useConfirm } from '../components/AskText.tsx';
 import { type Theme, applyTheme, useTheme } from '../storage.ts';
 import { useWorkspace } from '../workspace.tsx';
 
@@ -9,6 +10,7 @@ export const settingsSections: (() => ReactNode)[] = [];
 
 export function SettingsScreen() {
   const ws = useWorkspace();
+  const confirm = useConfirm();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [trash, setTrash] = useState<TrashItem[] | null>(null);
   const theme = useTheme();
@@ -101,7 +103,42 @@ export function SettingsScreen() {
         ))}
 
         <section className="space-y-3">
-          <h2 className="font-semibold">Trash</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">Trash</h2>
+            {trash && trash.length > 0 && (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={buttonClass}
+                  onClick={async () => {
+                    const { restored } = await api.restoreAll();
+                    setTrash([]);
+                    ws.toast(`Restored ${restored} item${restored === 1 ? '' : 's'}.`);
+                  }}
+                >
+                  Restore all
+                </button>
+                <button
+                  type="button"
+                  className={dangerClass}
+                  onClick={async () => {
+                    const sure = await confirm({
+                      title: 'Empty the trash?',
+                      message: `The ${trash.length} item${trash.length === 1 ? '' : 's'} in the trash will be deleted for good. This cannot be undone (a backup made before can still bring them back).`,
+                      confirm: 'Delete for good',
+                      cancel: 'Keep them',
+                    });
+                    if (!sure) return;
+                    await api.emptyTrash();
+                    setTrash([]);
+                    ws.toast('The trash is empty.');
+                  }}
+                >
+                  Empty trash
+                </button>
+              </div>
+            )}
+          </div>
           <p className="text-sm text-muted">Deleted games, positions, sets and collections stay here for 30 days.</p>
           {trash && trash.length === 0 && <Empty>The trash is empty.</Empty>}
           <ul className="divide-y divide-line rounded-xl border border-line bg-surface">

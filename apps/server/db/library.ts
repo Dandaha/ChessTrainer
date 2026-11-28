@@ -468,6 +468,23 @@ export function restore(db: Db, kind: TrashKind, id: string): void {
   db.update(table).set({ deletedAt: null }).where(eq(table.id, id)).run();
 }
 
+/** Takes everything out of the trash; says how many items came back. */
+export function restoreAll(db: Db): number {
+  let restored = 0;
+  db.transaction((tx) => {
+    for (const table of Object.values(TRASH_TABLES)) {
+      restored += tx.update(table).set({ deletedAt: null }).where(isNotNull(table.deletedAt)).run().changes;
+    }
+  });
+  return restored;
+}
+
+/** Deletes everything in the trash for good, whatever its age. */
+export function emptyTrash(db: Db): number {
+  // A cutoff a day ahead takes in everything deleted until now.
+  return purgeTrash(db, -1);
+}
+
 export function listTrash(db: Db): TrashItem[] {
   const items: TrashItem[] = [
     ...db

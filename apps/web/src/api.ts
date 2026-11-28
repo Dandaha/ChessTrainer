@@ -198,11 +198,12 @@ function query(params: object): string {
 export const api = {
   health: () => call<{ ok: boolean }>('GET', '/api/health'),
 
-  games: (filters: GameFilters = {}) => call<{ total: number; games: GameSummary[] }>('GET', `/api/games${query(filters)}`),
+  /** `lastImport`: only the games of the last import that added any. */
+  games: (filters: GameFilters & { lastImport?: 1 } = {}) => call<{ total: number; games: GameSummary[] }>('GET', `/api/games${query(filters)}`),
   game: (id: string) => call<GameDetail>('GET', `/api/games/${id}`),
   duplicates: () => call<{ groups: { keep: GameSummary; copies: GameSummary[] }[]; extraCopies: number }>('GET', '/api/games/duplicates'),
   timeControls: () => call<{ timeControl: string; speed: string | null; games: number }[]>('GET', '/api/games/time-controls'),
-  exportGames: (filters: GameFilters) => call<{ pgn: string; count: number }>('GET', `/api/games/export${query(filters)}`),
+  exportGames: (filters: GameFilters & { lastImport?: 1 }) => call<{ pgn: string; count: number }>('GET', `/api/games/export${query(filters)}`),
   exportGameIds: (ids: string[]) => call<{ pgn: string; count: number }>('POST', '/api/games/export', { ids }),
   createGame: (pgn: string) => call<{ id: string }>('POST', '/api/games', { pgn }),
   updateGame: (id: string, changes: { pgn?: string; notes?: string | null; tags?: string[]; myColor?: 'white' | 'black' | null }) =>
@@ -338,6 +339,8 @@ export const api = {
       `/api/repertoires/${id}/gaps${query({ maxPositions, minShare })}`,
     ),
   restore: (kind: TrashKind, id: string) => call('POST', '/api/trash/restore', { kind, id }),
+  restoreAll: () => call<{ restored: number }>('POST', '/api/trash/restore-all', {}),
+  emptyTrash: () => call<{ deleted: number }>('POST', '/api/trash/empty', {}),
   backups: () => call<{ folder: string; backups: Backup[] }>('GET', '/api/backups'),
   lichessToken: () => call<{ connected: boolean }>('GET', '/api/lichess/token'),
   setLichessToken: (token: string) => call<{ connected: boolean; username: string | null }>('PUT', '/api/lichess/token', { token }),

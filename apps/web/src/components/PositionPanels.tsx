@@ -50,6 +50,14 @@ export function GamesHere({
     <div className="space-y-3 p-3 text-sm">
       <p className="text-muted">
         Reached in {data.total} game{data.total === 1 ? '' : 's'}.
+        {data.total > data.games.length && (
+          <>
+            {' '}
+            <button type="button" className="text-accent hover:underline" onClick={() => navigate(`games?fen=${encodeURIComponent(fen)}`)}>
+              Show all {data.total} in the games list
+            </button>
+          </>
+        )}
       </p>
       {data.moves.length > 0 && (
         <table className="w-full">

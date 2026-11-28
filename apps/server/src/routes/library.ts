@@ -36,6 +36,8 @@ import {
   removeGamesFromCollection,
   reorderSet,
   restore,
+  restoreAll,
+  emptyTrash,
   savesOfPosition,
   softDelete,
   updateCollection,
@@ -58,6 +60,10 @@ const bool = (v?: string) => (v === 'true' ? true : v === 'false' ? false : unde
 /** Phase 2: the game library, saved positions, sets, tags, settings and trash. */
 export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFolder: string }): void {
   // Games ---------------------------------------------------------------------
+  const lastImportAt = () => {
+    const at = getSettings(db).lastImportAt;
+    return typeof at === 'string' ? at : undefined;
+  };
   const gameFilters = (q: Query): GameFilters => ({
       q: q.q,
       player: q.player,
@@ -72,6 +78,8 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
       source: q.source as GameFilters['source'],
       speed: (SPEEDS as readonly string[]).includes(q.speed ?? '') ? (q.speed as GameFilters['speed']) : undefined,
       timeControl: q.timeControl || undefined,
+      // The last import: from when it started (none yet: nothing matches).
+      since: q.lastImport ? (lastImportAt() ?? '9999') : undefined,
       sort: (GAME_SORTS as readonly string[]).includes(q.sort ?? '') ? (q.sort as GameFilters['sort']) : undefined,
       dir: q.dir === 'asc' || q.dir === 'desc' ? q.dir : undefined,
       limit: num(q.limit),
@@ -121,9 +129,15 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
     reply: FastifyReply,
     work: (onProgress: (progress: ImportProgress) => void) => Promise<ImportReport>,
   ) => {
-    if (!wantsEvents(req)) return work(() => {});
+    // An import that adds games becomes "the last import" in the library, from when it started.
+    const started = new Date().toISOString();
+    const remember = (report: ImportReport) => {
+      if (report.imported > 0) updateSettings(db, { lastImportAt: started });
+      return report;
+    };
+    if (!wantsEvents(req)) return remember(await work(() => {}));
     await streamEvents<ImportEvent>(reply, async (emit) => {
-      const report = await work((progress) => emit({ type: 'progress', ...progress }));
+      const report = remember(await work((progress) => emit({ type: 'progress', ...progress })));
       emit({ type: 'done', report });
     });
     return reply;
@@ -266,6 +280,8 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
     const backup = backupDatabase(db, options.backupFolder);
     return { backup, folder: options.backupFolder, backups: listBackups(options.backupFolder) };
   });
+  app.post('/api/trash/restore-all', async () => ({ restored: restoreAll(db) }));
+  app.post('/api/trash/empty', async () => ({ deleted: emptyTrash(db) }));
   app.post('/api/trash/restore', async (req) => {
     const { kind, id } = parseBody(bodies.restore, req.body);
     restore(db, kind, id);

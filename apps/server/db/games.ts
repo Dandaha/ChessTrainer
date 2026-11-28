@@ -64,6 +64,8 @@ export interface GameFilters {
   myColor?: 'white' | 'black';
   source?: GameSource;
   speed?: Speed;
+  /** Only games added since this time (ISO): the last import. */
+  since?: string;
   /** The TimeControl tag exactly, such as "180+2". */
   timeControl?: string;
   /** A column to sort by; the newest first when none is given (a collection: its own order). */
@@ -409,6 +411,7 @@ function conditions(db: Db, f: GameFilters): SQL[] | null {
   if (f.dateTo) where.push(sql`${games.date} <= ${`${f.dateTo.replace(/-/g, '.')}~`}`);
   if (f.myColor) where.push(eq(games.myColor, f.myColor));
   if (f.speed) where.push(eq(games.speed, f.speed));
+  if (f.since) where.push(sql`${games.createdAt} >= ${f.since}`);
   if (f.timeControl) where.push(eq(games.timeControl, f.timeControl));
   if (f.source) where.push(eq(games.source, f.source));
   if (f.collectionId) {

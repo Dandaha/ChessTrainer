@@ -4,11 +4,14 @@ import { type CollectionSummary, type GameSort, type GameSummary, type ImportPro
 import { Modal } from '../Dialogs.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { useWorkspace } from '../workspace.tsx';
+import { navigate, useRoute } from '../router.ts';
 import { useAskText } from '../components/AskText.tsx';
 import { readTextFile } from '../files.ts';
 import { download, safeFileName } from '../pieces.ts';
 
 const LIMIT = 50;
+/** The sidebar entry for the games of the last import, beside the collections. */
+const LAST_IMPORT = 'last-import';
 
 interface Filters {
   q: string;
@@ -55,11 +58,23 @@ export function GamesScreen() {
   const rows = useRef<(HTMLTableRowElement | null)[]>([]);
 
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
+  const [lastImportCount, setLastImportCount] = useState(0);
+  // "Show all" from the board's Games tab: only the games that reached that position.
+  const fen = useRoute().params.get('fen') ?? '';
+  const scope = {
+    collectionId: collectionId && collectionId !== LAST_IMPORT ? collectionId : undefined,
+    lastImport: collectionId === LAST_IMPORT ? (1 as const) : undefined,
+    fen: fen || undefined,
+  };
   const askText = useAskText();
 
   useEffect(() => {
     api.collections().then(setCollections).catch(() => {});
     api.timeControls().then(setControls).catch(() => {});
+    api
+      .games({ lastImport: 1, limit: 1 })
+      .then((d) => setLastImportCount(d.total))
+      .catch(() => {});
   }, [refresh]);
 
   useEffect(() => {
@@ -68,7 +83,7 @@ export function GamesScreen() {
       api
         .games({
           ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
-          collectionId: collectionId || undefined,
+          ...scope,
           sort: sort?.key,
           dir: sort?.dir,
           limit: LIMIT,
@@ -85,13 +100,13 @@ export function GamesScreen() {
       live = false;
       clearTimeout(timer);
     };
-  }, [filters, collectionId, offset, refresh, sort]);
+  }, [filters, collectionId, offset, refresh, sort, fen]);
 
   // A selection belongs to the rows on screen: a new filter, collection or page starts afresh, so a
   // bulk action can never reach games that are no longer visible.
   useEffect(() => {
     setSelected(new Set());
-  }, [filters, collectionId, offset]);
+  }, [filters, collectionId, offset, fen]);
 
   const setFilter = (key: keyof Filters, value: string) => {
     setFilters((f) => ({ ...f, [key]: value }));
@@ -161,7 +176,7 @@ export function GamesScreen() {
             try {
               const { pgn, count } = await api.exportGames({
                 ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
-                collectionId: collectionId || undefined,
+                ...scope,
                 sort: sort?.key,
                 dir: sort?.dir,
               });
@@ -185,7 +200,8 @@ export function GamesScreen() {
         <aside className="w-56 shrink-0 space-y-3 overflow-y-auto border-r border-line p-3">
           <SideList
             items={[
-              { id: '', label: 'All games', count: collectionId ? undefined : data?.total },
+              { id: '', label: 'All games', count: collectionId || fen ? undefined : data?.total },
+              ...(lastImportCount ? [{ id: LAST_IMPORT, label: 'Last import', count: lastImportCount }] : []),
               ...collections.map((c) => ({ id: c.id, label: c.name, count: c.games })),
             ]}
             activeId={collectionId}
@@ -275,6 +291,15 @@ export function GamesScreen() {
               </button>
             )}
           </div>
+
+          {fen && (
+            <div className="flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm">
+              <span>Only games that reached the position from the board.</span>
+              <button type="button" className="ml-auto text-accent hover:underline" onClick={() => navigate('games')}>
+                Show all games
+              </button>
+            </div>
+          )}
 
           {selected.size > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm">
@@ -475,9 +500,14 @@ export function GamesScreen() {
       {importing && (
         <ImportGamesDialog
           collections={collections}
-          defaultCollection={collectionId}
+          defaultCollection={collectionId === LAST_IMPORT ? '' : collectionId}
           onClose={() => setImporting(false)}
           onDone={(report) => {
+            // Show what came in.
+            if (report.imported > 0 && !collectionId) {
+              setCollectionId(LAST_IMPORT);
+              setOffset(0);
+            }
             reload();
             ws.toast(importSummary(report), report.errors.length > 0 && report.imported === 0);
           }}
