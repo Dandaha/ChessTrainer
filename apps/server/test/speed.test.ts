@@ -36,7 +36,9 @@ describe('the speed of a game', () => {
     expect(formatTimeControl('600')).toBe('10+0');
     expect(formatTimeControl('30+0')).toBe('½+0');
     expect(formatTimeControl('-')).toBeNull();
-    expect(formatTimeControl('1/86400')).toBe('1/86400');
+    expect(formatTimeControl('1/86400')).toBe('1 day/move');
+    expect(formatTimeControl('1/259200')).toBe('3 days/move');
+    expect(formatTimeControl('40/7200:3600')).toBe('40/7200:3600');
   });
 });
 

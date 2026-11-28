@@ -28,6 +28,12 @@ export function speedOf(timeControl: string | null | undefined, event?: string |
 /** "180+2" as people say it: "3+2"; "600" is "10+0"; half a minute is "½". */
 export function formatTimeControl(timeControl: string | null | undefined): string | null {
   const clock = /^(\d+)(?:\+(\d+))?$/.exec(timeControl?.trim() ?? '');
+  // A time per move, as Chess.com's daily games write it: "1/86400" is a day a move.
+  const perMove = /^1\/(\d+)$/.exec(timeControl?.trim() ?? '');
+  if (perMove) {
+    const days = Number(perMove[1]) / 86400;
+    if (Number.isInteger(days)) return `${days} day${days === 1 ? '' : 's'}/move`;
+  }
   if (!clock) return timeControl?.trim() && timeControl.trim() !== '-' ? timeControl.trim() : null;
   const minutes = Number(clock[1]) / 60;
   const base = Number.isInteger(minutes) ? String(minutes) : minutes === 0.5 ? '½' : minutes === 0.25 ? '¼' : minutes.toFixed(1);

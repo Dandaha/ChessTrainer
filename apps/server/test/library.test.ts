@@ -97,6 +97,8 @@ describe('the game library', () => {
     expect(listGames(db, { q: 'tyler_920' }).games.map((g) => g.white)).toEqual(['tyler_920']);
     expect(listGames(db, { player: 'каспаров' }).total).toBe(1);
     expect(listGames(db, { player: 'MÜLLER' }).total).toBe(1);
+    // Accents are ignored too: "muller" finds "Müller".
+    expect(listGames(db, { player: 'muller' }).total).toBe(1);
     expect(listGames(db, { q: '50%' }).total).toBe(1);
     expect(listGames(db, { q: '%' }).total).toBe(1);
     createSavedPosition(db, { fen: FEN_START, title: 'pawn_storm 50% idea' });

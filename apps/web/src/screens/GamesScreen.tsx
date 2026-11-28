@@ -56,6 +56,8 @@ export function GamesScreen() {
   // The row the keyboard is on: arrows move it, Enter opens, Space selects, E edits, Delete deletes.
   const [focusRow, setFocusRow] = useState(0);
   const rows = useRef<(HTMLTableRowElement | null)[]>([]);
+  // Set when a key changed the list (a page turned, a game deleted): the keyboard stays in it.
+  const refocus = useRef(false);
 
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const [lastImportCount, setLastImportCount] = useState(0);
@@ -133,10 +135,17 @@ export function GamesScreen() {
   const current = collections.find((c) => c.id === collectionId);
 
   const deleteOne = async (game: GameSummary) => {
+    refocus.current = true;
     await api.deleteGames([game.id]);
     undoToast(ws, 'Moved the game to the trash.', () => api.restore('game', game.id), reload);
     reload();
   };
+
+  useEffect(() => {
+    if (!refocus.current || !data?.games.length) return;
+    refocus.current = false;
+    rows.current[Math.min(focusRow, data.games.length - 1)]?.focus();
+  }, [data]);
 
   const onRowKey = (event: React.KeyboardEvent, index: number, game: GameSummary) => {
     const count = data?.games.length ?? 0;
@@ -150,8 +159,18 @@ export function GamesScreen() {
       ArrowUp: () => go(index - 1),
       Home: () => go(0),
       End: () => go(count - 1),
-      PageDown: () => data && offset + LIMIT < data.total && setOffset(offset + LIMIT),
-      PageUp: () => offset > 0 && setOffset(Math.max(0, offset - LIMIT)),
+      PageDown: () => {
+        if (!data || offset + LIMIT >= data.total) return;
+        refocus.current = true;
+        setFocusRow(0);
+        setOffset(offset + LIMIT);
+      },
+      PageUp: () => {
+        if (offset === 0) return;
+        refocus.current = true;
+        setFocusRow(0);
+        setOffset(Math.max(0, offset - LIMIT));
+      },
       Enter: () => void ws.openGameById(game.id),
       ' ': () => toggle(game.id),
       e: () => setEditing(game),
@@ -197,10 +216,11 @@ export function GamesScreen() {
         </button>
       </PageHeader>
       <div className="flex min-h-0 flex-1">
-        <aside className="w-56 shrink-0 space-y-3 overflow-y-auto border-r border-line p-3">
+        <aside className="w-48 shrink-0 space-y-3 overflow-y-auto border-r border-line p-3 xl:w-56">
           <SideList
             items={[
-              { id: '', label: 'All games', count: collectionId || fen ? undefined : data?.total },
+              // The library's count, not a filter's: none while a filter is on.
+              { id: '', label: 'All games', count: collectionId || fen || Object.values(filters).some(Boolean) ? undefined : data?.total },
               ...(lastImportCount ? [{ id: LAST_IMPORT, label: 'Last import', count: lastImportCount }] : []),
               ...collections.map((c) => ({ id: c.id, label: c.name, count: c.games })),
             ]}
@@ -250,7 +270,21 @@ export function GamesScreen() {
 
         <section className="min-w-0 flex-1 space-y-3 overflow-y-auto p-4">
           <div className="flex flex-wrap gap-2">
-            <input aria-label="Search games" className={`${inputClass} w-56`} placeholder="Search players, event, opening…" value={filters.q} onChange={(e) => setFilter('q', e.target.value)} />
+            <input
+              aria-label="Search games"
+              className={`${inputClass} w-56`}
+              placeholder="Search players, event, opening…"
+              value={filters.q}
+              onChange={(e) => setFilter('q', e.target.value)}
+              onKeyDown={(e) => {
+                // Down from the search box goes into the list, for the keyboard.
+                if (e.key === 'ArrowDown' && rows.current[0]) {
+                  e.preventDefault();
+                  setFocusRow(0);
+                  rows.current[0].focus();
+                }
+              }}
+            />
             <input aria-label="Player" className={`${inputClass} w-36`} placeholder="Player" value={filters.player} onChange={(e) => setFilter('player', e.target.value)} />
             <input aria-label="Opening or ECO" className={`${inputClass} w-36`} placeholder="Opening or ECO" value={filters.opening} onChange={(e) => setFilter('opening', e.target.value)} />
             <select aria-label="Result" className={inputClass} value={filters.result} onChange={(e) => setFilter('result', e.target.value)}>
@@ -314,7 +348,7 @@ export function GamesScreen() {
                 onChange={async (e) => {
                   if (!e.target.value) return;
                   await api.addToCollection(e.target.value, [...selected]);
-                  ws.toast(`Added ${selected.size} game(s) to the collection.`);
+                  ws.toast(`Added ${selected.size} game${selected.size === 1 ? '' : 's'} to the collection.`);
                   reload();
                 }}
               >
@@ -379,7 +413,7 @@ export function GamesScreen() {
             </Empty>
           )}
           {data && data.total > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+            <div className="relative overflow-x-auto rounded-xl border border-line bg-surface">
               <table className="w-full text-sm">
                 <thead className="border-b border-line text-left text-xs text-muted">
                   <tr>
@@ -398,6 +432,7 @@ export function GamesScreen() {
                         key={column.key}
                         column={column}
                         sort={sort}
+                        ownOrder={!!scope.collectionId}
                         onSort={(next) => {
                           setSort(next);
                           setOffset(0);
@@ -509,9 +544,10 @@ export function GamesScreen() {
           defaultCollection={collectionId === LAST_IMPORT ? '' : collectionId}
           onClose={() => setImporting(false)}
           onDone={(report) => {
-            // Show what came in.
+            // Show what came in, all of it (a filter left on could hide it).
             if (report.imported > 0 && !collectionId) {
               setCollectionId(LAST_IMPORT);
+              setFilters(EMPTY);
               setOffset(0);
             }
             reload();
@@ -706,14 +742,18 @@ const COLUMNS: { key: GameSort; label: string; first: 'asc' | 'desc' }[] = [
 function SortHeader({
   column,
   sort,
+  ownOrder = false,
   onSort,
 }: {
   column: (typeof COLUMNS)[number];
   sort: { key: GameSort; dir: 'asc' | 'desc' } | null;
+  /** A collection in its own order: no column is the sort until one is chosen. */
+  ownOrder?: boolean;
   onSort(next: { key: GameSort; dir: 'asc' | 'desc' }): void;
 }) {
-  const active = sort?.key === column.key || (!sort && column.key === 'date');
-  const dir = sort?.key === column.key ? sort.dir : !sort && column.key === 'date' ? 'desc' : null;
+  const newestFirst = !sort && !ownOrder && column.key === 'date';
+  const active = sort?.key === column.key || newestFirst;
+  const dir = sort?.key === column.key ? sort.dir : newestFirst ? 'desc' : null;
   return (
     <th className="px-2 py-2" aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'}>
       <button
