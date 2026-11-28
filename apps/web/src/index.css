@@ -126,7 +126,7 @@ kbd {
     container-type: size;
   }
   .repertoire-board .board-frame {
-    width: min(calc(100cqw - 2rem), 100cqh);
+    width: min(calc(100cqw - 4.75rem), 100cqh);
   }
 }
 

@@ -43,6 +43,13 @@ export function ConceptPicker({
   const [text, setText] = useState('');
   const [options, setOptions] = useState<ConceptSummary[]>([]);
   const [open, setOpen] = useState(false);
+  // The list opens upward when the box sits near the bottom of the window, so it is never cut off.
+  const [upward, setUpward] = useState(false);
+  useEffect(() => {
+    if (!open || !box.current) return;
+    const rect = box.current.getBoundingClientRect();
+    setUpward(window.innerHeight - rect.bottom < 260 && rect.top > 260);
+  }, [open]);
   // The highlighted row, which Enter takes: the first suggestion unless the arrow keys moved it.
   const [active, setActive] = useState(0);
   const box = useRef<HTMLDivElement>(null);
@@ -142,7 +149,11 @@ export function ConceptPicker({
         className={`${inputClass} w-full`}
       />
       {open && (options.length > 0 || text.trim()) && (
-        <ul id={listId} role="listbox" className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-line bg-surface py-1 text-sm shadow-panel">
+        <ul
+          id={listId}
+          role="listbox"
+          className={`absolute z-30 max-h-60 w-full overflow-y-auto rounded-md border border-line bg-surface py-1 text-sm shadow-panel ${upward ? 'bottom-full mb-1' : 'mt-1'}`}
+        >
           {options.map((o, i) => (
             <li key={o.id} role="option" aria-selected={i === active}>
               <button

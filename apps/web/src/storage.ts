@@ -4,7 +4,7 @@
  * keeping goes to the server's database.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 const PREFIX = 'chess-workspace:';
 
@@ -56,6 +56,41 @@ export function readFlag(key: string, fallback = false): boolean {
 
 export function writeFlag(key: string, on: boolean): void {
   write(key, on ? '1' : '0');
+}
+
+/** How boards look, the same on every board: the last move marked, legal moves shown, coordinates. */
+export interface BoardPrefs {
+  lastMove: boolean;
+  legalMoves: boolean;
+  coordinates: boolean;
+}
+
+const boardPrefListeners = new Set<() => void>();
+
+export function readBoardPrefs(): BoardPrefs {
+  return {
+    lastMove: readFlag('board-last-move', true),
+    legalMoves: readFlag('board-legal-moves', true),
+    coordinates: readFlag('board-coordinates', true),
+  };
+}
+
+export function writeBoardPref(key: keyof BoardPrefs, on: boolean): void {
+  writeFlag(key === 'lastMove' ? 'board-last-move' : key === 'legalMoves' ? 'board-legal-moves' : 'board-coordinates', on);
+  for (const listener of boardPrefListeners) listener();
+}
+
+/** The board preferences, kept up to date when they change (on any board). */
+export function useBoardPrefs(): BoardPrefs {
+  const [prefs, setPrefs] = useState(readBoardPrefs);
+  useEffect(() => {
+    const changed = () => setPrefs(readBoardPrefs());
+    boardPrefListeners.add(changed);
+    return () => {
+      boardPrefListeners.delete(changed);
+    };
+  }, []);
+  return prefs;
 }
 
 export function currentTheme(): Theme {

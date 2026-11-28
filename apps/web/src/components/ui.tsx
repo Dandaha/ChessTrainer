@@ -73,12 +73,15 @@ export function Toggle({
   label,
   shortcut,
   swatch,
+  small = false,
 }: {
   on: boolean;
   onToggle(): void;
   label: string;
   shortcut?: string;
   swatch?: string;
+  /** A smaller switch, for a row of them above a panel. */
+  small?: boolean;
 }) {
   return (
     <button
@@ -87,19 +90,22 @@ export function Toggle({
       aria-checked={on}
       onClick={onToggle}
       title={`${label}: ${on ? 'on' : 'off'}${shortcut ? ` (${shortcut})` : ''}`}
-      className="inline-flex items-center gap-2 rounded-full py-1 pr-2.5 pl-1 text-sm hover:bg-surface-2"
+      className={`inline-flex items-center rounded-full hover:bg-surface-2 ${small ? 'gap-1.5 py-0.5 pr-2 pl-0.5 text-xs' : 'gap-2 py-1 pr-2.5 pl-1 text-sm'}`}
     >
       <span
         aria-hidden
-        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${on ? 'bg-accent' : 'bg-field'}`}
+        className={`relative shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none ${small ? 'h-4 w-7' : 'h-5 w-9'} ${on ? 'bg-accent' : 'bg-field'}`}
       >
         <span
-          className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 motion-reduce:transition-none ${on ? 'translate-x-4' : ''}`}
+          className={`absolute top-0.5 left-0.5 rounded-full bg-white shadow transition-transform duration-200 motion-reduce:transition-none ${small ? 'h-3 w-3' : 'h-4 w-4'} ${
+            on ? (small ? 'translate-x-3' : 'translate-x-4') : ''
+          }`}
         />
       </span>
       {swatch && <span aria-hidden className="h-0.5 w-3 rounded" style={{ backgroundColor: swatch }} />}
       <span className={on ? 'font-medium text-text' : 'text-muted'}>{label}</span>
-      {shortcut && <kbd>{shortcut}</kbd>}
+      {/* The key: written out beside a full-size switch; on a small one only in its tooltip. */}
+      {shortcut && !small && <kbd>{shortcut}</kbd>}
     </button>
   );
 }

@@ -20,6 +20,7 @@ import { BoardEditor } from '../components/BoardEditor.tsx';
 import { GameTagsDialog } from '../components/GameTagsDialog.tsx';
 import { gameLabel, useWorkspace } from '../workspace.tsx';
 import { typedMoveProblem } from '../moveText.ts';
+import { BoardTools, MoveNav } from '../components/BoardControls.tsx';
 
 type Dialog = 'import' | 'export' | 'shortcuts' | 'save' | 'repertoire' | 'editor' | 'tags' | null;
 export type BoardTab = 'notes' | 'games' | 'saved';
@@ -51,6 +52,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const { g } = ws;
   const [dialog, setDialog] = useState<Dialog>(null);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const boardArea = useRef<HTMLElement>(null);
   const [typed, setTyped] = useState('');
   const [tab, setTab] = useState<string>('notes');
   const [savedRefresh, setSavedRefresh] = useState(0);
@@ -289,9 +291,6 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
           <button type="button" className={toolButton} onClick={() => setDialog('export')} title="Export (X)">
             Export
           </button>
-          <button type="button" className={toolButton} onClick={ws.flip} title="Flip (F)">
-            Flip
-          </button>
           <button type="button" className={toolButton} onClick={() => setDialog('shortcuts')} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
             ?
           </button>
@@ -299,7 +298,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:justify-center">
-        <section className="analysis-board flex min-w-0 flex-col items-center gap-3 md:flex-1 md:items-end">
+        <section ref={boardArea} className="analysis-board flex min-w-0 flex-col items-center gap-3 bg-bg md:flex-1 md:items-end">
           <div className="flex w-full justify-center gap-2 md:justify-end">
             {/* In threat mode the engine looks at the other side's move: the bar shows the position's own
                 score when it has one, and is hidden rather than shown empty when it has not. */}
@@ -328,29 +327,13 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               />
               <MaterialStrip side={bottom} material={material[bottom]} />
             </div>
+            {/* Flip, full screen and the board settings, level with the board. */}
+            <div className="flex py-6">
+              <BoardTools onFlip={ws.flip} fullScreen={boardArea} />
+            </div>
           </div>
           <div className="flex w-full max-w-[calc(100dvh-16rem)] items-center gap-2">
-            <div className="flex gap-1">
-              {(
-                [
-                  ['⏮', 'Start (↑)', g.toStart],
-                  ['◀', 'Back (←)', g.back],
-                  ['▶', 'Forward (→)', g.forward],
-                  ['⏭', 'End (↓)', g.toEnd],
-                ] as const
-              ).map(([icon, label, action]) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={action}
-                  aria-label={label}
-                  title={label}
-                  className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm hover:bg-surface-2"
-                >
-                  {icon}
-                </button>
-              ))}
-            </div>
+            <MoveNav onStart={g.toStart} onBack={g.back} onForward={g.forward} onEnd={g.toEnd} />
             <input
               ref={moveInput}
               aria-label="Type a move"

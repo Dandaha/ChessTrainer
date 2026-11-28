@@ -41,7 +41,7 @@ describe('opening names', () => {
     const bc4 = await screen.findByRole('button', { name: /Bc4/ });
     await waitFor(() => expect(bc4.title).toBe('C50 Italian Game'));
     fireEvent.click(bc4);
-    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Board display' })).getByTestId('opening').textContent).toBe('C50 Italian Game'));
+    await waitFor(() => expect(screen.getByTestId('opening').textContent).toBe('C50 Italian Game'));
   });
 
   it('name a saved position by the moves of its game, or by its own position', async () => {

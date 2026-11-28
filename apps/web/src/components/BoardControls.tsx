@@ -1,0 +1,210 @@
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
+import { type BoardPrefs, useBoardPrefs, writeBoardPref } from '../storage.ts';
+import { Icon, type IconName } from './icons.tsx';
+import { Toggle } from './ui.tsx';
+
+/**
+ * The small controls around a board: the move buttons under it (start, back, forward, end), and a
+ * strip of tools beside it (flip, full screen, board settings), with a tip (ⓘ) for anything that
+ * needs explaining. Icons, not text, so they take little room.
+ */
+
+const iconButton = 'grid h-8 w-8 place-items-center rounded-md border border-line bg-surface text-muted hover:bg-surface-2 hover:text-text';
+
+/** Start, back, forward, end. */
+export function MoveNav({ onStart, onBack, onForward, onEnd }: { onStart(): void; onBack(): void; onForward(): void; onEnd(): void }) {
+  const buttons: [IconName, string, () => void][] = [
+    ['first', 'Start (Home)', onStart],
+    ['prev', 'Back (←)', onBack],
+    ['next', 'Forward (→)', onForward],
+    ['last', 'End of the line (End)', onEnd],
+  ];
+  return (
+    <div className="flex shrink-0 gap-1" role="group" aria-label="Moves">
+      {buttons.map(([icon, label, action]) => (
+        <button key={icon} type="button" onClick={action} aria-label={label} title={label} className={`${iconButton} w-9`}>
+          <Icon name={icon} size={16} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Flip, full screen and the board settings, in a column beside the board. Full screen takes the
+ * element given (the board and what goes with it) to the whole screen; Escape comes back.
+ */
+export function BoardTools({ onFlip, fullScreen }: { onFlip(): void; fullScreen: RefObject<HTMLElement | null> }) {
+  const [isFull, setIsFull] = useState(false);
+  useEffect(() => {
+    const changed = () => setIsFull(document.fullscreenElement !== null);
+    document.addEventListener('fullscreenchange', changed);
+    return () => document.removeEventListener('fullscreenchange', changed);
+  }, []);
+  return (
+    <div className="flex shrink-0 flex-col gap-1" role="toolbar" aria-label="Board tools" aria-orientation="vertical">
+      <button type="button" className={iconButton} onClick={onFlip} aria-label="Flip the board (F)" title="Flip the board (F)">
+        <Icon name="flip" size={16} />
+      </button>
+      <button
+        type="button"
+        className={iconButton}
+        aria-label={isFull ? 'Leave full screen (Esc)' : 'Full screen'}
+        title={isFull ? 'Leave full screen (Esc)' : 'Full screen'}
+        onClick={() => {
+          if (document.fullscreenElement) void document.exitFullscreen();
+          else void fullScreen.current?.requestFullscreen?.().catch(() => {});
+        }}
+      >
+        <Icon name={isFull ? 'shrink' : 'expand'} size={16} />
+      </button>
+      <Popover label="Board settings" icon="settings" side="left">
+        <BoardSettings />
+      </Popover>
+    </div>
+  );
+}
+
+/** How every board looks: the switches behind the gear beside a board. */
+function BoardSettings() {
+  const prefs = useBoardPrefs();
+  const rows: [keyof BoardPrefs, string][] = [
+    ['lastMove', 'Highlight the last move'],
+    ['legalMoves', 'Show legal moves'],
+    ['coordinates', 'Coordinates'],
+  ];
+  return (
+    <div className="space-y-1">
+      <p className="px-1 text-xs font-semibold text-muted">Every board</p>
+      {rows.map(([key, label]) => (
+        <div key={key}>
+          <Toggle on={prefs[key]} onToggle={() => writeBoardPref(key, !prefs[key])} label={label} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A small icon button that opens a panel next to it: settings, or a longer explanation (ⓘ). Escape
+ * or a click elsewhere closes it.
+ */
+export function Popover({
+  label,
+  icon,
+  children,
+  side = 'below',
+  className = iconButton,
+}: {
+  label: string;
+  icon: IconName;
+  children: ReactNode;
+  side?: 'below' | 'left';
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: PointerEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', away);
+    window.addEventListener('keydown', key, true);
+    return () => {
+      document.removeEventListener('pointerdown', away);
+      window.removeEventListener('keydown', key, true);
+    };
+  }, [open]);
+  return (
+    <div ref={box} className="relative">
+      <button type="button" className={className} aria-label={label} title={label} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name={icon} size={16} />
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-label={label}
+          className={`absolute z-40 w-64 rounded-lg border border-line bg-surface p-2 text-sm shadow-panel ${
+            side === 'left' ? 'top-0 right-full mr-2' : 'top-full right-0 mt-1'
+          }`}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** ⓘ: a short explanation, kept out of the way until asked for. */
+export function InfoTip({ children, label = 'How this works' }: { children: ReactNode; label?: string }) {
+  return (
+    <Popover label={label} icon="info" className="grid h-6 w-6 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-text">
+      <div className="p-1 text-xs leading-relaxed">{children}</div>
+    </Popover>
+  );
+}
+
+/** "⋯": the actions a screen needs now and then, in a menu instead of a row of buttons. */
+export function MoreMenu({ label = 'More', items }: { label?: string; items: { label: string; onSelect(): void; danger?: boolean; disabled?: boolean }[] }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: PointerEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', away);
+    window.addEventListener('keydown', key, true);
+    return () => {
+      document.removeEventListener('pointerdown', away);
+      window.removeEventListener('keydown', key, true);
+    };
+  }, [open]);
+  return (
+    <div ref={box} className="relative">
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="grid h-[34px] w-9 place-items-center rounded-md border border-line bg-surface hover:bg-surface-2"
+      >
+        <Icon name="more" size={18} />
+      </button>
+      {open && (
+        <div role="menu" className="absolute top-full right-0 z-40 mt-1 min-w-44 rounded-lg border border-line bg-surface py-1 text-sm shadow-panel">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              disabled={item.disabled}
+              className={`block w-full px-3 py-1.5 text-left hover:bg-surface-2 disabled:opacity-40 ${item.danger ? 'text-danger' : ''}`}
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

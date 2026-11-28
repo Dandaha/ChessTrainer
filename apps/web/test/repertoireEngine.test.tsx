@@ -42,7 +42,7 @@ describe('the repertoire board with the engine', () => {
 
     // Off at first, apart from the repertoire's own arrows.
     await screen.findByRole('group', { name: 'Board display' });
-    expect([pressed(/^Engine lines/), pressed(/^Best-move arrow/), pressed(/^Variation arrows/)]).toEqual(['false', 'false', 'true']);
+    expect([pressed(/^Engine lines/), pressed(/^Best move/), pressed(/^Variations/)]).toEqual(['false', 'false', 'true']);
 
     // E shows the lines; the choice is kept for next time.
     fireEvent.keyDown(window, { key: 'e' });
@@ -50,6 +50,9 @@ describe('the repertoire board with the engine', () => {
     expect(localStorage.getItem('chess-workspace:repertoire-engine-lines')).toBe('1');
     const panel = await screen.findByLabelText('Engine lines', { selector: 'div' });
     expect(await within(panel).findByText('+0.30')).toBeTruthy();
+    // How Space works is behind the ⓘ, out of the way until asked for.
+    expect(within(panel).queryByText(/adds the top line's first move/)).toBeNull();
+    fireEvent.click(within(panel).getByRole('button', { name: 'How the engine lines work' }));
     expect(within(panel).getByText(/adds the top line's first move/)).toBeTruthy();
 
     // Space adds the engine's move here.
@@ -65,7 +68,7 @@ describe('the repertoire board with the engine', () => {
     // A and V switch the arrows; E again hides the lines.
     fireEvent.keyDown(window, { key: 'a' });
     fireEvent.keyDown(window, { key: 'v' });
-    expect([pressed(/^Best-move arrow/), pressed(/^Variation arrows/)]).toEqual(['true', 'false']);
+    expect([pressed(/^Best move/), pressed(/^Variations/)]).toEqual(['true', 'false']);
     expect(localStorage.getItem('chess-workspace:repertoire-move-arrows')).toBe('0');
     fireEvent.click(switchFor(/^Engine lines/));
     await waitFor(() => expect(screen.queryByLabelText('Engine lines', { selector: 'div' })).toBeNull());

@@ -1,4 +1,5 @@
 import { type MoveNode, NAG_GLYPHS, displayComment, isWhiteMove, moveNumber } from '@chess/chess-core';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 /**
  * Annotations for the current move: its comment, NAGs, and what to do with
@@ -20,7 +21,19 @@ const MOVE_NAGS = [1, 2, 3, 4, 5, 6];
 const POSITION_NAGS = [10, 13, 14, 15, 16, 17, 18, 19, 146];
 
 /** The NAG buttons: how good the move is (! ? !! ?? !? ?!), then the position (= ∞ ± …). */
-export function NagButtons({ nags, disabled = false, onToggle }: { nags: readonly number[]; disabled?: boolean; onToggle(nag: number): void }) {
+export function NagButtons({
+  nags,
+  disabled = false,
+  onToggle,
+  compact = false,
+}: {
+  nags: readonly number[];
+  disabled?: boolean;
+  onToggle(nag: number): void;
+  /** Small buttons in one wrapping row, the move's marks first; 'narrow' puts the position's marks
+   * behind one button. */
+  compact?: boolean | 'narrow';
+}) {
   const nagButton = (nag: number) => {
     const active = nags.includes(nag);
     const info = NAG_GLYPHS[nag]!;
@@ -33,7 +46,7 @@ export function NagButtons({ nags, disabled = false, onToggle }: { nags: readonl
         title={info.label}
         aria-label={info.label}
         aria-pressed={active}
-        className={`min-w-8 rounded-md border px-1.5 py-0.5 text-sm font-semibold disabled:opacity-40 ${
+        className={`rounded-md border font-semibold disabled:opacity-40 ${compact ? 'h-7 min-w-7 px-1 text-xs' : 'min-w-8 px-1.5 py-0.5 text-sm'} ${
           active ? 'border-accent bg-accent text-on-accent' : 'border-line bg-surface hover:bg-surface-2'
         }`}
       >
@@ -41,6 +54,26 @@ export function NagButtons({ nags, disabled = false, onToggle }: { nags: readonl
       </button>
     );
   };
+  if (compact === 'narrow') {
+    const shown = POSITION_NAGS.filter((nag) => nags.includes(nag));
+    return (
+      <div className="flex flex-wrap items-center gap-1">
+        {MOVE_NAGS.map(nagButton)}
+        <span aria-hidden className="mx-0.5 h-5 w-px bg-line" />
+        <PositionMarks label={shown.length ? shown.map((n) => NAG_GLYPHS[n]!.glyph).join(' ') : '±…'}>
+          <div className="flex flex-wrap gap-1">{POSITION_NAGS.map(nagButton)}</div>
+        </PositionMarks>
+      </div>
+    );
+  }
+  if (compact)
+    return (
+      <div className="flex flex-wrap items-center gap-1">
+        {MOVE_NAGS.map(nagButton)}
+        <span aria-hidden className="mx-0.5 h-5 w-px bg-line" />
+        {POSITION_NAGS.map(nagButton)}
+      </div>
+    );
   return (
     <>
       <div className="flex flex-wrap gap-1">{MOVE_NAGS.map(nagButton)}</div>
@@ -99,6 +132,35 @@ export function AnnotationPanel(props: AnnotationPanelProps) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The position's marks (=, ±, …) behind one button showing the ones set, for a narrow panel. */
+function PositionMarks({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: PointerEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [open]);
+  return (
+    <div ref={box} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label="Evaluation of the position"
+        title="Evaluation of the position"
+        onClick={() => setOpen((o) => !o)}
+        className="h-7 min-w-9 rounded-md border border-line bg-surface px-1.5 text-xs font-semibold hover:bg-surface-2"
+      >
+        {label} ▾
+      </button>
+      {open && <div className="absolute bottom-full left-0 z-40 mb-1 w-56 rounded-lg border border-line bg-surface p-2 shadow-panel">{children}</div>}
     </div>
   );
 }

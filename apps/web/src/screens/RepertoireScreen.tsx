@@ -32,6 +32,9 @@ import { undoToast, useWorkspace } from '../workspace.tsx';
 import { useAskText, useConfirm } from '../components/AskText.tsx';
 import { NagButtons } from '../AnnotationPanel.tsx';
 import { EnginePanel, EvalBar } from '../components/EnginePanel.tsx';
+import { BoardTools, MoreMenu, MoveNav } from '../components/BoardControls.tsx';
+import { useMediaQuery } from '../useMediaQuery.ts';
+import { Icon } from '../components/icons.tsx';
 import { useEngine } from '../useEngine.ts';
 import { OpeningLabel, type OpeningName, useOpenings } from '../openings.tsx';
 import { type EngineSettings, readEngineSettings, readFlag, writeEngineSettings, writeFlag } from '../storage.ts';
@@ -205,6 +208,11 @@ export function RepertoireScreen() {
   const [showMoves, setShowMoves] = useState(() => readFlag('repertoire-move-arrows', true));
   const [engineSettings, setEngineSettings] = useState<EngineSettings>(readEngineSettings);
   const [threat, setThreat] = useState(false);
+  // The board turned round (F, or the flip button): the repertoire's side at the top.
+  const [flipped, setFlipped] = useState(false);
+  const boardArea = useRef<HTMLDivElement>(null);
+  // Wide windows have room for the move editor in a column of its own, right of the board.
+  const wide = useMediaQuery('(min-width: 1536px)');
   const engineOn = showLines || showBest;
   // Threat mode analyses the position with the other side to move (not possible in check).
   const threatFen = useMemo(() => (showLines && threat ? passTurn(fen) : null), [showLines, threat, fen]);
@@ -319,6 +327,13 @@ export function RepertoireScreen() {
     if (next && placed.has(next.edge.id)) select(next.edge.id);
   };
 
+  /** To the end of the line on screen: on along the first continuation while there is one. */
+  const toEnd = () => {
+    let node = current ?? tree[0];
+    while (node?.children[0] && placed.has(node.children[0].edge.id)) node = node.children[0];
+    if (node && placed.has(node.edge.id)) select(node.edge.id);
+  };
+
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   keys.current = (event) => {
     // Not behind a dialog (a confirm, the rename box): its keys are its own.
@@ -333,11 +348,9 @@ export function RepertoireScreen() {
         if (line) select(line.nodes[0]!.edge.id);
       },
       ArrowUp: () => select(lineIndex <= 0 ? null : lines[lineIndex - 1]!.nodes[0]!.edge.id),
-      End: () => {
-        const line = lines[lineIndex];
-        if (line) select(line.nodes[line.nodes.length - 1]!.edge.id);
-      },
+      End: toEnd,
       Home: () => select(null),
+      f: () => setFlipped((on) => !on),
       e: switchLines,
       a: switchBest,
       v: switchMoves,
@@ -406,6 +419,39 @@ export function RepertoireScreen() {
   ];
   const firstSeen = current?.transposition ? findNode(tree, (n) => n.edge.toKey === current.edge.toKey && !n.transposition) : undefined;
 
+  // The selected move's marks, comment and concepts: a column right of the board on a wide window,
+  // under the moves otherwise. One editor either way.
+  const editor = current ? (
+  <MoveEditor
+                  key={current.edge.id}
+                  node={current}
+                  onChanged={reload}
+                  cut={movesCutBy(edges, current.edge.id).length - 1}
+                compact={!wide}
+                  onDeleted={(n) => {
+                    ws.toast(`Deleted ${n} move${n === 1 ? '' : 's'}.`);
+                    // The place stays: the move before the deleted one.
+                    select(placed.get(current.edge.id)?.parent?.edge.id ?? null);
+                    reload();
+                  }}
+                  onOpenBoard={() => {
+                    const path: string[] = [];
+                    const walk = (nodes: RepTreeNode[], trail: string[]): boolean => {
+                      for (const n of nodes) {
+                        if (n === current || walk(n.children, [...trail, n.edge.san])) {
+                          if (n === current) path.push(...trail, n.edge.san);
+                          return true;
+                        }
+                      }
+                      return false;
+                    };
+                    walk(tree, []);
+                    ws.openLine(START_FEN, path);
+                    ws.setOrientation(color);
+                  }}
+                />
+  ) : null;
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Repertoire">
@@ -426,56 +472,6 @@ export function RepertoireScreen() {
             </option>
           ))}
         </select>
-        <button type="button" className={buttonClass} onClick={() => setDialog('new')}>
-          New
-        </button>
-        <button
-          type="button"
-          className={buttonClass}
-          disabled={!repertoire}
-          onClick={async () => {
-            if (!repertoire) return;
-            const name = await askText('Rename repertoire', repertoire.name, '', async (text) => {
-              if (text.trim() && text.trim() !== repertoire.name) await api.renameRepertoire(repertoire.id, text.trim());
-            });
-            if (name) reload();
-          }}
-        >
-          Rename
-        </button>
-        <button
-          type="button"
-          className={dangerClass}
-          disabled={!repertoire}
-          onClick={async () => {
-            if (!repertoire) return;
-            await api.deleteRepertoire(repertoire.id);
-            setList((all) => all?.filter((r) => r.id !== repertoire.id) ?? all);
-            select(null);
-            navigate('repertoire');
-            reload();
-            undoToast(ws, `Moved “${repertoire.name}” to the trash.`, () => api.restore('repertoire', repertoire.id), () => {
-              reload();
-              navigate(`repertoire/${repertoire.id}`);
-            });
-          }}
-        >
-          Delete
-        </button>
-        <button type="button" className={buttonClass} onClick={() => setDialog('import')} disabled={!repertoire}>
-          Import PGN
-        </button>
-        <button
-          type="button"
-          className={buttonClass}
-          disabled={!repertoire}
-          onClick={async () => {
-            const { pgn } = await api.exportRepertoire(id);
-            download(new Blob([pgn], { type: 'application/x-chess-pgn' }), `${safeFileName(repertoire!.name)}-${color}.pgn`);
-          }}
-        >
-          Export PGN
-        </button>
         <button type="button" className={buttonClass} onClick={() => setDialog('gaps')} disabled={!edges.length}>
           Find gaps
         </button>
@@ -494,25 +490,75 @@ export function RepertoireScreen() {
         <button type="button" className={primaryClass} onClick={() => navigate(`training?repertoire=${id}`)} disabled={!edges.length}>
           Train
         </button>
+        {/* Now and then: in a menu, so the header stays one row. */}
+        <MoreMenu
+          label="More: new, rename, import, export, delete"
+          items={[
+            { label: 'New repertoire…', onSelect: () => setDialog('new') },
+            {
+              label: 'Rename…',
+              disabled: !repertoire,
+              onSelect: async () => {
+                if (!repertoire) return;
+                const name = await askText('Rename repertoire', repertoire.name, '', async (text) => {
+                  if (text.trim() && text.trim() !== repertoire.name) await api.renameRepertoire(repertoire.id, text.trim());
+                });
+                if (name) reload();
+              },
+            },
+            { label: 'Import PGN…', disabled: !repertoire, onSelect: () => setDialog('import') },
+            {
+              label: 'Export PGN',
+              disabled: !repertoire,
+              onSelect: async () => {
+                const { pgn } = await api.exportRepertoire(id);
+                download(new Blob([pgn], { type: 'application/x-chess-pgn' }), `${safeFileName(repertoire!.name)}-${color}.pgn`);
+              },
+            },
+            {
+              label: 'Delete repertoire',
+              danger: true,
+              disabled: !repertoire,
+              onSelect: async () => {
+                if (!repertoire) return;
+                await api.deleteRepertoire(repertoire.id);
+                setList((all) => all?.filter((r) => r.id !== repertoire.id) ?? all);
+                select(null);
+                navigate('repertoire');
+                reload();
+                undoToast(ws, `Moved “${repertoire.name}” to the trash.`, () => api.restore('repertoire', repertoire.id), () => {
+                  reload();
+                  navigate(`repertoire/${repertoire.id}`);
+                });
+              },
+            },
+          ]}
+        />
       </PageHeader>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:overflow-hidden">
-        {/* The tree, and under it the selected move's editor, beside the board: annotating needs no scrolling. */}
-        <div className="flex min-h-0 flex-col gap-3 md:h-full md:w-[20rem] md:shrink-0 md:overflow-y-auto xl:w-[26rem]">
-        {showLines && (
-          <div className="shrink-0 rounded-xl border border-line bg-surface md:max-h-[45%] md:overflow-y-auto" aria-label="Engine lines">
-            <EnginePanel
-              state={engine}
-              settings={engineSettings}
-              onSettings={changeEngineSettings}
-              threat={{ on: threat, side: threatFen ? (fen.split(' ')[1] === 'w' ? 'Black' : 'White') : null, onToggle: toggleThreat }}
-              onPlayLine={(sans) => void addLine(sans)}
-              onTurnOff={switchLines}
-              playHint="adds the top line's first move; a click on a move in a line adds the line up to it."
-            />
+        {/* Left: the board's switches, the engine's lines and the moves, which take all the height left. */}
+        <div className="flex min-h-0 flex-col gap-2 md:h-full md:w-[20rem] md:shrink-0 md:overflow-y-auto xl:w-[24rem]">
+          <div role="group" aria-label="Board display" className="flex shrink-0 flex-wrap items-center gap-x-1 gap-y-0.5">
+            <Toggle small on={showLines} onToggle={switchLines} label="Engine lines" shortcut="E" />
+            <Toggle small on={showBest} onToggle={switchBest} label="Best move" shortcut="A" swatch="#68217a" />
+            <Toggle small on={showMoves} onToggle={switchMoves} label="Variations" shortcut="V" swatch="#15781B" />
           </div>
-        )}
-        <div ref={treeRef} className="min-h-[16rem] flex-1 overflow-y-auto rounded-xl border border-line bg-surface p-2 text-sm" aria-label="Repertoire tree">
+          {engineOn && !showLines && engine.error && <p className="shrink-0 text-xs text-danger">{engine.error}</p>}
+          {showLines && (
+            <div className="shrink-0 rounded-xl border border-line bg-surface md:max-h-[40%] md:overflow-y-auto" aria-label="Engine lines">
+              <EnginePanel
+                state={engine}
+                settings={engineSettings}
+                onSettings={changeEngineSettings}
+                threat={{ on: threat, side: threatFen ? (fen.split(' ')[1] === 'w' ? 'Black' : 'White') : null, onToggle: toggleThreat }}
+                onPlayLine={(sans) => void addLine(sans)}
+                onTurnOff={switchLines}
+                playHint="adds the top line's first move; a click on a move in a line adds the line up to it."
+              />
+            </div>
+          )}
+        <div ref={treeRef} className="min-h-[12rem] flex-1 overflow-y-auto rounded-xl border border-line bg-surface p-2 text-sm" aria-label="Repertoire tree">
           {branches.size > 0 && (
             <div className="mb-1 flex justify-end gap-3 px-1 text-xs">
               <button type="button" className="text-muted hover:text-text" onClick={() => setCollapsed(new Set())}>
@@ -591,75 +637,46 @@ export function RepertoireScreen() {
           })}
         </div>
 
-        {current && (
-              <MoveEditor
-                key={current.edge.id}
-                node={current}
-                onChanged={reload}
-                cut={movesCutBy(edges, current.edge.id).length - 1}
-                onDeleted={(n) => {
-                  ws.toast(`Deleted ${n} move${n === 1 ? '' : 's'}.`);
-                  // The place stays: the move before the deleted one.
-                  select(placed.get(current.edge.id)?.parent?.edge.id ?? null);
-                  reload();
-                }}
-                onOpenBoard={() => {
-                  const path: string[] = [];
-                  const walk = (nodes: RepTreeNode[], trail: string[]): boolean => {
-                    for (const n of nodes) {
-                      if (n === current || walk(n.children, [...trail, n.edge.san])) {
-                        if (n === current) path.push(...trail, n.edge.san);
-                        return true;
-                      }
-                    }
-                    return false;
-                  };
-                  walk(tree, []);
-                  ws.openLine(START_FEN, path);
-                  ws.setOrientation(color);
-                }}
-              />
-            )}
+          {!wide && editor}
         </div>
 
-        <div className="repertoire-board flex min-w-0 flex-1 flex-col items-center gap-3 md:h-full md:overflow-y-auto">
-          <div role="group" aria-label="Board display" className="flex w-full shrink-0 flex-wrap items-center gap-2 text-sm">
-            <Toggle on={showLines} onToggle={switchLines} label="Engine lines" shortcut="E" />
-            <Toggle on={showBest} onToggle={switchBest} label="Best-move arrow" shortcut="A" swatch="#68217a" />
-            <Toggle on={showMoves} onToggle={switchMoves} label="Variation arrows" shortcut="V" swatch="#15781B" />
-            {engineOn && !showLines && engine.error && <span className="text-xs text-danger">{engine.error}</span>}
-            <OpeningLabel opening={selected ? openingOf.get(selected) : null} className="ml-auto min-w-0 truncate text-xs" />
-          </div>
+        {/* The board, with its tools beside it and the moves under it; it fills what the columns leave. */}
+        <div ref={boardArea} className="repertoire-board flex min-w-0 flex-1 flex-col items-center gap-2 bg-bg md:h-full">
+          <OpeningLabel opening={selected ? openingOf.get(selected) : null} className="w-full shrink-0 truncate text-center text-xs" />
           <div className="board-fit flex w-full justify-center md:min-h-[16rem] md:flex-1">
             {/* As tall as the board, so the eval bar beside it is too. */}
             <div className="flex h-fit w-full justify-center gap-2 md:w-auto">
               {/* No bar for an engine that could not start: an empty bar would read as an even position. */}
-              {engineOn && !engine.error && (barLine || !threatFen) && <EvalBar line={barLine} flipped={color === 'black'} />}
+              {engineOn && !engine.error && (barLine || !threatFen) && <EvalBar line={barLine} flipped={(color === 'black') !== flipped} />}
               <Board
                 node={boardNode(fen, current?.edge.uci ?? '', ply)}
-                orientation={color}
+                orientation={flipped ? (color === 'white' ? 'black' : 'white') : color}
                 autoShapes={shapes}
                 onMove={(from, to, promotion) => void addMove(from, to, promotion)}
                 onShapes={() => {}}
                 onWheelStep={(direction) => (direction < 0 ? stepBack() : stepForward())}
               />
+              <BoardTools onFlip={() => setFlipped((on) => !on)} fullScreen={boardArea} />
             </div>
           </div>
-          <div className="w-full max-w-xl shrink-0 space-y-3 text-sm">
-            <input
-              aria-label="Type a move to add"
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void addTyped();
-                if (e.key === 'Escape') e.currentTarget.blur();
-              }}
-              placeholder={`Type a move to add here, e.g. ${isMyTurn(fen, color) ? 'Nf3' : 'the reply you expect'}`}
-              spellCheck={false}
-              autoComplete="off"
-              disabled={!repertoire}
-              className={`${inputClass} w-full`}
-            />
+          <div className="w-full max-w-xl shrink-0 space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <MoveNav onStart={() => select(null)} onBack={stepBack} onForward={stepForward} onEnd={toEnd} />
+              <input
+                aria-label="Type a move to add"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void addTyped();
+                  if (e.key === 'Escape') e.currentTarget.blur();
+                }}
+                placeholder={`Type a move to add, e.g. ${isMyTurn(fen, color) ? 'Nf3' : 'the reply you expect'}`}
+                spellCheck={false}
+                autoComplete="off"
+                disabled={!repertoire}
+                className={`${inputClass} min-w-0 flex-1`}
+              />
+            </div>
             <p>
               {isMyTurn(fen, color) ? (
                 movesHere.length ? (
@@ -704,6 +721,9 @@ export function RepertoireScreen() {
             )}
           </div>
         </div>
+
+        {/* Right, on a wide window: the selected move's marks, comment and concepts. */}
+        {wide && current && <div className="flex min-h-0 w-[20rem] shrink-0 flex-col md:h-full md:overflow-y-auto">{editor}</div>}
       </div>
 
       {dialog === 'new' && (
@@ -783,6 +803,7 @@ function NewRepertoire({ onCreated }: { onCreated(id: string): void }) {
 function MoveEditor({
   node,
   cut,
+  compact = false,
   onChanged,
   onDeleted,
   onOpenBoard,
@@ -790,6 +811,8 @@ function MoveEditor({
   node: RepTreeNode;
   /** How many moves after this one deleting it takes too: those reached by no other move order. */
   cut: number;
+  /** Under the moves, in a narrow column: the position's marks behind one button, the actions as icons in the top row. */
+  compact?: boolean;
   onChanged(): void;
   onDeleted(n: number): void;
   onOpenBoard(): void;
@@ -821,8 +844,25 @@ function MoveEditor({
     },
     [],
   );
+  // Not kept in the trash, and the moves' training progress goes with them: ask when it is more than one move.
+  const deleteHere = async () => {
+    if (
+      cut > 0 &&
+      !(await confirm({
+        title: `Delete ${moveLabel(node.ply, e.san)} and what follows?`,
+        message: `${cut} move${cut === 1 ? '' : 's'} after it go too, with their comments and training progress. This cannot be undone.`,
+        confirm: 'Delete them',
+        cancel: 'Keep them',
+      }))
+    )
+      return;
+    const { deleted } = await api.deleteRepertoireMove(e.id);
+    onDeleted(deleted);
+  };
+  const iconAction = 'grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text';
+
   return (
-    <div className="space-y-2 rounded-xl border border-line bg-surface p-3">
+    <div className="shrink-0 space-y-2 rounded-xl border border-line bg-surface p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{moveLabel(node.ply, e.san)}</span>
         {/* Whose move it is follows from the repertoire's colour, so it is shown, not chosen. */}
@@ -861,8 +901,24 @@ function MoveEditor({
               Move to top
             </button>
           ))}
+        {compact && (
+          <span className="ml-auto flex gap-0.5">
+            <button type="button" className={iconAction} onClick={onOpenBoard} aria-label="Open on the analysis board" title="The line to this move on the analysis board">
+              <Icon name="board" size={16} />
+            </button>
+            <button
+              type="button"
+              className={`${iconAction} hover:text-danger`}
+              onClick={() => void deleteHere()}
+              aria-label="Delete from here"
+              title="Delete this move, and the moves after it that no other move order reaches"
+            >
+              <Icon name="trash" size={16} />
+            </button>
+          </span>
+        )}
       </div>
-      <NagButtons nags={e.nags} onToggle={(nag) => void update({ nags: toggledNags(e.nags, nag) })} />
+      <NagButtons compact={compact ? 'narrow' : true} nags={e.nags} onToggle={(nag) => void update({ nags: toggledNags(e.nags, nag) })} />
       <textarea
         aria-label="Comment"
         rows={2}
@@ -878,7 +934,7 @@ function MoveEditor({
         className={`${inputClass} w-full`}
       />
       <LinkedConcepts targetType="repertoire_move" targetId={e.id} />
-      <div className="flex gap-2">
+      <div className={compact ? 'hidden' : 'flex flex-wrap gap-2'}>
         <button type="button" className={`${buttonClass} whitespace-nowrap`} onClick={onOpenBoard} title="The line to this move on the analysis board">
           Open on board
         </button>
@@ -886,22 +942,7 @@ function MoveEditor({
           type="button"
           className={`${dangerClass} whitespace-nowrap`}
           title="Delete this move, and the moves after it that no other move order reaches"
-          onClick={async () => {
-            // Not kept in the trash, and the moves' training progress goes with them: ask when it is more than one move.
-            const after = cut;
-            if (
-              after > 0 &&
-              !(await confirm({
-                title: `Delete ${moveLabel(node.ply, e.san)} and what follows?`,
-                message: `${after} move${after === 1 ? '' : 's'} after it go too, with their comments and training progress. This cannot be undone.`,
-                confirm: 'Delete them',
-                cancel: 'Keep them',
-              }))
-            )
-              return;
-            const { deleted } = await api.deleteRepertoireMove(e.id);
-            onDeleted(deleted);
-          }}
+          onClick={() => void deleteHere()}
         >
           Delete from here
         </button>

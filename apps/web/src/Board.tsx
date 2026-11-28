@@ -14,6 +14,7 @@ import {
 } from '@chess/chess-core';
 import { useEffect, useRef, useState } from 'react';
 import { pieceImage } from './pieces.ts';
+import { useBoardPrefs } from './storage.ts';
 
 /**
  * The chessground board for one position. Moves and drawings go back up
@@ -113,6 +114,13 @@ export function Board({ node, orientation, autoShapes = [], viewOnly = false, on
       api.current = null;
     };
   }, []);
+
+  // The board preferences (Board settings beside a board): applied as they change.
+  const prefs = useBoardPrefs();
+  useEffect(() => {
+    api.current?.set({ coordinates: prefs.coordinates, highlight: { lastMove: prefs.lastMove, check: true }, movable: { showDests: prefs.legalMoves } });
+    api.current?.redrawAll();
+  }, [prefs.coordinates, prefs.lastMove, prefs.legalMoves]);
 
   useEffect(() => {
     const state = boardState(node.fen);

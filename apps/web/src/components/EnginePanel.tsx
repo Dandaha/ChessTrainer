@@ -2,6 +2,7 @@ import { type GameEnd, describeGameEnd } from '@chess/chess-core';
 import { type EngineLine, formatScore } from '@chess/chess-tools/score';
 import type { EngineSettings } from '../storage.ts';
 import type { EngineState } from '../useEngine.ts';
+import { InfoTip, Popover } from './BoardControls.tsx';
 
 /** Win share for White from a score, for the eval bar (a smooth curve, not a probability claim). */
 export function whiteShare(line?: Pick<EngineLine, 'cp' | 'mate'>): number {
@@ -105,62 +106,71 @@ export function EnginePanel({
   const showingThreat = threat.on && threat.side !== null;
   return (
     <div className="space-y-2 p-3 text-sm">
-      <div className="flex items-center justify-between text-xs text-muted">
-        <span>
+      {/* One row: what is running, then threat mode, the settings (behind the gear), how it works (ⓘ)
+          and the off switch. The settings and the explanation open only when asked for. */}
+      <div className="flex items-center gap-1 text-xs text-muted">
+        <span className="min-w-0 flex-1 truncate">
           {analysis ? `${analysis.engine}${analysis.depth ? ` · depth ${analysis.depth}` : ''}` : 'Stockfish'}
           {settings.elo ? ` · ${settings.elo} Elo` : ''}
           {status === 'running' && ' · thinking…'}
           {status === 'starting' && ' · starting…'}
         </span>
-        <button type="button" className="text-accent" onClick={onTurnOff} title="Engine off (E)">
-          Turn off <kbd>E</kbd>
-        </button>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-        <label className="flex items-center gap-1">
-          Lines
-          <select aria-label="Lines" className={small} value={settings.lines} onChange={(e) => onSettings({ ...settings, lines: Number(e.target.value) })}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1">
-          Depth
-          <select aria-label="Depth" className={small} value={settings.depth} onChange={(e) => onSettings({ ...settings, depth: Number(e.target.value) })}>
-            {DEPTHS.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1">
-          Strength
-          <select
-            aria-label="Strength"
-            className={small}
-            value={settings.elo ?? ''}
-            onChange={(e) => onSettings({ ...settings, elo: e.target.value ? Number(e.target.value) : null })}
-          >
-            <option value="">Full</option>
-            {STRENGTHS.map((elo) => (
-              <option key={elo} value={elo}>
-                {elo} Elo
-              </option>
-            ))}
-          </select>
-        </label>
         <button
           type="button"
           aria-pressed={threat.on}
-          className={`rounded border px-1.5 py-0.5 ${threat.on ? 'border-danger text-danger' : 'border-line hover:bg-surface-2'}`}
+          className={`shrink-0 rounded border px-1.5 py-0.5 ${threat.on ? 'border-danger text-danger' : 'border-line hover:bg-surface-2'}`}
           onClick={threat.onToggle}
           title="Show what the opponent threatens (T)"
         >
           Threat <kbd>T</kbd>
+        </button>
+        <Popover label="Engine settings" icon="settings" className="grid h-6 w-6 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text">
+          <div className="space-y-2 p-1 text-xs">
+            <label className="flex items-center justify-between gap-2">
+              Lines
+              <select aria-label="Lines" className={small} value={settings.lines} onChange={(e) => onSettings({ ...settings, lines: Number(e.target.value) })}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              Depth
+              <select aria-label="Depth" className={small} value={settings.depth} onChange={(e) => onSettings({ ...settings, depth: Number(e.target.value) })}>
+                {DEPTHS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              Strength
+              <select
+                aria-label="Strength"
+                className={small}
+                value={settings.elo ?? ''}
+                onChange={(e) => onSettings({ ...settings, elo: e.target.value ? Number(e.target.value) : null })}
+              >
+                <option value="">Full</option>
+                {STRENGTHS.map((elo) => (
+                  <option key={elo} value={elo}>
+                    {elo} Elo
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </Popover>
+        {!showingThreat && (
+          <InfoTip label="How the engine lines work">
+            <kbd>Space</kbd> {playHint} <kbd>T</kbd> shows what the opponent would play if it were their move.
+          </InfoTip>
+        )}
+        <button type="button" className="shrink-0 rounded px-1 text-accent hover:bg-surface-2" onClick={onTurnOff} title="Engine off (E)">
+          Off <kbd>E</kbd>
         </button>
       </div>
       {gameOver && (
@@ -218,11 +228,6 @@ export function EnginePanel({
           );
         })}
       </ol>
-      {!showingThreat && analysis?.lines.length ? (
-        <p className="text-xs text-muted">
-          <kbd>Space</kbd> {playHint}
-        </p>
-      ) : null}
     </div>
   );
 }
