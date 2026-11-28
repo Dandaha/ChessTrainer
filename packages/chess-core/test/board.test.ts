@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boardState, castleTarget, isPromotion, passTurn } from '../board.ts';
+import { boardState, castleTarget, isPromotion, materialBalance, passTurn } from '../board.ts';
 import { START_FEN } from '../positionKey.ts';
 
 describe('boardState', () => {
@@ -58,3 +58,24 @@ describe('castling by putting the king on its rook', () => {
     expect(castleTarget('r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R b KQkq - 0 1', 'e8', 'h8')).toBe('g8');
   });
 });
+
+describe('materialBalance', () => {
+  it('is level at the start and after a trade', () => {
+    expect(materialBalance('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')).toEqual({ white: { up: [], lead: 0 }, black: { up: [], lead: 0 } });
+    // Knights traded on f6 and c3: one each gone.
+    expect(materialBalance('r1bqkb1r/pppppppp/8/8/8/8/PPPPPPPP/R1BQKB1R w KQkq - 0 5').white.lead).toBe(0);
+  });
+
+  it('shows what each side is up and who leads, a bishop for two pawns being +1', () => {
+    // White has taken a bishop; Black has taken two pawns.
+    const balance = materialBalance('rn1qkbnr/pppppppp/8/8/8/8/PPPPPP2/RNBQKBNR w KQkq - 0 9');
+    expect(balance.white).toEqual({ up: ['b'], lead: 1 });
+    expect(balance.black).toEqual({ up: ['p', 'p'], lead: 0 });
+  });
+
+  it('counts a promotion as the new piece, and works for a position set up by hand', () => {
+    expect(materialBalance('4k3/8/8/8/8/8/8/Q3K3 b - - 0 60')).toEqual({ white: { up: ['q'], lead: 9 }, black: { up: [], lead: 0 } });
+    expect(materialBalance('8/8/4k3/8/8/8/1p6/4K2R w - - 0 1')).toEqual({ white: { up: ['r'], lead: 4 }, black: { up: ['p'], lead: 0 } });
+  });
+});
+

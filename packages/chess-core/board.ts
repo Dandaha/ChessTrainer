@@ -85,3 +85,35 @@ export function castleTarget(fen: string, from: string, to: string): string | nu
   const castle = chess.moves({ square: from as Square, verbose: true }).find((m) => rookSquareFor(m) === to);
   return castle ? castle.to : null;
 }
+
+export type MaterialRole = 'q' | 'r' | 'b' | 'n' | 'p';
+
+/** Points per piece, as chess sites count them. */
+export const PIECE_POINTS: Record<MaterialRole, number> = { q: 9, r: 5, b: 3, n: 3, p: 1 };
+
+export interface MaterialSide {
+  /** The pieces this side has more of than the other, most valuable first: what it is up. */
+  up: MaterialRole[];
+  /** Its lead in points (0 for the side behind or level). */
+  lead: number;
+}
+
+/**
+ * The material difference on the board, as Lichess shows it: per piece type, how many more one side
+ * has, and who leads by how many points. From the position alone, so a trade cancels out, a
+ * promotion counts as the new piece, and a position set up by hand works too.
+ */
+export function materialBalance(fen: string): { white: MaterialSide; black: MaterialSide } {
+  const roles: MaterialRole[] = ['q', 'r', 'b', 'n', 'p'];
+  const count = { white: { q: 0, r: 0, b: 0, n: 0, p: 0 }, black: { q: 0, r: 0, b: 0, n: 0, p: 0 } };
+  for (const ch of fen.split(' ')[0] ?? '') {
+    const role = ch.toLowerCase() as MaterialRole;
+    if (role in PIECE_POINTS) count[ch === role ? 'black' : 'white'][role] += 1;
+  }
+  const up = (side: 'white' | 'black', other: 'white' | 'black') =>
+    roles.flatMap((role) => Array<MaterialRole>(Math.max(0, count[side][role] - count[other][role])).fill(role));
+  const points = (side: 'white' | 'black') => roles.reduce((sum, role) => sum + PIECE_POINTS[role] * count[side][role], 0);
+  const lead = points('white') - points('black');
+  return { white: { up: up('white', 'black'), lead: Math.max(0, lead) }, black: { up: up('black', 'white'), lead: Math.max(0, -lead) } };
+}
+

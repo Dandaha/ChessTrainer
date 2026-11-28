@@ -59,6 +59,9 @@ database path.
 - Paste a PGN or FEN anywhere (Ctrl+V), or press **O** to open one.
 - Move by dragging, or press **/** and type a move (`Nf3`, `nf3` and `g1f3` all work).
 - ← → step through moves, ↑ ↓ jump to the start or the end of the line, **F** flips.
+- Strips above and below the board show the material difference, as on Lichess: the pieces
+  a side has taken more of than it lost (a trade cancels out) and its lead in points
+  (Q 9, R 5, B 3, N 3, P 1). Each side's strip is at its own edge of the board.
 - Right-click drag draws an arrow, right-click a square circles it (Shift red, Alt blue).
   Drawings are saved in the PGN as `[%cal]` / `[%csl]`.
 - Right-click a move to promote it, make it the main line or delete from it.

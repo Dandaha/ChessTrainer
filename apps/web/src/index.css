@@ -94,9 +94,13 @@ kbd {
   aspect-ratio: 1;
 }
 
-/* The analysis board leaves room for the FEN row under it. */
+/* The analysis board leaves room for the FEN row under it and the material strips at its edges:
+   the column holding them is the board's width, and the board fills it. */
+.analysis-board .board-column {
+  width: min(100%, calc(100dvh - 16rem));
+}
 .analysis-board .board-frame {
-  width: min(100%, calc(100dvh - 13rem));
+  width: 100%;
 }
 
 /* The repertoire board leaves room for its switches above it. */

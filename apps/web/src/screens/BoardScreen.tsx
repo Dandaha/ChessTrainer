@@ -1,4 +1,4 @@
-import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, moveSpellings, normalizeFen, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, materialBalance, moveSpellings, normalizeFen, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
@@ -9,6 +9,7 @@ import { CoachPanel, type CoachPanelHandle } from '../components/CoachPanel.tsx'
 import type { Annotations } from '../api.ts';
 import { useEngine } from '../useEngine.ts';
 import { OpeningLabel, useOpenings } from '../openings.tsx';
+import { MaterialStrip } from '../components/Material.tsx';
 import { type EngineSettings, readEngineSettings, writeEngineSettings } from '../storage.ts';
 import type { DrawShape } from '../Board.tsx';
 import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
@@ -65,6 +66,10 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const end = useMemo(() => gameEnd(g.path), [g.path]);
   // The opening of the move on the board: the deepest named position on the way to it, as on Lichess.
   const openings = useOpenings();
+  // Who is up what, for the strips at the board's edges; the side at the bottom is the one it faces.
+  const material = useMemo(() => materialBalance(current.fen), [current.fen]);
+  const bottom = ws.orientation;
+  const top = bottom === 'white' ? 'black' : 'white';
   const opening = useMemo(() => openings?.classifyOpening(g.path.map((n) => n.fen)) ?? null, [openings, g.path]);
   // Threat mode analyses the same position with the other side to move (not possible in check).
   const threatFen = useMemo(() => (engineOn && threat ? passTurn(current.fen) : null), [engineOn, threat, current.fen]);
@@ -263,24 +268,31 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
         <section className="analysis-board flex min-w-0 flex-col items-center gap-3 md:flex-1 md:items-end">
           <div className="flex w-full justify-center gap-2 md:justify-end">
             {engineOn && (
-              <EvalBar
-                line={best}
-                flipped={ws.orientation === 'black'}
-                decided={end ? (end.kind === 'checkmate' ? end.winner : 'draw') : undefined}
-              />
+              // Level with the board, not with the strips above and below it.
+              <div className="flex py-6">
+                <EvalBar
+                  line={best}
+                  flipped={ws.orientation === 'black'}
+                  decided={end ? (end.kind === 'checkmate' ? end.winner : 'draw') : undefined}
+                />
+              </div>
             )}
-            <Board
-              node={current}
-              orientation={ws.orientation}
-              autoShapes={[...engineShapes, ...coachShapes]}
-              onMove={(from, to, promotion) => {
-                if (!g.play(promotion ? { from, to, promotion } : { from, to })) g.goTo(current.id);
-              }}
-              onShapes={g.setShapes}
-              onWheelStep={(direction) => (direction < 0 ? g.back() : g.forward())}
-            />
+            <div className="board-column flex min-w-0 flex-col gap-1">
+              <MaterialStrip side={top} material={material[top]} />
+              <Board
+                node={current}
+                orientation={ws.orientation}
+                autoShapes={[...engineShapes, ...coachShapes]}
+                onMove={(from, to, promotion) => {
+                  if (!g.play(promotion ? { from, to, promotion } : { from, to })) g.goTo(current.id);
+                }}
+                onShapes={g.setShapes}
+                onWheelStep={(direction) => (direction < 0 ? g.back() : g.forward())}
+              />
+              <MaterialStrip side={bottom} material={material[bottom]} />
+            </div>
           </div>
-          <div className="flex w-full max-w-[calc(100dvh-13rem)] items-center gap-2">
+          <div className="flex w-full max-w-[calc(100dvh-16rem)] items-center gap-2">
             <div className="flex gap-1">
               {(
                 [
@@ -317,7 +329,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               className="min-w-0 flex-1 rounded-md border border-field bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent"
             />
           </div>
-          <div className="flex w-full max-w-[calc(100dvh-13rem)] items-center gap-2 text-xs">
+          <div className="flex w-full max-w-[calc(100dvh-16rem)] items-center gap-2 text-xs">
             <input
               aria-label="FEN"
               value={fenText ?? current.fen}
