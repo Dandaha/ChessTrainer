@@ -129,7 +129,7 @@ export function ImportDialog({
         rows={12}
         spellCheck={false}
         placeholder={'[Event "…"]\n\n1. e4 e5 2. Nf3 …\n\nor a FEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1'}
-        className="w-full rounded-md border border-line bg-bg px-2 py-1.5 font-mono text-sm outline-none focus:border-accent"
+        className="w-full rounded-md border border-field bg-bg px-2 py-1.5 font-mono text-sm outline-none focus:border-accent"
       />
       {error && (
         <p role="alert" className="mt-2 text-sm text-danger">
@@ -186,7 +186,7 @@ export function ExportDialog({ pgn, fileName, onClose }: { pgn: string; fileName
         rows={14}
         spellCheck={false}
         onFocus={(e) => e.target.select()}
-        className="w-full rounded-md border border-line bg-bg px-2 py-1.5 font-mono text-sm outline-none"
+        className="w-full rounded-md border border-field bg-bg px-2 py-1.5 font-mono text-sm outline-none"
       />
       <div className="mt-3 flex justify-end gap-2">
         <button type="button" className={buttonClass} onClick={() => void copy()}>

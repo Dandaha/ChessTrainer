@@ -69,7 +69,7 @@ export function PresentScreen({ setId }: { setId: string }) {
         </span>
       </div>
       {/* Centred when it fits, scrollable from the top when it does not (a narrow window). */}
-      <div className="flex min-h-0 flex-1 flex-col items-center-safe justify-center-safe gap-8 overflow-auto px-6 pb-6 lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col items-center-safe justify-center-safe gap-8 overflow-auto px-6 pb-6 md:flex-row">
         <Board
           node={node}
           orientation={current.sideToSolve}

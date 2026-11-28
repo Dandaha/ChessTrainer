@@ -71,7 +71,7 @@ export function SavePositionDialog({
     }
   };
 
-  const field = 'w-full rounded-md border border-line bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent';
+  const field = 'w-full rounded-md border border-field bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent';
 
   return (
     <Modal title="Save position" onClose={onClose}>

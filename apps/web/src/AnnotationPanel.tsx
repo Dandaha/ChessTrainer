@@ -68,7 +68,7 @@ export function AnnotationPanel(props: AnnotationPanelProps) {
         defaultValue={displayComment(node.comments.join(' '))}
         onChange={(e) => props.onComment(e.target.value)}
         rows={2}
-        className="w-full resize-y rounded-md border border-line bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
+        className="w-full resize-y rounded-md border border-field bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
       />
       <NagButtons nags={node.nags} disabled={isRoot} onToggle={props.onToggleNag} />
       {!isRoot && (

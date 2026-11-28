@@ -26,7 +26,7 @@ export function EvalBar({ line, flipped, decided }: { line?: EngineLine; flipped
 
 const DEPTHS = [16, 20, 24, 30, 40];
 const STRENGTHS = [2800, 2500, 2200, 1900, 1600, 1350];
-const small = 'rounded border border-line bg-surface px-1 py-0.5 text-xs text-text';
+const small = 'rounded border border-field bg-surface px-1 py-0.5 text-xs text-text';
 
 /**
  * The engine tab: score, depth and the best lines, each move clickable; the settings (lines, depth,

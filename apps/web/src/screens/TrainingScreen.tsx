@@ -503,7 +503,7 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
           Stop <kbd>Esc</kbd>
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 overflow-auto p-6 lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 overflow-auto p-6 md:flex-row">
         <Board node={node} orientation={color} autoShapes={arrows} viewOnly={!ready || !!outcome} onMove={(f, t, p) => void onMove(f, t, p)} onShapes={() => {}} />
         <div className="w-full max-w-sm space-y-4">
           {card.kind === 'repertoire_move' ? (
@@ -556,7 +556,7 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
                 ws.toast(`${text} is not a legal move here.`, true);
               }}
               placeholder="Or type it, e.g. Nf3"
-              className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent"
+              className="w-full rounded-md border border-field bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent"
             />
           )}
           {checking && <p className="text-sm text-muted">Checking with Stockfish…</p>}

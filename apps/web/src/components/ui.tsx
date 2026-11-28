@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 /** Small shared building blocks so every screen looks the same. */
 
 export const inputClass =
-  'rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent';
+  'rounded-md border border-field bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent';
 export const buttonClass = 'rounded-md border border-line bg-surface px-3 py-1.5 text-sm hover:bg-surface-2 disabled:opacity-40';
 export const primaryClass =
   'rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:opacity-90 disabled:opacity-40';

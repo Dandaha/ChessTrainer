@@ -258,9 +258,9 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
         </nav>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 lg:flex-row lg:items-start lg:justify-center">
-        <section className="analysis-board flex min-w-0 flex-col items-center gap-3 lg:flex-1 lg:items-end">
-          <div className="flex w-full justify-center gap-2 lg:justify-end">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:justify-center">
+        <section className="analysis-board flex min-w-0 flex-col items-center gap-3 md:flex-1 md:items-end">
+          <div className="flex w-full justify-center gap-2 md:justify-end">
             {engineOn && (
               <EvalBar
                 line={best}
@@ -312,7 +312,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               placeholder="Type a move, e.g. Nf3   ( / )"
               spellCheck={false}
               autoComplete="off"
-              className="min-w-0 flex-1 rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent"
+              className="min-w-0 flex-1 rounded-md border border-field bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent"
             />
           </div>
           <div className="flex w-full max-w-[calc(100dvh-13rem)] items-center gap-2 text-xs">
@@ -332,7 +332,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               title="The position as FEN: type or paste one and press Enter to open it"
               spellCheck={false}
               autoComplete="off"
-              className="min-w-0 flex-1 rounded-md border border-line bg-surface px-2 py-1 font-mono text-muted outline-none focus:border-accent focus:text-text"
+              className="min-w-0 flex-1 rounded-md border border-field bg-surface px-2 py-1 font-mono text-muted outline-none focus:border-accent focus:text-text"
             />
             <button type="button" className="rounded-md border border-line px-2 py-1 hover:bg-surface-2" onClick={() => void copyFen()}>
               Copy FEN
@@ -346,11 +346,11 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
           </div>
         </section>
 
-        <aside className="flex max-h-[calc(100dvh-7rem)] min-h-[24rem] w-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel lg:w-[26rem]">
+        <aside className="flex max-h-[calc(100dvh-7rem)] min-h-[24rem] w-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel md:w-[22rem] md:shrink-0 xl:w-[26rem]">
           <MoveList game={game} currentId={current.id} onSelect={g.goTo} onMenu={(id, x, y) => setMenu({ id, x, y })} />
           <Branches node={current} choice={g.choice} onEnter={g.goTo} />
           <GameOver end={end} result={game.result} atEnd={!current.children.length} onSetResult={g.setResult} />
-          <div className="flex border-t border-line text-sm" role="tablist">
+          <div className="flex overflow-x-auto border-t border-line text-sm" role="tablist">
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -359,7 +359,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
                 title={t.key ? `${t.label} (${t.key.toUpperCase()})` : t.label}
-                className={`flex-1 px-2 py-1.5 ${tab === t.id ? 'border-b-2 border-accent font-semibold' : 'text-muted hover:text-text'}`}
+                className={`flex-1 whitespace-nowrap px-1.5 py-1.5 xl:px-2 ${tab === t.id ? 'border-b-2 border-accent font-semibold' : 'text-muted hover:text-text'}`}
               >
                 {t.label}
               </button>

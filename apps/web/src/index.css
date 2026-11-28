@@ -12,6 +12,8 @@
   --surface: #ffffff;
   --surface-2: #eeebe5;
   --line: #ddd9d1;
+  /* The edge of a field you type in: 3:1 against what it sits on, so it can be found (WCAG 1.4.11). */
+  --field-line: #8a8378;
   --text: #1d1b18;
   --muted: #6d675e;
   --accent: #2f6b4a;
@@ -30,6 +32,7 @@
   --surface: #1e1d1a;
   --surface-2: #282723;
   --line: #36342f;
+  --field-line: #76716a;
   --text: #e9e6e0;
   --muted: #9c968c;
   --accent: #6fb08a;
@@ -48,6 +51,7 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-line: var(--line);
+  --color-field: var(--field-line);
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-accent: var(--accent);

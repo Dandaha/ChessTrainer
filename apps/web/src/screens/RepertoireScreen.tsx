@@ -339,8 +339,8 @@ export function RepertoireScreen() {
         </button>
       </PageHeader>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 lg:flex-row">
-        <div ref={treeRef} className="min-h-[16rem] overflow-y-auto rounded-xl border border-line bg-surface p-2 text-sm lg:w-[26rem]" aria-label="Repertoire tree">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row">
+        <div ref={treeRef} className="min-h-[16rem] overflow-y-auto rounded-xl border border-line bg-surface p-2 text-sm md:w-[20rem] md:shrink-0 xl:w-[26rem]" aria-label="Repertoire tree">
           {branches.size > 0 && (
             <div className="mb-1 flex justify-end gap-3 px-1 text-xs">
               <button type="button" className="text-muted hover:text-text" onClick={() => setCollapsed(new Set())}>
