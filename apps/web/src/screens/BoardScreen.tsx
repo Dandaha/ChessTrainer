@@ -1,5 +1,5 @@
-import { getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type GameEnd, describeGameEnd, gameEnd, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
 import { GamesHere, SavedHere } from '../components/PositionPanels.tsx';
@@ -61,6 +61,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const moveInput = useRef<HTMLInputElement>(null);
 
   const { game, current } = g;
+  const end = useMemo(() => gameEnd(g.path), [g.path]);
   const engine = useEngine(current.fen, engineOn);
   const best = engine.analysis?.fen === current.fen ? engine.analysis.lines[0] : undefined;
   const engineShapes: DrawShape[] = best?.pv[0]
@@ -211,7 +212,13 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 lg:flex-row lg:items-start lg:justify-center">
         <section className="flex min-w-0 flex-col items-center gap-3 lg:flex-1 lg:items-end">
           <div className="flex w-full justify-center gap-2 lg:justify-end">
-            {engineOn && <EvalBar line={best} flipped={ws.orientation === 'black'} />}
+            {engineOn && (
+              <EvalBar
+                line={best}
+                flipped={ws.orientation === 'black'}
+                decided={end ? (end.kind === 'checkmate' ? end.winner : 'draw') : undefined}
+              />
+            )}
             <Board
               node={current}
               orientation={ws.orientation}
@@ -263,6 +270,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 
         <aside className="flex max-h-[calc(100dvh-7rem)] min-h-[24rem] w-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel lg:w-[26rem]">
           <MoveList game={game} currentId={current.id} onSelect={g.goTo} onMenu={(id, x, y) => setMenu({ id, x, y })} />
+          <GameOver end={end} result={game.result} atEnd={!current.children.length} onSetResult={g.setResult} />
           <div className="flex border-t border-line text-sm" role="tablist">
             {tabs.map((t) => (
               <button
@@ -421,3 +429,20 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   );
 }
 
+/**
+ * When the position on the board ends the game (mate, stalemate, a draw by rule), says so under the
+ * moves, as Lichess does; at the end of the game it offers to write that result into the PGN.
+ */
+function GameOver({ end, result, atEnd, onSetResult }: { end: GameEnd | null; result: string; atEnd: boolean; onSetResult(result: string): void }) {
+  if (!end) return null;
+  return (
+    <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-accent-soft px-3 py-1.5 text-sm">
+      <span className="font-medium">{describeGameEnd(end)}</span>
+      {atEnd && result !== end.result && (
+        <button type="button" className="text-accent hover:underline" onClick={() => onSetResult(end.result)}>
+          Set the result to {end.result === '1/2-1/2' ? '½–½' : end.result}
+        </button>
+      )}
+    </div>
+  );
+}

@@ -52,6 +52,8 @@ export interface GameApi {
   makeMain(id: string): void;
   setCommentText(text: string): void;
   toggleNag(nag: number): void;
+  /** The game's result (1-0, 0-1, 1/2-1/2 or *), as written in the PGN. */
+  setResult(result: string): void;
   setShapes(arrows: Arrow[], highlights: Highlight[]): void;
   /** Loads a game; `at` picks the node to show, `clean` marks it as saved. */
   load(game: Game, options?: { at?: string; clean?: boolean }): void;
@@ -126,6 +128,10 @@ export function useGame(
       } catch {
         return false;
       }
+    },
+    setResult: (result) => {
+      game.result = result;
+      bump();
     },
     deleteFrom: (id) => {
       if (id === game.root.id) return;

@@ -8,13 +8,15 @@ export function whiteShare(line?: Pick<EngineLine, 'cp' | 'mate'>): number {
   return 1 / (1 + Math.exp(-(line.cp ?? 0) / 250));
 }
 
-export function EvalBar({ line, flipped }: { line?: EngineLine; flipped: boolean }) {
-  const share = whiteShare(line);
+/** `decided`: the game is over on the board, so the bar shows the result rather than a score. */
+export function EvalBar({ line, flipped, decided }: { line?: EngineLine; flipped: boolean; decided?: 'white' | 'black' | 'draw' }) {
+  const share = decided ? (decided === 'white' ? 1 : decided === 'black' ? 0 : 0.5) : whiteShare(line);
+  const label = decided ? (decided === 'draw' ? 'Draw' : `${decided === 'white' ? 'White' : 'Black'} has won`) : line ? formatScore(line) : '';
   return (
     <div
       className={`relative w-3 shrink-0 self-stretch overflow-hidden rounded-sm border border-[#7a776f] bg-[#2b2a27] ${flipped ? 'rotate-180' : ''}`}
-      aria-label={line ? `Evaluation ${formatScore(line)}` : 'Evaluation'}
-      title={line ? formatScore(line) : ''}
+      aria-label={label ? `Evaluation ${label}` : 'Evaluation'}
+      title={label}
     >
       <div className="absolute inset-x-0 bottom-0 bg-[#f4f2ee] transition-[height] duration-300" style={{ height: `${share * 100}%` }} />
     </div>

@@ -95,6 +95,17 @@ describe('PGN import and export', () => {
     expect(exportedPgn()).toContain('[FEN "8/4P3/8/8/8/8/k7/4K3 w - - 0 1"]');
   });
 
+  it('says when the game is over and can write the result into the PGN', () => {
+    render(<App />);
+    openPgn('1. f3 e5 2. g4 *');
+    fireEvent.keyDown(window, { key: 'End' });
+    expect(screen.queryByText(/Checkmate/)).toBeNull();
+    typeMove('Qh4');
+    expect(screen.getByRole('status').textContent).toContain('Checkmate: Black wins.');
+    fireEvent.click(screen.getByRole('button', { name: 'Set the result to 0-1' }));
+    expect(exportedPgn()).toMatch(/\[Result "0-1"\][\s\S]*2\. g4 Qh4# 0-1/);
+  });
+
   it('explains why a broken PGN does not load', () => {
     render(<App />);
     openPgn('1. e4 e5 2. Ke3');
