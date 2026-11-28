@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { type Analysis, api } from './api.ts';
+import { DEFAULT_ENGINE_SETTINGS, type EngineSettings } from './storage.ts';
 
 export interface EngineState {
   analysis: Analysis | null;
@@ -13,7 +14,13 @@ export interface EngineState {
  * the panel is turned off, the position changes or the screen goes away, and
  * the server then stops the search.
  */
-export function useEngine(fen: string, enabled: boolean, multipv = 3, history?: { startFen: string; moves: string[] }): EngineState {
+export function useEngine(
+  fen: string,
+  enabled: boolean,
+  settings: EngineSettings = DEFAULT_ENGINE_SETTINGS,
+  history?: { startFen: string; moves: string[] },
+): EngineState {
+  const { lines: multipv, depth, elo } = settings;
   const [state, setState] = useState<EngineState>({ analysis: null, status: 'off', error: null });
   const historyKey = history ? `${history.startFen}|${history.moves.join(',')}` : '';
 
@@ -27,7 +34,7 @@ export function useEngine(fen: string, enabled: boolean, multipv = 3, history?: 
       return;
     }
     setState((s) => ({ analysis: s.analysis?.fen === fen ? s.analysis : null, status: 'starting', error: null }));
-    const source = new EventSource(api.engineStreamUrl(fen, multipv, history));
+    const source = new EventSource(api.engineStreamUrl(fen, multipv, history, { depth, elo }));
     source.addEventListener('update', (e) => {
       setState({ analysis: JSON.parse((e as MessageEvent).data) as Analysis, status: 'running', error: null });
     });
@@ -45,7 +52,7 @@ export function useEngine(fen: string, enabled: boolean, multipv = 3, history?: 
       source.close();
     });
     return () => source.close();
-  }, [fen, enabled, multipv, historyKey]);
+  }, [fen, enabled, multipv, depth, elo, historyKey]);
 
   return state;
 }

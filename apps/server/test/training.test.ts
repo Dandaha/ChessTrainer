@@ -156,6 +156,28 @@ describe.skipIf(!existsSync(STOCKFISH))('the engine through the API', () => {
     await engines.shutdown();
   });
 
+  it('streams to the depth asked, answers from the cache when it already went that deep, and keeps a weakened engine out of it', async () => {
+    const db = freshDb();
+    updateSettings(db, { enginePath: STOCKFISH });
+    const engines = new EngineService(db);
+    const fen = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3';
+    const run = (settings: { depth?: number; elo?: number }) =>
+      new Promise<{ depth: number; updates: number }>((resolve) => {
+        let updates = 0;
+        void engines.stream(fen, 1, () => (updates += 1), (a) => resolve({ depth: a.depth, updates }), undefined, settings);
+      });
+    const first = await run({ depth: 10 });
+    expect(first.depth).toBeGreaterThanOrEqual(10);
+    expect(first.depth).toBeLessThan(14);
+    // Cached at depth 10: a search to 8 is answered at once, without updates.
+    expect(await run({ depth: 8 })).toEqual({ depth: first.depth, updates: 0 });
+    // A weakened engine searches for itself and is not stored.
+    const weak = await run({ depth: 6, elo: 1500 });
+    expect(weak.updates).toBeGreaterThan(0);
+    expect(await run({ depth: 8 })).toEqual({ depth: first.depth, updates: 0 });
+    await engines.shutdown();
+  });
+
   it('checks a solve-mode move against the answer and the engine', async () => {
     const db = freshDb();
     updateSettings(db, { enginePath: STOCKFISH });

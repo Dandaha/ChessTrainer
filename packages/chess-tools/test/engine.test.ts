@@ -37,6 +37,27 @@ describe.skipIf(!available)('Stockfish', () => {
     await engine?.quit();
   });
 
+  it('plays at a set strength when asked, and at full strength again afterwards', async () => {
+    const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const sent: string[] = [];
+    const spy = engine as unknown as { send(line: string): void };
+    const send = spy.send.bind(engine);
+    spy.send = (line: string) => {
+      sent.push(line);
+      send(line);
+    };
+    const weak = await engine.analyse(start, { depth: 4, elo: 1500 });
+    await engine.analyse(start, { depth: 4, elo: 1500 });
+    await engine.analyse(start, { depth: 4 });
+    spy.send = send;
+    expect(weak.lines.length).toBeGreaterThan(0);
+    expect(sent.filter((l) => /UCI_LimitStrength|UCI_Elo/.test(l))).toEqual([
+      'setoption name UCI_LimitStrength value true',
+      'setoption name UCI_Elo value 1500',
+      'setoption name UCI_LimitStrength value false',
+    ]);
+  });
+
   it('finds a mate in one and reports it from White’s point of view', async () => {
     const result = await engine.analyse('6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1', { depth: 8, multipv: 2 });
     expect(result.engine).toMatch(/Stockfish/);

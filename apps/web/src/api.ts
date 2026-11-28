@@ -282,8 +282,8 @@ export const api = {
   testEngine: (path: string) => call<{ name: string }>('POST', '/api/engine/test', { path }),
   engineStatus: () => call<EngineStatus>('GET', '/api/engine/status'),
   evaluate: (fen: string, depth = 18, multipv = 3) => call<Analysis>('POST', '/api/engine/evaluate', { fen, depth, multipv }),
-  engineStreamUrl: (fen: string, multipv = 3, history?: { startFen: string; moves: string[] }) =>
-    `/api/engine/stream${query({ fen, multipv, start: history?.startFen, moves: history?.moves.join(',') })}`,
+  engineStreamUrl: (fen: string, multipv = 3, history?: { startFen: string; moves: string[] }, settings: { depth?: number; elo?: number | null } = {}) =>
+    `/api/engine/stream${query({ fen, multipv, start: history?.startFen, moves: history?.moves.join(','), depth: settings.depth, elo: settings.elo ?? undefined })}`,
 
   trainingSummary: () => call<QueueSummary>('GET', '/api/training/summary'),
   trainingQueue: (filter: { repertoireId?: string; type?: 'repertoire_move' | 'saved_position' } = {}) =>

@@ -135,17 +135,29 @@ export class EngineService {
     onDone: (analysis: Analysis) => void,
     /** The moves since the last capture or pawn move, when the position has occurred among them. */
     history?: { startFen: string; moves: string[] },
+    /** How deep to search (40 unless given), and an Elo to play at instead of full strength. */
+    settings: { depth?: number; elo?: number } = {},
   ): Promise<() => void> {
     const engine = await this.get('panel');
-    // A repeated position is judged with its history (a draw by repetition), so neither the cache's
-    // view of it nor this one belongs to the position alone.
-    const withHistory = Boolean(history?.moves.length);
-    const cached = withHistory ? undefined : bestCachedAnalysis(this.db, fen, engine.name);
-    if (cached && cached.lines.length >= multipv) onUpdate({ ...cached, lines: cached.lines.slice(0, multipv) });
+    const depth = settings.depth ?? 40;
+    // A repeated position is judged with its history (a draw by repetition), and a weakened engine
+    // by its strength, so neither the cache's view of it nor this one belongs to the position alone.
+    const ownView = Boolean(history?.moves.length) || settings.elo !== undefined;
+    const cached = ownView ? undefined : bestCachedAnalysis(this.db, fen, engine.name);
+    if (cached && cached.lines.length >= multipv) {
+      const known = { ...cached, lines: cached.lines.slice(0, multipv) };
+      // Already searched as deep as asked: nothing to run.
+      if (cached.depth >= depth) {
+        onDone(known);
+        return () => {};
+      }
+      onUpdate(known);
+    }
     let stopped = false;
     const run = engine.analyse(fen, {
       multipv,
-      depth: 40,
+      depth,
+      elo: settings.elo,
       history,
       onUpdate: (analysis) => {
         // Still in use: keep the idle timer from stopping the engine under an open panel.
@@ -154,7 +166,7 @@ export class EngineService {
       },
     });
     void run.then((analysis) => {
-      if (!withHistory) storeAnalysis(this.db, analysis);
+      if (!ownView) storeAnalysis(this.db, analysis);
       this.touch('panel');
       if (!stopped) onDone(analysis);
     });

@@ -1,4 +1,4 @@
-import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
@@ -8,6 +8,7 @@ import { EnginePanel, EvalBar } from '../components/EnginePanel.tsx';
 import { CoachPanel, type CoachPanelHandle } from '../components/CoachPanel.tsx';
 import type { Annotations } from '../api.ts';
 import { useEngine } from '../useEngine.ts';
+import { type EngineSettings, readEngineSettings, writeEngineSettings } from '../storage.ts';
 import type { DrawShape } from '../Board.tsx';
 import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
 import { ExportDialog, ImportDialog, ShortcutsDialog } from '../Dialogs.tsx';
@@ -57,18 +58,34 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
   const [savedRefresh, setSavedRefresh] = useState(0);
   const [repertoireRefresh, setRepertoireRefresh] = useState(0);
   const [engineOn, setEngineOn] = useState(false);
+  const [engineSettings, setEngineSettings] = useState<EngineSettings>(readEngineSettings);
+  const [threat, setThreat] = useState(false);
   const [coachMarks, setCoachMarks] = useState<Annotations | null>(null);
   const coach = useRef<CoachPanelHandle>(null);
   const moveInput = useRef<HTMLInputElement>(null);
 
   const { game, current } = g;
   const end = useMemo(() => gameEnd(g.path), [g.path]);
-  const history = useMemo(() => (engineOn ? repetitionHistory(g.path) : undefined), [engineOn, g.path]);
-  const engine = useEngine(current.fen, engineOn, 3, history);
+  // Threat mode analyses the same position with the other side to move (not possible in check).
+  const threatFen = useMemo(() => (engineOn && threat ? passTurn(current.fen) : null), [engineOn, threat, current.fen]);
+  const history = useMemo(() => (engineOn && !threatFen ? repetitionHistory(g.path) : undefined), [engineOn, threatFen, g.path]);
+  const engine = useEngine(threatFen ?? current.fen, engineOn, engineSettings, history);
   const best = engine.analysis?.fen === current.fen ? engine.analysis.lines[0] : undefined;
-  const engineShapes: DrawShape[] = best?.pv[0]
-    ? [{ orig: best.pv[0].slice(0, 2) as DrawShape['orig'], dest: best.pv[0].slice(2, 4) as DrawShape['orig'], brush: 'paleBlue' }]
-    : [];
+  const threatLine = threatFen && engine.analysis?.fen === threatFen ? engine.analysis.lines[0] : undefined;
+  const arrow = (line: typeof best, brush: string): DrawShape[] =>
+    line?.pv[0] ? [{ orig: line.pv[0].slice(0, 2) as DrawShape['orig'], dest: line.pv[0].slice(2, 4) as DrawShape['orig'], brush }] : [];
+  const engineShapes: DrawShape[] = [...arrow(best, 'paleBlue'), ...arrow(threatLine, 'red')];
+  const changeEngineSettings = (next: EngineSettings) => {
+    setEngineSettings(next);
+    writeEngineSettings(next);
+  };
+  const toggleThreat = () => {
+    if (!engineOn) {
+      setEngineOn(true);
+      setTab('engine');
+      setThreat(true);
+    } else setThreat((on) => !on);
+  };
   const coachShapes: DrawShape[] = coachMarks
     ? [
         ...coachMarks.arrows.map((a) => ({ orig: a.from as DrawShape['orig'], dest: a.to as DrawShape['orig'], brush: a.color })),
@@ -124,6 +141,10 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       s: () => setDialog('save'),
       r: () => setDialog('repertoire'),
       e: toggleEngine,
+      t: toggleThreat,
+      ' ': () => {
+        if (best?.san[0]) g.play(best.san[0]);
+      },
       c: () => {
         setTab('coach');
         setTimeout(() => coach.current?.focusQuestion(), 0);
@@ -329,6 +350,9 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               (engineOn ? (
                 <EnginePanel
                   state={engine}
+                  settings={engineSettings}
+                  onSettings={changeEngineSettings}
+                  threat={{ on: threat, side: threatFen ? (current.fen.split(' ')[1] === 'w' ? 'Black' : 'White') : null, onToggle: toggleThreat }}
                   onTurnOff={toggleEngine}
                   onPlayLine={(sans) => g.playLineFrom(current.id, sans)}
                 />

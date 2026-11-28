@@ -27,7 +27,7 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
 
   /** Server-sent events with the lines as they deepen. Closing the panel closes the stream and stops the search. */
   app.get('/api/engine/stream', async (req, reply) => {
-    const q = req.query as { fen: string; multipv?: string; start?: string; moves?: string };
+    const q = req.query as { fen: string; multipv?: string; start?: string; moves?: string; depth?: string; elo?: string };
     const moves = q.moves?.split(',').filter((m) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m)) ?? [];
     const history = q.start && moves.length ? { startFen: q.start, moves } : undefined;
     reply.hijack();
@@ -53,6 +53,11 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
           res.end();
         },
         history,
+        {
+          depth: q.depth ? Math.min(Math.max(Math.round(Number(q.depth)) || 40, 1), 60) : undefined,
+          // Stockfish plays from about 1320 to 3190 Elo when limited.
+          elo: q.elo ? Math.min(Math.max(Math.round(Number(q.elo)) || 3190, 1320), 3190) : undefined,
+        },
       );
       // Closed while the engine was starting: stop the search it has just begun.
       if (closed) stop();

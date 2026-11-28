@@ -47,6 +47,32 @@ export function useTheme(): Theme {
   return useSyncExternalStore(onThemeChange, currentTheme);
 }
 
+/** How the analysis engine runs: lines shown, how deep it searches, and an Elo to play at (null: full strength). */
+export interface EngineSettings {
+  lines: number;
+  depth: number;
+  elo: number | null;
+}
+
+export const DEFAULT_ENGINE_SETTINGS: EngineSettings = { lines: 3, depth: 40, elo: null };
+
+export function readEngineSettings(): EngineSettings {
+  try {
+    const stored = JSON.parse(read('engine') ?? '{}') as Partial<EngineSettings>;
+    return {
+      lines: Number.isInteger(stored.lines) && stored.lines! >= 1 && stored.lines! <= 5 ? stored.lines! : DEFAULT_ENGINE_SETTINGS.lines,
+      depth: Number.isInteger(stored.depth) && stored.depth! >= 1 && stored.depth! <= 60 ? stored.depth! : DEFAULT_ENGINE_SETTINGS.depth,
+      elo: typeof stored.elo === 'number' ? stored.elo : null,
+    };
+  } catch {
+    return DEFAULT_ENGINE_SETTINGS;
+  }
+}
+
+export function writeEngineSettings(settings: EngineSettings): void {
+  write('engine', JSON.stringify(settings));
+}
+
 /** The PGN of the game left on the board, so a reload does not lose it. */
 export function readDraft(): string | null {
   return read('draft');

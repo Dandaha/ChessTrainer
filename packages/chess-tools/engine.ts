@@ -32,6 +32,8 @@ export interface AnalyseOptions {
    * positions have occurred, so it sees a repetition as the draw it is.
    */
   history?: { startFen: string; moves: string[] };
+  /** Play at about this Elo (UCI_LimitStrength) rather than at full strength. */
+  elo?: number;
 }
 
 /**
@@ -67,6 +69,8 @@ export class Engine {
   private exited = false;
   /** Number of the newest search asked for; an older one that has not started yet is skipped. */
   private latest = 0;
+  /** The Elo the engine is limited to now; null at full strength. */
+  private limited: number | null = null;
 
   private constructor(process: ChildProcessWithoutNullStreams) {
     this.process = process;
@@ -204,6 +208,12 @@ export class Engine {
           const multipv = Math.min(options.multipv ?? 3, legal);
           this.search = { fen, multipv, lines: new Map(), onUpdate: options.onUpdate, resolve };
           this.send(`setoption name MultiPV value ${multipv}`);
+          const elo = options.elo ?? null;
+          if (elo !== this.limited) {
+            this.send(`setoption name UCI_LimitStrength value ${elo ? 'true' : 'false'}`);
+            if (elo) this.send(`setoption name UCI_Elo value ${elo}`);
+            this.limited = elo;
+          }
           const history = options.history;
           this.send(history?.moves.length ? `position fen ${history.startFen} moves ${history.moves.join(' ')}` : `position fen ${fen}`);
           if (options.movetime) this.send(`go movetime ${options.movetime}`);

@@ -1,4 +1,5 @@
 import { Chess, type Square } from 'chess.js';
+import { isValidFen } from './positionKey.ts';
 
 /** What a board needs to know about a position to let a person move on it. */
 
@@ -49,4 +50,16 @@ export function isPromotion(fen: string, from: string, to: string): boolean {
   return chess
     .moves({ verbose: true })
     .some((m) => m.from === from && m.to === to && m.promotion !== undefined);
+}
+
+/**
+ * The position with the other side to move, as if the side to move passed: what threat mode looks
+ * at, to show what the opponent would play if it were their turn. Null when the side to move is in
+ * check, since passing would leave the king to be taken.
+ */
+export function passTurn(fen: string): string | null {
+  if (!isValidFen(fen) || new Chess(fen).inCheck()) return null;
+  const [placement, turn, castling, , , fullmove = '1'] = fen.trim().split(/\s+/);
+  const next = [placement, turn === 'w' ? 'b' : 'w', castling, '-', '0', String(Number(fullmove) + (turn === 'b' ? 1 : 0))].join(' ');
+  return isValidFen(next) ? next : null;
 }
