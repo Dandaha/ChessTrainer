@@ -133,24 +133,25 @@ export function SavePositionDialog({
         }}
         className="space-y-3"
       >
-        {newPosition && (
-          <div className="flex items-start gap-3">
-            <div className="w-28 shrink-0">
-              <MiniBoard fen={fen} flipped={fen.split(' ')[1] === 'b'} />
-            </div>
-            <div className="min-w-0 space-y-2 text-sm">
-              <p data-testid="setup-summary">{describeSetup(fen)}</p>
-              {noMoves && (
-                <p className="text-xs text-danger">
-                  {describeGameEnd(noMoves)} There is no move to find here, so solving and training will skip over it.
-                </p>
-              )}
+        {/* The position being saved, in view: the dialog covers the board it came from. */}
+        <div className="flex items-start gap-3">
+          <div className="w-28 shrink-0">
+            <MiniBoard fen={fen} flipped={fen.split(' ')[1] === 'b'} />
+          </div>
+          <div className="min-w-0 space-y-2 text-sm">
+            <p data-testid="setup-summary">{describeSetup(fen)}</p>
+            {noMoves && (
+              <p className="text-xs text-danger">
+                {describeGameEnd(noMoves)} There is no move to find here, so solving and training will skip over it.
+              </p>
+            )}
+            {newPosition && (
               <button type="button" className="text-accent" onClick={newPosition.onBack}>
                 ← Change the position
               </button>
-            </div>
+            )}
           </div>
-        )}
+        </div>
         <input
           ref={titleInput}
           aria-label="Title"
@@ -227,7 +228,7 @@ export function SavePositionDialog({
                 aria-label="Answer"
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
-                placeholder="e.g. Bxh7+ Kxh7 Ng5+ (empty: Stockfish judges)"
+                placeholder="e.g. Bxh7+ Kxh7 Ng5+ (or leave empty)"
                 className={field}
                 aria-invalid={answerProblem(fen, answer) !== null}
               />
