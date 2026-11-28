@@ -89,11 +89,17 @@ export function useGame(
   const current = findNode(game.root, currentId) ?? game.root;
   const path = pathTo(game.root, current.id);
 
-  /** Remembers the game before a change that loses work, so Ctrl+Z can bring it back. */
+  /**
+   * Remembers the game before each change, so Ctrl+Z takes back the last one, whatever it was: a move,
+   * a delete, a comment. (Undoing only deletes would bring back a deleted line over the moves played
+   * since, and lose them.)
+   */
   const snapshot = useCallback(() => {
     undoStack.current.push({ game: structuredClone(game), currentId, context: contextRef.current?.current() });
-    if (undoStack.current.length > 50) undoStack.current.shift();
+    if (undoStack.current.length > 100) undoStack.current.shift();
   }, [game, currentId]);
+  // Typing a comment is one change per move, not one per key.
+  const commentEdit = useRef<{ id: string; at: number } | null>(null);
 
   const goTo = useCallback((id: string) => setCurrentId(id), []);
 
@@ -124,6 +130,7 @@ export function useGame(
     playLineFrom: (id, sans) => {
       let node = findNode(game.root, id);
       if (!node) return;
+      snapshot();
       let added = false;
       for (const san of sans) {
         try {
@@ -137,24 +144,30 @@ export function useGame(
       }
       setCurrentId(node.id);
       if (added) bump();
+      else undoStack.current.pop(); // only went to moves already there
     },
     play: (move) => {
+      snapshot();
       try {
         const before = current.children.length;
         const node = addMove(current, move);
         setCurrentId(node.id);
         // Stepping into a move that is already there is navigation, not an edit.
         if (current.children.length !== before) bump();
+        else undoStack.current.pop();
         return true;
       } catch {
+        undoStack.current.pop();
         return false;
       }
     },
     setResult: (result) => {
+      snapshot();
       game.result = result;
       bump();
     },
     setHeaders: (headers) => {
+      snapshot();
       game.headers = headers;
       bump();
     },
@@ -178,6 +191,9 @@ export function useGame(
     },
     setCommentText: (text) => {
       // Commands such as [%clk] stay attached, out of sight; drawings live in arrows/highlights.
+      const last = commentEdit.current;
+      if (!last || last.id !== current.id || Date.now() - last.at > 3000) snapshot();
+      commentEdit.current = { id: current.id, at: Date.now() };
       const hidden = current.comments.join(' ').match(/\[%[^\]]*\]/g) ?? [];
       const value = [...hidden, text.trim()].join(' ').trim();
       current.comments = value ? [value] : [];
@@ -185,10 +201,12 @@ export function useGame(
     },
     toggleNag: (nag) => {
       if (current === game.root) return;
+      snapshot();
       toggleNag(current, nag);
       bump();
     },
     setShapes: (arrows, highlights) => {
+      snapshot();
       current.arrows = arrows;
       current.highlights = highlights;
       bump();

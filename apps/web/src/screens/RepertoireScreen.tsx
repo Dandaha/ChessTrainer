@@ -8,6 +8,7 @@ import {
   displayComment,
   isMyTurn,
   moveLabel,
+  moveSpellings,
   nagGlyph,
   playMove,
   positionKey,
@@ -170,7 +171,7 @@ export function RepertoireScreen() {
   const addTyped = async () => {
     const text = typed.trim();
     if (!text) return;
-    for (const spelling of [text, text[0]!.toUpperCase() + text.slice(1)]) {
+    for (const spelling of moveSpellings(text)) {
       try {
         const move = /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(spelling)
           ? { from: spelling.slice(0, 2).toLowerCase(), to: spelling.slice(2, 4).toLowerCase(), promotion: spelling[4]?.toLowerCase() }

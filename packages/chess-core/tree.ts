@@ -138,6 +138,19 @@ function cleanSan(san: string): string {
     .replace(/^P(?=[a-h])/, '');
 }
 
+/**
+ * The ways a typed move may be meant, most likely first: "nf3" is Nf3 (but "b4" stays a pawn move
+ * before it is tried as Bb4), "o-o" and "0-0" castle, and "e8q", "e8=q" or "exd8q" promote.
+ */
+export function moveSpellings(typed: string): string[] {
+  let text = typed.trim().replace(/^(0-0-0|o-o-o)/i, 'O-O-O').replace(/^(0-0|o-o)(?!-)/i, 'O-O');
+  text = text.replace(/^([a-h](?:x[a-h])?[18])=?([qrbn])([+#]?)$/i, (_, square: string, piece: string, check: string) => `${square}=${piece.toUpperCase()}${check}`);
+  const out = [text];
+  if (/^[nrqk]/.test(text)) out.push(text[0]!.toUpperCase() + text.slice(1));
+  if (/^b/.test(text) && !text.includes('=')) out.push(`B${text.slice(1)}`); // after trying it as a b-pawn move
+  return [...new Set(out)];
+}
+
 /** Plays a move from a node's position without changing the tree. Throws IllegalMoveError. */
 export function playMove(from: MoveNode, input: MoveInput): MoveNode {
   const chess = new Chess(from.fen);

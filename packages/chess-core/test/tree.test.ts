@@ -119,3 +119,17 @@ describe('the move tree', () => {
     expect(last.comments).toEqual([]);
   });
 });
+
+describe('moveSpellings', () => {
+  it('reads moves the way people type them', async () => {
+    const { moveSpellings } = await import('../tree.ts');
+    expect(moveSpellings('nf3')).toEqual(['nf3', 'Nf3']);
+    expect(moveSpellings('o-o')).toEqual(['O-O']);
+    expect(moveSpellings('0-0-0')).toEqual(['O-O-O']);
+    expect(moveSpellings('o-o-o')).toEqual(['O-O-O']);
+    expect(moveSpellings('b8q')).toEqual(['b8=Q']);
+    expect(moveSpellings('bc4')).toEqual(['bc4', 'Bc4']);
+    expect(moveSpellings('exd8=q+')).toEqual(['exd8=Q+']);
+    expect(moveSpellings('b4')).toEqual(['b4', 'B4']);
+  });
+});

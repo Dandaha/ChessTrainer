@@ -37,10 +37,13 @@ export function EnginePanel({
   settings,
   onSettings,
   threat,
+  gameOver = null,
   onPlayLine,
   onTurnOff,
 }: {
   state: EngineState;
+  /** How the game ended at this position, if it did (the lines are then for playing on). */
+  gameOver?: string | null;
   settings: EngineSettings;
   onSettings(settings: EngineSettings): void;
   /** Threat mode: on or off, and whose threats ('Black' when White is to move), or null in check. */
@@ -54,7 +57,7 @@ export function EnginePanel({
     <div className="space-y-2 p-3 text-sm">
       <div className="flex items-center justify-between text-xs text-muted">
         <span>
-          {analysis ? `${analysis.engine} · depth ${analysis.depth}` : 'Stockfish'}
+          {analysis ? `${analysis.engine}${analysis.depth ? ` · depth ${analysis.depth}` : ''}` : 'Stockfish'}
           {settings.elo ? ` · ${settings.elo} Elo` : ''}
           {status === 'running' && ' · thinking…'}
           {status === 'starting' && ' · starting…'}
@@ -110,6 +113,9 @@ export function EnginePanel({
           Threat <kbd>T</kbd>
         </button>
       </div>
+      {gameOver && analysis?.lines.length ? (
+        <p className="text-xs text-muted">{gameOver} The lines below are for playing on.</p>
+      ) : null}
       {threat.on && (
         <p className="text-xs text-danger">
           {threat.side

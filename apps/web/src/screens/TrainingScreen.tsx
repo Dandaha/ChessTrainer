@@ -1,4 +1,4 @@
-import { type Color, type MoveNode, answerLine, createGame, displayComment, lineLabel, moveLabel, playMove } from '@chess/chess-core';
+import { type Color, type MoveNode, answerLine, createGame, displayComment, lineLabel, moveLabel, moveSpellings, playMove } from '@chess/chess-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type CardDetail, type QueueSummary, type TrainingStats, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
@@ -542,8 +542,7 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
                 if (e.key !== 'Enter' || !typed.trim()) return;
                 e.stopPropagation();
                 const text = typed.trim();
-                const tries = [text, text[0]!.toUpperCase() + text.slice(1)];
-                for (const t of tries) {
+                for (const t of moveSpellings(text)) {
                   try {
                     const m = playMove(node, t);
                     setTyped('');

@@ -1,4 +1,4 @@
-import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, normalizeFen, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, moveSpellings, normalizeFen, passTurn, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
@@ -25,14 +25,6 @@ export function isTyping(target: EventTarget | null): boolean {
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
-/** Typed moves are forgiving: "nf3" means Nf3, and "e2e4" works too. */
-function spellings(typed: string): string[] {
-  const text = typed.trim();
-  const out = [text];
-  if (/^[nrqk]/.test(text)) out.push(text[0]!.toUpperCase() + text.slice(1));
-  if (/^b/.test(text)) out.push(`B${text.slice(1)}`); // after trying it as a b-pawn move
-  return out;
-}
 
 function fileName(pgn: { white?: string; black?: string; date?: string }): string {
   // Letters of any alphabet stay: Каспаров-vs-Карпов, not _-vs-_.
@@ -111,7 +103,8 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
       await ws.openFen(normalizeFen(fenText));
       setFenText(null);
     } catch (error) {
-      ws.toast((error as Error).message, true);
+      const why = (error as Error).message.replace(/^Invalid FEN:\s*/i, '');
+      ws.toast(`That is not a position the board can show: ${why.charAt(0).toLowerCase()}${why.slice(1).replace(/\.?$/, '.')}`, true);
     }
   };
   const copyFen = async () => {
@@ -125,13 +118,17 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 
   const playTyped = () => {
     if (!typed.trim()) return;
-    if (spellings(typed).some((move) => g.play(move))) setTyped('');
+    if (moveSpellings(typed).some((move) => g.play(move))) setTyped('');
     else ws.toast(`${typed.trim()} is not a legal move here.`, true);
   };
 
   const keys = useRef<(event: KeyboardEvent) => void>(() => {});
   keys.current = (event) => {
     const mod = event.ctrlKey || event.metaKey;
+    if (event.key === 'Escape' && menu) {
+      setMenu(null);
+      return;
+    }
     // Ctrl+S saves the game from anywhere on the board, the comment box included (the browser would
     // otherwise offer to save the page).
     if (mod && event.key.toLowerCase() === 's' && !dialog && !document.querySelector('[data-overlay]')) {
@@ -349,7 +346,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
         <aside className="flex max-h-[calc(100dvh-7rem)] min-h-[24rem] w-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel md:w-[22rem] md:shrink-0 xl:w-[26rem]">
           <MoveList game={game} currentId={current.id} onSelect={g.goTo} onMenu={(id, x, y) => setMenu({ id, x, y })} />
           <Branches node={current} choice={g.choice} onEnter={g.goTo} />
-          <GameOver end={end} result={game.result} atEnd={!current.children.length} onSetResult={g.setResult} />
+          <GameOver end={end} result={game.result} atEnd={!current.children.length && onMainline} onSetResult={g.setResult} />
           <div className="flex overflow-x-auto border-t border-line text-sm" role="tablist">
             {tabs.map((t) => (
               <button
@@ -359,7 +356,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
                 title={t.key ? `${t.label} (${t.key.toUpperCase()})` : t.label}
-                className={`flex-1 whitespace-nowrap px-1.5 py-1.5 xl:px-2 ${tab === t.id ? 'border-b-2 border-accent font-semibold' : 'text-muted hover:text-text'}`}
+                className={`flex-1 whitespace-nowrap px-1 py-1.5 text-[13px] xl:px-2 xl:text-sm ${tab === t.id ? 'border-b-2 border-accent font-semibold' : 'text-muted hover:text-text'}`}
               >
                 {t.label}
               </button>
@@ -403,6 +400,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
                   state={engine}
                   settings={engineSettings}
                   onSettings={changeEngineSettings}
+                  gameOver={end ? describeGameEnd(end) : null}
                   threat={{ on: threat, side: threatFen ? (current.fen.split(' ')[1] === 'w' ? 'Black' : 'White') : null, onToggle: toggleThreat }}
                   onTurnOff={toggleEngine}
                   onPlayLine={(sans) => g.playLineFrom(current.id, sans)}

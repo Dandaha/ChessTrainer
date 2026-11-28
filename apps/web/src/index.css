@@ -109,6 +109,18 @@ kbd {
   font-weight: 600;
 }
 
+/* File letters in the corner of their own square (chessground's sheet shifts them 24px right, which
+   puts the h on small boards outside the board). */
+.cg-wrap coords.files {
+  left: 0;
+  bottom: 0;
+}
+.cg-wrap coords.files coord {
+  flex: 1 1 0;
+  text-align: right;
+  padding-right: 3px;
+}
+
 /* A variation inside the move list. */
 .variation {
   border-left: 2px solid var(--line);

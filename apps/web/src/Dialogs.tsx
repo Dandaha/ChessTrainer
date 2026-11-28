@@ -207,7 +207,7 @@ const SHORTCUTS: [string, string][] = [
   ['F', 'Flip the board'],
   ['/', 'Type a move'],
   ['Delete', 'Delete from the current move'],
-  ['Ctrl+Z', 'Undo a delete or promotion'],
+  ['Ctrl+Z', 'Undo the last change: a move, a delete, a comment, a drawing'],
   ['E', 'Engine on / off (Stockfish runs only while it is on)'],
   ['Space', "Play the engine's best move"],
   ['T', 'Threat: what the opponent would play if it were their move'],

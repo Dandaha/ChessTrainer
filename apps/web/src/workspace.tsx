@@ -91,6 +91,8 @@ export function useWorkspace(): Workspace {
 interface Draft {
   pgn: string;
   linked: LinkedGame | null;
+  /** The moves to the position on the board, so a reload comes back to it. */
+  at?: string[];
 }
 
 function readSavedDraft(): Draft | null {
@@ -152,8 +154,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState<{ text: string; error: boolean; action?: ToastAction } | null>(null);
 
   useEffect(() => {
-    writeDraft(JSON.stringify({ pgn: writePgn(g.game), linked } satisfies Draft));
-  }, [g.game, g.version, linked]);
+    writeDraft(JSON.stringify({ pgn: writePgn(g.game), linked, at: g.path.slice(1).map((n) => n.san) } satisfies Draft));
+  }, [g.game, g.version, linked, g.current.id]);
+
+  // After a reload, back to the move that was on the board.
+  useEffect(() => {
+    let node = g.game.root;
+    for (const san of draft.current?.at ?? []) {
+      const next = node.children.find((c) => c.san === san);
+      if (!next) break;
+      node = next;
+    }
+    if (node !== g.game.root) g.goTo(node.id);
+    // Once, for the game read from the draft.
+  }, []);
 
   useEffect(() => {
     if (!message) return;
@@ -231,6 +245,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const note = clearedNote();
       g.load(createGame(), { clean: true });
       setLinked(null);
+      setOrientation('white');
       if (note) toast(note);
     },
     saveToLibrary: async () => {

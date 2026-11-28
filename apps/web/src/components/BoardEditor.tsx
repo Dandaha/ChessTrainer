@@ -56,6 +56,8 @@ export function BoardEditor({ fen, onUse, onClose }: { fen: string; onUse(fen: s
   const [turn, setTurn] = useState<'w' | 'b'>(start[1] === 'b' ? 'b' : 'w');
   const [rights, setRights] = useState(() => new Set((start[2] ?? '-').replace('-', '').split('').filter(Boolean)));
   const [ep, setEp] = useState(start[3] ?? '-');
+  // The move counters: kept from the position it started from, or from a FEN pasted in.
+  const [counters, setCounters] = useState<[string, string]>([start[4] ?? '0', start[5] ?? '1']);
   const [orientation, setOrientation] = useState<'white' | 'black'>(start[1] === 'b' ? 'black' : 'white');
   const [tool, setTool] = useState<Tool>(null);
   const [typed, setTyped] = useState<string | null>(null);
@@ -70,12 +72,13 @@ export function BoardEditor({ fen, onUse, onClose }: { fen: string; onUse(fen: s
     .map((r) => r.right)
     .join('');
   const epChoices = enPassantSquares(placement, turn);
-  const result = `${placement} ${turn} ${castling || '-'} ${epChoices.includes(ep) ? ep : '-'} 0 ${start[5] ?? 1}`;
+  const result = `${placement} ${turn} ${castling || '-'} ${epChoices.includes(ep) ? ep : '-'} ${counters[0]} ${counters[1]}`;
   let problem: string | null = null;
   try {
     normalizeFen(result);
   } catch (error) {
-    problem = (error as Error).message.replace(/^Invalid FEN: /, '');
+    const why = (error as Error).message.replace(/^Invalid FEN:\s*/i, '');
+    problem = `${why.charAt(0).toUpperCase()}${why.slice(1).replace(/\.?$/, '.')}`;
   }
 
   useEffect(() => {
@@ -118,6 +121,7 @@ export function BoardEditor({ fen, onUse, onClose }: { fen: string; onUse(fen: s
     setTurn(fields[1] === 'b' ? 'b' : 'w');
     setRights(new Set((fields[2] ?? '-').replace('-', '').split('').filter(Boolean)));
     setEp(fields[3] ?? '-');
+    setCounters([/^\d+$/.test(fields[4] ?? '') ? fields[4]! : '0', /^[1-9]\d*$/.test(fields[5] ?? '') ? fields[5]! : '1']);
     return true;
   };
 
@@ -210,7 +214,14 @@ export function BoardEditor({ fen, onUse, onClose }: { fen: string; onUse(fen: s
             <button type="button" className={buttonClass} onClick={() => loadTyped(START_FEN)}>
               Starting position
             </button>
-            <button type="button" className={buttonClass} onClick={() => setPlacement(EMPTY)}>
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => {
+                setPlacement(EMPTY);
+                setCounters(['0', '1']);
+              }}
+            >
               Clear
             </button>
             <button type="button" className={buttonClass} onClick={() => setOrientation((o) => (o === 'white' ? 'black' : 'white'))}>
