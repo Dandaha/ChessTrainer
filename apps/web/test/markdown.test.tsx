@@ -51,3 +51,19 @@ describe('notes in markdown', () => {
     expect(document.querySelectorAll('ul li')).toHaveLength(2);
   });
 });
+
+describe('markdown edge cases', () => {
+  it('keeps snake_case and 2*3*4 as written, and still reads _this_ and *that*', () => {
+    const { container } = show('snake_case_word and 2*3*4, but _this_ and *that*.');
+    expect(container.textContent).toBe('snake_case_word and 2*3*4, but this and that.');
+    expect([...container.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['this', 'that']);
+  });
+
+  it('starts a board or a list on the line after a paragraph, carries on indented items, and numbers from the first', () => {
+    const { container } = show('Look here:\n8/8/8/8/8/8/8/K6k w - - 0 1\nThen:\n3. third\n   still third\n4. fourth\n> a quote');
+    expect(container.querySelector('ol')!.getAttribute('start')).toBe('3');
+    expect([...container.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['third still third', 'fourth']);
+    expect(container.querySelector('blockquote')!.textContent).toBe('a quote');
+    expect(container.textContent).not.toContain('K6k');
+  });
+});

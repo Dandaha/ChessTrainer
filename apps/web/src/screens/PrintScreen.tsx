@@ -12,11 +12,20 @@ export function PrintScreen({ setId }: { setId: string }) {
   const [name, setName] = useState('');
 
   useEffect(() => {
-    api.savedPositions({ setId, limit: 500 }).then((d) => setItems(d.positions)).catch(() => setItems([]));
+    api.savedPositions({ setId, limit: 5000 }).then((d) => setItems(d.positions)).catch(() => setItems([]));
     api.sets().then((sets) => setName(sets.find((s) => s.id === setId)?.name ?? 'Worksheet')).catch(() => {});
   }, [setId]);
 
   if (!items) return <p className="p-8">Loading…</p>;
+  if (!items.length)
+    return (
+      <div className="space-y-4 p-8">
+        <p>This set has no positions to print.</p>
+        <button type="button" onClick={() => navigate(`positions?set=${setId}`)} className="rounded-md border border-line px-3 py-1.5 text-sm">
+          Back
+        </button>
+      </div>
+    );
 
   return (
     <div className="worksheet mx-auto max-w-[50rem] bg-white p-8 text-black">
@@ -24,7 +33,7 @@ export function PrintScreen({ setId }: { setId: string }) {
         <button type="button" onClick={() => window.print()} className="rounded-md bg-[#2f6b4a] px-3 py-1.5 text-sm font-medium text-white">
           Print or save as PDF
         </button>
-        <button type="button" onClick={() => navigate('positions')} className="rounded-md border border-[#ddd] px-3 py-1.5 text-sm">
+        <button type="button" onClick={() => navigate(`positions?set=${setId}`)} className="rounded-md border border-[#ddd] px-3 py-1.5 text-sm">
           Back
         </button>
         <span className="text-sm text-[#666]">In the print dialog, choose “Save as PDF” for a file.</span>

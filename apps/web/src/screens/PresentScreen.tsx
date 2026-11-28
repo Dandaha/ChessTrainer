@@ -20,7 +20,7 @@ export function PresentScreen({ setId }: { setId: string }) {
   const [nodeId, setNodeId] = useState<string | null>(null);
 
   useEffect(() => {
-    api.savedPositions({ setId, limit: 500 }).then((d) => setItems(d.positions)).catch(() => setItems([]));
+    api.savedPositions({ setId, limit: 5000 }).then((d) => setItems(d.positions)).catch(() => setItems([]));
     api.sets().then((sets) => setName(sets.find((s) => s.id === setId)?.name ?? '')).catch(() => {});
   }, [setId]);
 
@@ -54,18 +54,28 @@ export function PresentScreen({ setId }: { setId: string }) {
   }, [items, current]);
 
   if (!items) return <p className="p-8 text-muted">Loading…</p>;
-  if (!current || !game) return <p className="p-8 text-muted">This set has no positions.</p>;
+  if (!current || !game)
+    return (
+      <div className="space-y-4 p-8">
+        <p className="text-muted">{name ? `“${name}” has no positions to present.` : 'This set has no positions, or is not in the library.'}</p>
+        <button type="button" className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-surface-2" onClick={() => navigate(name ? `positions?set=${setId}` : 'positions')}>
+          Back
+        </button>
+      </div>
+    );
 
   const node = findById(game, nodeId) ?? game.root;
 
   return (
     <div className="flex h-full flex-col bg-bg" data-overlay>
       <div className="flex items-center gap-4 px-6 py-3 text-sm text-muted">
-        <span>{name}</span>
-        <span className="tabular-nums">
+        <span className="min-w-0 truncate" title={name}>
+          {name}
+        </span>
+        <span className="shrink-0 whitespace-nowrap tabular-nums">
           {index + 1} / {items.length}
         </span>
-        <span className="ml-auto">
+        <span className="ml-auto hidden shrink-0 lg:inline">
           <kbd>←</kbd> <kbd>→</kbd> move between positions · <kbd>Enter</kbd> reveal · <kbd>R</kbd> reset · <kbd>Esc</kbd> leave
         </span>
       </div>

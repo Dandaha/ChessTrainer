@@ -34,17 +34,31 @@ const CALLS = {
 const NEW = '\u0000new';
 
 /** Adds a category by name, or finds the one already called that; null if the person cancelled. */
-export async function askNewCategory(ask: ReturnType<typeof useAskText>, kind: CategoryKind = 'position'): Promise<PositionCategory | null> {
+/**
+ * Asks for a new category's name and adds it. A name already taken, or too long, is refused in the
+ * box itself, which stays open to change it; `pickExisting` takes a taken name's category instead
+ * (a picker, where choosing it is what was wanted).
+ */
+export async function askNewCategory(
+  ask: ReturnType<typeof useAskText>,
+  kind: CategoryKind = 'position',
+  pickExisting = false,
+): Promise<PositionCategory | null> {
   const calls = CALLS[kind];
-  const name = (await ask('New category', '', calls.example))?.trim();
-  if (!name) return null;
-  try {
-    return await calls.create(name);
-  } catch (error) {
-    const existing = (await calls.list()).find((c) => c.name.toLowerCase() === name.toLowerCase());
-    if (existing) return existing;
-    throw error;
-  }
+  const done: { category?: PositionCategory } = {};
+  await ask('New category', '', calls.example, async (text) => {
+    const name = text.trim();
+    if (!name) return;
+    if (pickExisting) {
+      const existing = (await calls.list()).find((c) => c.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        done.category = existing;
+        return;
+      }
+    }
+    done.category = await calls.create(name);
+  });
+  return done.category ?? null;
 }
 
 /**
@@ -92,7 +106,7 @@ export function CategorySelect({
           return;
         }
         try {
-          const created = await askNewCategory(ask, kind);
+          const created = await askNewCategory(ask, kind, true);
           if (!created) return;
           setCategories(await CALLS[kind].list());
           onChange(created.name);

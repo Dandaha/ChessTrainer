@@ -42,6 +42,14 @@ describe('request bodies', () => {
     expect((await server.inject({ method: 'GET', url: `/api/concepts/${concept.id}` })).json().title).toBe('Minority attack');
   });
 
+  it('keeps concept titles apart, ignoring case and accents', async () => {
+    const server = app();
+    await server.inject({ method: 'POST', url: '/api/concepts', payload: { title: 'Réti manoeuvre' } });
+    const again = await server.inject({ method: 'POST', url: '/api/concepts', payload: { title: ' reti  MANOEUVRE ' } });
+    expect(again.statusCode).toBe(400);
+    expect(again.json().error).toBe('There is already a concept called “Réti manoeuvre”.');
+  });
+
   it('answers 400, not a server error, for a missing or malformed body', async () => {
     const server = app();
     expect((await server.inject({ method: 'POST', url: '/api/games' })).statusCode).toBe(400);

@@ -3,6 +3,7 @@ import type { Api } from '@lichess-org/chessground/api';
 import { dragNewPiece } from '@lichess-org/chessground/drag';
 import type { Key, Piece, Role } from '@lichess-org/chessground/types';
 import { START_FEN, normalizeFen } from '@chess/chess-core';
+import { fenProblem } from '../loadText.ts';
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from '../Dialogs.tsx';
 import { pieceImage } from '../pieces.ts';
@@ -69,6 +70,7 @@ export function BoardEditor({
   const [ep, setEp] = useState(start[3] ?? '-');
   // The move counters: kept from the position it started from, or from a FEN pasted in.
   const [counters, setCounters] = useState<[string, string]>([start[4] ?? '0', start[5] ?? '1']);
+  const [pasteProblem, setPasteProblem] = useState<string | null>(null);
   const [orientation, setOrientation] = useState<'white' | 'black'>(start[1] === 'b' ? 'black' : 'white');
   const [tool, setTool] = useState<Tool>(null);
   const [typed, setTyped] = useState<string | null>(null);
@@ -85,12 +87,16 @@ export function BoardEditor({
   const epChoices = enPassantSquares(placement, turn);
   const result = `${placement} ${turn} ${castling || '-'} ${epChoices.includes(ep) ? ep : '-'} ${counters[0]} ${counters[1]}`;
   let problem: string | null = null;
-  try {
-    normalizeFen(result);
-  } catch (error) {
-    const why = (error as Error).message.replace(/^Invalid FEN:\s*/i, '');
-    problem = `${why.charAt(0).toUpperCase()}${why.slice(1).replace(/\.?$/, '.')}`;
-  }
+  // The counters are whole numbers: "1.5" or "5e3" would be read as 1 and 5 by some programs and
+  // refused by others.
+  if (!/^\d+$/.test(counters[1]) || Number(counters[1]) < 1) problem = 'The move number is a whole number, 1 or more.';
+  else if (!/^\d+$/.test(counters[0])) problem = 'Moves since a capture or pawn move: a whole number, 0 or more.';
+  else
+    try {
+      normalizeFen(result);
+    } catch (error) {
+      problem = fenProblem(error as Error);
+    }
 
   useEffect(() => {
     if (!element.current) return;
@@ -127,7 +133,12 @@ export function BoardEditor({
 
   const loadTyped = (text: string) => {
     const fields = text.trim().split(/\s+/);
-    if (!fields[0] || fields[0].split('/').length !== 8) return false;
+    if (!fields[0] || fields[0].split('/').length !== 8) {
+      // Not a FEN at all: say so, rather than quietly showing the board as it was.
+      if (text.trim()) setPasteProblem('That is not a FEN: it needs eight rows of pieces, such as rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1.');
+      return false;
+    }
+    setPasteProblem(null);
     setPlacement(fields[0]);
     setTurn(fields[1] === 'b' ? 'b' : 'w');
     setRights(new Set((fields[2] ?? '-').replace('-', '').split('').filter(Boolean)));
@@ -233,6 +244,7 @@ export function BoardEditor({
                   aria-label="Move number"
                   type="number"
                   min={1}
+                  step={1}
                   className={`${inputClass} w-20`}
                   value={counters[1]}
                   onChange={(e) => setCounters(([clock]) => [clock, e.target.value])}
@@ -247,6 +259,7 @@ export function BoardEditor({
                   aria-label="Halfmove clock"
                   type="number"
                   min={0}
+                  step={1}
                   className={`${inputClass} w-20`}
                   value={counters[0]}
                   onChange={(e) => setCounters(([, number]) => [e.target.value, number])}
@@ -278,7 +291,10 @@ export function BoardEditor({
               aria-label="Editor FEN"
               className={`${inputClass} w-full font-mono text-xs`}
               value={typed ?? result}
-              onChange={(e) => setTyped(e.target.value)}
+              onChange={(e) => {
+                setTyped(e.target.value);
+                setPasteProblem(null);
+              }}
               onBlur={() => {
                 if (typed !== null) loadTyped(typed);
                 setTyped(null);
@@ -291,9 +307,9 @@ export function BoardEditor({
               }}
             />
           </label>
-          {problem && (
+          {(pasteProblem ?? problem) && (
             <p role="alert" className="text-xs text-danger">
-              {problem}
+              {pasteProblem ?? problem}
             </p>
           )}
           <div className="flex justify-end gap-2 pt-1">

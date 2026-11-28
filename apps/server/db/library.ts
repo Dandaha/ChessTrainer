@@ -303,6 +303,8 @@ export function updateSavedPosition(db: Db, id: string, input: Partial<Omit<Save
   db.transaction((tx) => {
     const t = tx as unknown as Db;
     if ('category' in fields) fields.category = categoryName(t, fields.category);
+    // A title is tidied as on create: no spaces around it, and never blank.
+    if (typeof fields.title === 'string') fields.title = fields.title.trim() || 'Untitled position';
     t.update(savedPositions).set({ ...fields, updatedAt: now() }).where(eq(savedPositions.id, id)).run();
     if (tagNames) setTags(t, 'saved_position', id, tagNames);
     if (setIds) {
@@ -387,7 +389,8 @@ export function listSavedPositions(db: Db, f: SavedPositionFilters = {}): { tota
     .from(savedPositions)
     .where(and(...where))
     .orderBy(...order)
-    .limit(Math.min(f.limit ?? 60, 500))
+    // A set is shown whole (presented, solved, printed): up to 5,000; other lists a page at a time.
+    .limit(Math.min(f.limit ?? 60, f.setId ? 5000 : 500))
     .offset(f.offset ?? 0)
     .all()
     .map(({ setPlace: place, ...row }) => (place === null ? row : { ...row, setPlace: place }));

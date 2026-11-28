@@ -392,6 +392,12 @@ function Session({
     [card, results, index, cards, onEnd],
   );
 
+  /** Stop the session (Esc, Stop): a position answered but not yet moved on from still counts. */
+  const stop = () => {
+    const answered = practice && outcome && !outcome.unjudged && card?.kind === 'saved_position' && !results.some((r) => r.saved === card.saved);
+    onEnd(answered ? [...results, { saved: card.saved, right: outcome.correct && !failed }] : results);
+  };
+
   /** Back to the position for another go; the card is already counted as missed. */
   const tryAgain = useCallback(() => {
     if (!card) return;
@@ -407,7 +413,7 @@ function Session({
   useLayoutEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (dialogOpen()) return;
-      if (event.key === 'Escape') onEnd(results);
+      if (event.key === 'Escape') stop();
       if (!outcome) return;
       const key = event.key.toLowerCase();
       if (outcome.unjudged) {
@@ -515,7 +521,8 @@ function Session({
       // another move that wins as much, counts, as on Lichess and ChessTempo.
       const engineGood = result.engine?.good === true;
       const correct = result.answerMatch === true || engineGood;
-      const answer = card.saved.answer?.trim();
+      // A saved answer that is no move of this position is not quoted as one; Stockfish judged instead.
+      const answer = answerLine(card.saved.fen, card.saved.answer).length ? card.saved.answer?.trim() : undefined;
       const best = result.engine?.best;
       setOutcome({
         correct,
@@ -528,7 +535,7 @@ function Session({
         message: correct && failed ? `Right this time: ${result.san}.` :
           result.answerMatch === true
             ? `Right: ${result.san} is your answer.`
-            : result.answerMatch === false
+            : result.answerMatch === false && answer
               ? engineGood
                 ? `${result.san} works too (your answer was ${card.saved.answer}).`
                 : `Your answer was ${card.saved.answer}; you played ${result.san}.`
@@ -551,7 +558,9 @@ function Session({
       setOutcome({
         correct: true,
         suggested: failed ? 1 : 3,
-        message: failed ? 'Solved this time.' : `Solved: the whole line, ${Math.ceil(solution.length / 2)} moves.`,
+        message: failed
+          ? 'Solved this time.'
+          : `Solved: the whole line, ${Math.ceil(solution.length / 2)} move${Math.ceil(solution.length / 2) === 1 ? '' : 's'}.`,
         detail: whole,
       });
     if (played.uci === expected.uci) {
@@ -628,7 +637,7 @@ function Session({
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
           <div className="h-full bg-accent" style={{ width: `${(index / cards.length) * 100}%` }} />
         </div>
-        <button type="button" className="text-muted hover:text-text" onClick={() => onEnd(results)}>
+        <button type="button" className="text-muted hover:text-text" onClick={() => stop()}>
           Stop <kbd>Esc</kbd>
         </button>
       </div>
@@ -778,7 +787,7 @@ function SetSolve({ setId }: { setId: string }) {
   useEffect(() => {
     // The server lists up to 500 saves at a time; a set is not expected to be bigger.
     api
-      .savedPositions({ setId, limit: 500 })
+      .savedPositions({ setId, limit: 5000 })
       .then((d) => {
         setAll(d.positions);
         setRound({ n: 0, items: d.positions });
@@ -833,7 +842,9 @@ function SetSolve({ setId }: { setId: string }) {
   return (
     <div className="mx-auto max-w-lg space-y-5 p-10">
       <div className="space-y-1">
-        <p className="text-sm text-muted">{name ? `Solving “${name}”` : 'Solving a set'}</p>
+        <p className="min-w-0 truncate text-sm text-muted" title={name || undefined}>
+          {name ? `Solving “${name}”` : 'Solving a set'}
+        </p>
         <h2 className="text-xl font-semibold">
           {firstTime === results.length && results.length === round.items.length
             ? results.length === 1

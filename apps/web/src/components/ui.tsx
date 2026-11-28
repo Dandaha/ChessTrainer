@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 
 /** Small shared building blocks so every screen looks the same. */
 
@@ -81,16 +81,24 @@ export function Pager({
   total: number;
   onChange(offset: number): void;
 }) {
+  // A new page starts at its top, not where the last one was scrolled to.
+  const box = useRef<HTMLDivElement>(null);
+  const go = (next: number) => {
+    onChange(next);
+    let el = box.current?.parentElement ?? null;
+    while (el && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+    el?.scrollTo?.({ top: 0 });
+  };
   if (total <= limit) return null;
   return (
-    <div className="flex items-center justify-end gap-2 text-sm text-muted">
+    <div ref={box} className="flex items-center justify-end gap-2 text-sm text-muted">
       <span className="tabular-nums">
         {(offset + 1).toLocaleString('en')}–{Math.min(offset + limit, total).toLocaleString('en')} of {total.toLocaleString('en')}
       </span>
-      <button type="button" className={buttonClass} disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - limit))}>
+      <button type="button" className={buttonClass} disabled={offset === 0} onClick={() => go(Math.max(0, offset - limit))}>
         Previous
       </button>
-      <button type="button" className={buttonClass} disabled={offset + limit >= total} onClick={() => onChange(offset + limit)}>
+      <button type="button" className={buttonClass} disabled={offset + limit >= total} onClick={() => go(offset + limit)}>
         Next
       </button>
     </div>

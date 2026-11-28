@@ -1,5 +1,5 @@
 import { START_FEN, answerProblem, mainlineFrom, parseGame, positionKey } from '@chess/chess-core';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { type PositionCategory, type PositionSetSummary, type SavedPosition, api } from '../api.ts';
 import { MiniBoard } from '../components/MiniBoard.tsx';
 import { CategoryList, CategorySelect } from '../components/CategorySelect.tsx';
@@ -12,6 +12,8 @@ import { navigate, useRoute } from '../router.ts';
 import { undoToast, useWorkspace } from '../workspace.tsx';
 import { useAskText, useConfirm } from '../components/AskText.tsx';
 import { BoardEditor } from '../components/BoardEditor.tsx';
+import { dialogOpen } from '../Dialogs.tsx';
+import { isTyping } from './BoardScreen.tsx';
 import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
 import { OpeningLabel, useOpenings } from '../openings.tsx';
 
@@ -29,11 +31,25 @@ export function PositionsScreen() {
   const ws = useWorkspace();
   const route = useRoute();
   const [sets, setSets] = useState<PositionSetSummary[]>([]);
-  // `positions?set=<id>` opens a set (coming back from solving or presenting it).
-  const [list, setList] = useState(() => {
+  // The list shown is in the address (`positions?set=<id>`, `positions?list=training`), so a reload,
+  // Back and coming back from solving or presenting a set all find it.
+  const listInRoute = () => {
     const set = route.params.get('set');
-    return set ? `set:${set}` : 'all';
-  });
+    const named = route.params.get('list');
+    return set ? `set:${set}` : named && LISTS.some((l) => l.id === named) ? named : 'all';
+  };
+  const [list, setList] = useState(listInRoute);
+  const chooseList = (id: string) => {
+    setList(id);
+    setOffset(0);
+    navigate(id.startsWith('set:') ? `positions?set=${id.slice(4)}` : id === 'all' ? 'positions' : `positions?list=${id}`);
+  };
+  useEffect(() => {
+    const fromRoute = listInRoute();
+    // A link that only opens a position (positions?open=…) keeps the list on screen.
+    if (route.params.get('open') && fromRoute === 'all') return;
+    setList((current) => (current === fromRoute ? current : fromRoute));
+  }, [route]);
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
   const [categories, setCategories] = useState<PositionCategory[]>([]);
@@ -55,8 +71,19 @@ export function PositionsScreen() {
     if (open) setOpenId(open);
   }, [route]);
 
+  // A set in the address that is gone (deleted, then the page reloaded): back to all positions, not a
+  // ghost of it. Checked against the first list of sets only: one made a moment ago is not in an
+  // earlier list yet.
+  const firstSets = useRef(true);
   useEffect(() => {
-    api.sets().then(setSets).catch(() => {});
+    api
+      .sets()
+      .then((all) => {
+        setSets(all);
+        if (firstSets.current && list.startsWith('set:') && !all.some((set) => `set:${set.id}` === list)) chooseList('all');
+        firstSets.current = false;
+      })
+      .catch(() => {});
     api.positionCategories().then(setCategories).catch(() => {});
     api.tags('saved_position').then(setTagOptions).catch(() => {});
   }, [refresh]);
@@ -73,7 +100,7 @@ export function PositionsScreen() {
           inTraining: list === 'training' ? true : undefined,
           source: list === 'games' ? 'game' : undefined,
           since: list === 'recent' ? new Date(Date.now() - 30 * 86_400_000).toISOString() : undefined,
-          limit: setId ? 500 : LIMIT,
+          limit: setId ? 5000 : LIMIT,
           offset: setId ? 0 : offset,
         })
         .then((d) => {
@@ -94,7 +121,7 @@ export function PositionsScreen() {
     const name = await askText('New set', '', 'e.g. Lesson: Greek gift', async (text) => ({ id } = await api.createSet(text)));
     if (!name) return;
     reload();
-    setList(`set:${id}`);
+    chooseList(`set:${id}`);
   };
 
   const move = async (index: number, by: number) => {
@@ -134,7 +161,7 @@ export function PositionsScreen() {
                 className="text-danger hover:underline"
                 onClick={async () => {
                   await api.deleteSet(currentSet.id);
-                  setList('all');
+                  chooseList('all');
                   reload();
                   undoToast(ws, `Moved the set “${currentSet.name}” to the trash. Its positions stay saved.`, () => api.restore('position_set', currentSet.id), reload);
                 }}
@@ -183,11 +210,11 @@ export function PositionsScreen() {
       </PageHeader>
       <div className="flex min-h-0 flex-1">
         <aside className="w-56 shrink-0 space-y-4 overflow-y-auto border-r border-line p-3">
-          <SideList items={LISTS} activeId={list} onSelect={(id) => { setList(id); setOffset(0); }} />
+          <SideList items={LISTS} activeId={list} onSelect={chooseList} />
           <div>
             <SideHeading label="Sets" addLabel="New set" addTitle="A new set: a lesson, a theme, positions to show someone" onAdd={() => void newSet()} />
             {sets.length ? (
-              <SideList items={sets.map((s) => ({ id: `set:${s.id}`, label: s.name, count: s.positions }))} activeId={list} onSelect={(id) => setList(id)} />
+              <SideList items={sets.map((s) => ({ id: `set:${s.id}`, label: s.name, count: s.positions }))} activeId={list} onSelect={chooseList} />
             ) : (
               <p className="px-2.5 text-xs text-muted">Group positions in order: a lesson, a theme, a worksheet.</p>
             )}
@@ -214,10 +241,10 @@ export function PositionsScreen() {
                 setOffset(0);
               }}
               noneLabel="Any category"
-              className={inputClass}
+              className={`${inputClass} max-w-48`}
               refreshKey={categories}
             />
-            <select aria-label="Tag" className={inputClass} value={tag} onChange={(e) => { setTag(e.target.value); setOffset(0); }}>
+            <select aria-label="Tag" className={`${inputClass} max-w-48`} value={tag} onChange={(e) => { setTag(e.target.value); setOffset(0); }}>
               <option value="">Any tag</option>
               {tagOptions.map((t) => (
                 <option key={t.name} value={t.name}>
@@ -230,9 +257,13 @@ export function PositionsScreen() {
           {error && <Empty>{error}</Empty>}
           {data && data.total === 0 && !error && (
             <Empty>
-              {setId
-                ? 'This set is empty. Open a saved position and tick this set, or choose it when saving.'
-                : 'No saved positions here yet. Set one up with New position, or press S on the board to save the position in front of you.'}
+              {q || category || tag
+                ? 'No saved position matches.'
+                : setId
+                  ? 'This set is empty. Open a saved position and tick this set, or choose it when saving.'
+                  : list !== 'all'
+                    ? 'Nothing here yet.'
+                    : 'No saved positions here yet. Set one up with New position, or press S on the board to save the position in front of you.'}
             </Empty>
           )}
           <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
@@ -325,6 +356,17 @@ function PositionDetail({
   const [saved, setSaved] = useState<SavedPosition | null>(initial ?? null);
   const [showIdea, setShowIdea] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
+  // Bumped when a save fails, so the fields show what is stored again.
+  const [fieldsKey, setFieldsKey] = useState(0);
+  // Escape closes the panel, when nothing else (a dialog, a text box) takes it.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || dialogOpen() || isTyping(event.target)) return;
+      onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   useEffect(() => {
     api.savedPosition(id).then(setSaved).catch((e: Error) => ws.toast(e.message, true));
@@ -357,9 +399,16 @@ function PositionDetail({
   if (!saved) return null;
 
   const update = async (changes: Parameters<typeof api.updateSavedPosition>[1]) => {
-    const next = await api.updateSavedPosition(saved.id, changes);
-    setSaved(next);
-    onChanged();
+    try {
+      const next = await api.updateSavedPosition(saved.id, changes);
+      setSaved(next);
+      onChanged();
+    } catch (error) {
+      // Not saved: say so, and show what is stored again (the fields below are keyed by it).
+      ws.toast(`Not saved: ${(error as Error).message}`, true);
+      setSaved({ ...saved });
+      setFieldsKey((n) => n + 1);
+    }
   };
 
   const field = `${inputClass} w-full`;
@@ -369,8 +418,10 @@ function PositionDetail({
       <div className="flex items-start justify-between gap-2">
         <input
           aria-label="Title"
+          key={`title-${saved.title}-${fieldsKey}`}
           defaultValue={saved.title}
-          onBlur={(e) => e.target.value.trim() !== saved.title && void update({ title: e.target.value })}
+          maxLength={300}
+          onBlur={(e) => e.target.value.trim() !== saved.title && void update({ title: e.target.value.trim() })}
           className="w-full rounded-md border border-transparent bg-transparent px-1 text-base font-semibold outline-none hover:border-line focus:border-accent"
         />
         <button type="button" onClick={onClose} className="text-muted hover:text-text" aria-label="Close">
@@ -424,7 +475,14 @@ function PositionDetail({
         </label>
         <label className="col-span-2 space-y-1">
           <span className="text-xs text-muted">Tags</span>
-          <input aria-label="Tags" className={field} defaultValue={saved.tags.join(', ')} onBlur={(e) => void update({ tags: e.target.value.split(',') })} />
+          <input
+            aria-label="Tags"
+            className={field}
+            // As stored after a save ("#hash, bar baz, foo"), not as typed.
+            key={`tags-${saved.tags.join(',')}-${fieldsKey}`}
+            defaultValue={saved.tags.join(', ')}
+            onBlur={(e) => e.target.value !== saved.tags.join(', ') && void update({ tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })}
+          />
         </label>
         {/* The key idea and the answer give the position away: hidden until asked for (an empty one has
             nothing to give away, so it can be filled in straight away). */}

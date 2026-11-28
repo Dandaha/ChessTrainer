@@ -54,11 +54,23 @@ export function ConceptsScreen() {
   }, [q, refresh]);
 
   const create = async () => {
-    const title = await askText('New concept', '', 'e.g. Minority attack');
-    if (!title?.trim()) return;
-    const c = await api.createConcept({ title: title.trim() });
+    // A title already in the library, or too long, is refused in the box, which stays open.
+    const made: { id?: string } = {};
+    await askText('New concept', '', 'e.g. Minority attack', async (text) => {
+      if (text.trim()) made.id = (await api.createConcept({ title: text.trim() })).id;
+    });
+    if (!made.id) return;
     reload();
-    navigate(`concepts/${c.id}?edit=1`);
+    navigate(`concepts/${made.id}?edit=1`);
+  };
+  const addStarters = async () => {
+    try {
+      const { added } = await api.addStarterConcepts();
+      ws.toast(added ? `Added ${added} starter concept${added === 1 ? '' : 's'}.` : 'Your library already has every starter concept.');
+      reload();
+    } catch (error) {
+      ws.toast((error as Error).message, true);
+    }
   };
 
   const named = categories.map((c) => c.name);
@@ -75,6 +87,14 @@ export function ConceptsScreen() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Concepts">
+        <button
+          type="button"
+          className={buttonClass}
+          title="The chess concepts that come with the app, from forks to the Lucena position: adds any your library does not have. Your own concepts are left as they are."
+          onClick={() => void addStarters()}
+        >
+          Add missing starter concepts
+        </button>
         <button type="button" className={primaryClass} onClick={() => void create()}>
           New concept
         </button>
@@ -83,8 +103,13 @@ export function ConceptsScreen() {
         <aside className="w-64 shrink-0 space-y-3 overflow-y-auto border-r border-line p-3">
           <input aria-label="Search concepts" className={`${inputClass} w-full`} placeholder="Search, aliases too…" value={q} onChange={(e) => setQ(e.target.value)} />
           {error && <p className="text-sm text-muted">{error}</p>}
+          {/* The categories first, as a filter: under 120 concepts they would be out of sight. */}
+          <CategoryList kind="concept" categories={categories} active={category} onSelect={setCategory} onChanged={reload} />
           {list && list.length === 0 && (
-            <p className="px-1 text-sm text-muted">{q ? 'Nothing found.' : 'Your chess wiki is empty. “Add missing starter concepts” below fills it with the classics.'}</p>
+            <p className="px-1 text-sm text-muted">{q ? 'Nothing found.' : 'Your chess wiki is empty. “Add missing starter concepts” above fills it with the classics.'}</p>
+          )}
+          {list && list.length > 0 && category && !groups.some((g) => g.items.length) && (
+            <p className="px-1 text-sm text-muted">{q ? `Nothing found in “${category}”.` : `No concept in “${category}” yet.`}</p>
           )}
           {groups
             .filter((g) => g.items.length)
@@ -105,23 +130,6 @@ export function ConceptsScreen() {
                 </ul>
               </div>
             ))}
-          <CategoryList kind="concept" categories={categories} active={category} onSelect={setCategory} onChanged={reload} />
-          <button
-            type="button"
-            className="px-2.5 text-left text-xs text-muted hover:text-text"
-            title="The chess concepts that come with the app, from forks to the Lucena position: adds any your library does not have. Your own concepts are left as they are."
-            onClick={async () => {
-              try {
-                const { added } = await api.addStarterConcepts();
-                ws.toast(added ? `Added ${added} starter concept${added === 1 ? '' : 's'}.` : 'Your library already has every starter concept.');
-                reload();
-              } catch (error) {
-                ws.toast((error as Error).message, true);
-              }
-            }}
-          >
-            Add missing starter concepts
-          </button>
         </aside>
         <section className="min-w-0 flex-1 overflow-y-auto p-6">
           {id ? (
@@ -355,7 +363,7 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
         void save();
       }}
     >
-      <input aria-label="Title" required className={`${field} text-lg font-semibold`} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <input aria-label="Title" required maxLength={200} className={`${field} text-lg font-semibold`} value={title} onChange={(e) => setTitle(e.target.value)} />
       <div className="grid grid-cols-2 gap-3 text-sm">
         <label className="space-y-1">
           <span className="text-muted">Also known as (commas)</span>

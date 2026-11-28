@@ -31,7 +31,8 @@ export function Markdown({ text, fen = START_FEN }: { text: string; fen?: string
 type Block =
   | { kind: 'heading'; level: number; text: string }
   | { kind: 'paragraph'; text: string }
-  | { kind: 'list'; ordered: boolean; items: string[] }
+  | { kind: 'list'; ordered: boolean; start: number; items: string[] }
+  | { kind: 'quote'; text: string }
   | { kind: 'board'; fen: string }
   | { kind: 'line'; moves: string }
   | { kind: 'code'; text: string };
@@ -40,7 +41,8 @@ const BULLET = /^([-*]|\d+[.)])\s+/;
 
 /** "- point", "* point", "1. point" or "1) point", but not "1. e4 e5", which is a line of moves. */
 function listItem(line: string): boolean {
-  return BULLET.test(line) && !/^\d+\.\s*[KQRBNOa-h]/.test(line);
+  // A move right after the number ("1. e4", "12. Nf3", "3. O-O") makes it moves; "4. fourth" is an item.
+  return BULLET.test(line) && !/^\d+\.(?:\.\.)?\s*(?:[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?|O-O(?:-O)?)(?![\w-])/.test(line);
 }
 
 function parseBlocks(text: string): Block[] {
@@ -72,26 +74,46 @@ function parseBlocks(text: string): Block[] {
       i += 1;
       continue;
     }
-    const heading = /^(#{1,3})\s+(.*)$/.exec(trimmed);
+    // #### and deeper read as the smallest heading.
+    const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
     if (heading) {
-      blocks.push({ kind: 'heading', level: heading[1]!.length, text: heading[2]! });
+      blocks.push({ kind: 'heading', level: Math.min(heading[1]!.length, 3), text: heading[2]! });
       i += 1;
+      continue;
+    }
+    if (trimmed.startsWith('>')) {
+      const quote: string[] = [];
+      while (i < lines.length && lines[i]!.trim().startsWith('>')) {
+        quote.push(lines[i]!.trim().replace(/^>\s?/, ''));
+        i += 1;
+      }
+      blocks.push({ kind: 'quote', text: quote.join(' ') });
       continue;
     }
     if (listItem(trimmed)) {
       const ordered = /^\d/.test(trimmed);
       const items: string[] = [];
-      // A numbered list ends where bullets start, and the other way round.
-      while (i < lines.length && listItem(lines[i]!.trim()) && /^\d/.test(lines[i]!.trim()) === ordered) {
-        items.push(lines[i]!.trim().replace(BULLET, ''));
+      // A numbered list ends where bullets start, and the other way round; an indented line under an
+      // item goes on with that item.
+      while (i < lines.length) {
+        const line = lines[i]!;
+        const t = line.trim();
+        if (listItem(t) && /^\d/.test(t) === ordered) items.push(t.replace(BULLET, ''));
+        else if (t && /^\s+/.test(line) && !listItem(t) && items.length) items[items.length - 1] += ` ${t}`;
+        else break;
         i += 1;
       }
-      blocks.push({ kind: 'list', ordered, items });
+      // "3. …" starts the list at 3, as written.
+      blocks.push({ kind: 'list', ordered, start: ordered ? Number(/^\d+/.exec(trimmed)![0]) : 1, items });
       continue;
     }
+    // A paragraph runs until a blank line, or a line that starts something else: a board, a list, a
+    // heading, a quote or a block of moves.
     const para: string[] = [];
-    while (i < lines.length && lines[i]!.trim() && !/^```/.test(lines[i]!.trim()) && !/^#{1,3}\s/.test(lines[i]!.trim())) {
-      para.push(lines[i]!.trim());
+    while (i < lines.length) {
+      const t = lines[i]!.trim();
+      if (!t || /^```/.test(t) || /^#{1,6}\s/.test(t) || t.startsWith('>') || (para.length && listItem(t)) || (isValidFen(t) && t.includes('/'))) break;
+      para.push(t);
       i += 1;
     }
     blocks.push({ kind: 'paragraph', text: para.join(' ') });
@@ -118,7 +140,7 @@ function renderBlock(block: Block, key: number, fen: string): ReactNode {
     case 'list': {
       const Tag = block.ordered ? 'ol' : 'ul';
       return (
-        <Tag key={key} className={`${block.ordered ? 'list-decimal' : 'list-disc'} space-y-0.5 pl-5`}>
+        <Tag key={key} start={block.ordered && block.start !== 1 ? block.start : undefined} className={`${block.ordered ? 'list-decimal' : 'list-disc'} space-y-0.5 pl-5`}>
           {block.items.map((item, i) => (
             <li key={i}>
               <Inline text={item} fen={fen} />
@@ -127,6 +149,12 @@ function renderBlock(block: Block, key: number, fen: string): ReactNode {
         </Tag>
       );
     }
+    case 'quote':
+      return (
+        <blockquote key={key} className="border-l-2 border-line pl-3 text-muted">
+          <Inline text={block.text} fen={fen} />
+        </blockquote>
+      );
     case 'board':
       return <EmbeddedBoard key={key} fen={block.fen} />;
     case 'line':
@@ -180,7 +208,13 @@ function EmbeddedLine({ moves, fen }: { moves: string; fen: string }) {
   // From the board above it, or, when the moves don't fit there, from the starting position.
   const base = playLine(fen, moves) ? fen : START_FEN;
   const played = playLine(base, moves);
-  if (!played) return <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-surface-2 p-2 text-xs">{moves}</pre>;
+  if (!played)
+    return (
+      <div className="space-y-1">
+        <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-surface-2 p-2 text-xs">{moves}</pre>
+        <p className="text-xs text-danger">These moves are not legal from the board above or from the start, so no board is shown.</p>
+      </div>
+    );
   return (
     <div className="space-y-1">
       <button type="button" onClick={() => ws.openLine(base, played.sans)} className="block w-56 max-w-full" title="Open the line on the board">
@@ -193,7 +227,7 @@ function EmbeddedLine({ moves, fen }: { moves: string; fen: string }) {
 
 // A run of numbered moves: "1. e4 e5 2. Nf3" or "14...Nd7 15. Bd3".
 const MOVES = /\b\d+\.(?:\.\.)?\s*(?:[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?|O-O(?:-O)?)[+#]?[!?]*(?:\s+(?:\d+\.(?:\.\.)?\s*)?(?:[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?|O-O(?:-O)?)[+#]?[!?]*)*/g;
-const INLINE = /(\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/g;
+const INLINE = /(\*\*[^*]+\*\*|(?<![\w*])\*[^*\s][^*]*\*(?![\w*])|(?<!\w)_[^_\s][^_]*_(?!\w)|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/g;
 
 function Inline({ text, fen }: { text: string; fen: string }) {
   return <>{formatted(text, 'i', fen)}</>;

@@ -2,7 +2,7 @@ import { positionKey } from '@chess/chess-core';
 import { type SQL, and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from './client.ts';
 import { type GameSummary, listGames } from './games.ts';
-import { type SavedPosition, getSavedPosition } from './library.ts';
+import { LibraryInputError, type SavedPosition, getSavedPosition } from './library.ts';
 import { findOrCreatePosition } from './positions.ts';
 import { getRepertoire } from './repertoire.ts';
 import { CONCEPT_LINK_TARGETS, conceptLinks, concepts, positions, repertoireMoves, savedPositions, taggings, tags } from './schema.ts';
@@ -81,11 +81,26 @@ export function listConcepts(db: Db, f: { q?: string; category?: ConceptCategory
   return toSummaries(db, db.select(summaryColumns).from(concepts).where(and(...where)).orderBy(sql`fold(${concepts.title})`).all());
 }
 
+/**
+ * A concept's title, tidied, if no other concept out of the trash has it (case and accents aside):
+ * two pages called "Fork" would split what is known about one idea.
+ */
+function freeTitle(db: Db, title: string, exceptId?: string): string {
+  const clean = title.trim().replace(/\s+/g, ' ') || 'Untitled concept';
+  const taken = db
+    .select({ title: concepts.title })
+    .from(concepts)
+    .where(and(isNull(concepts.deletedAt), sql`fold(${concepts.title}) = fold(${clean})`, exceptId ? sql`${concepts.id} <> ${exceptId}` : undefined))
+    .get();
+  if (taken) throw new LibraryInputError(`There is already a concept called “${taken.title}”.`);
+  return clean;
+}
+
 export function createConcept(db: Db, input: ConceptInput): ConceptSummary {
   const row = db
     .insert(concepts)
     .values({
-      title: input.title.trim() || 'Untitled concept',
+      title: freeTitle(db, input.title),
       aliases: JSON.stringify((input.aliases ?? []).map((a) => a.trim()).filter(Boolean)),
       category: input.category ? ensureCategory(db, 'concept', input.category) : null,
       bodyMd: input.bodyMd ?? null,
@@ -99,7 +114,7 @@ export function createConcept(db: Db, input: ConceptInput): ConceptSummary {
 
 export function updateConcept(db: Db, id: string, input: Partial<ConceptInput>): void {
   const set: Partial<typeof concepts.$inferInsert> = { updatedAt: now() };
-  if (input.title !== undefined) set.title = input.title.trim();
+  if (input.title !== undefined) set.title = freeTitle(db, input.title, id);
   if (input.aliases) set.aliases = JSON.stringify(input.aliases.map((a) => a.trim()).filter(Boolean));
   if (input.category !== undefined) set.category = input.category ? ensureCategory(db, 'concept', input.category) : null;
   if (input.bodyMd !== undefined) set.bodyMd = input.bodyMd;
