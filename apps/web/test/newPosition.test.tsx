@@ -21,6 +21,11 @@ describe('a new position', () => {
     fireEvent.change(fen, { target: { value: 'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 23' } });
     fireEvent.keyDown(fen, { key: 'Enter' });
     fireEvent.click(within(editor).getByRole('checkbox', { name: 'Black O-O-O' }));
+    // The counters are folded away, their values in the heading.
+    const advanced = within(editor).getByText(/^Advanced:/);
+    expect(advanced.textContent).toBe('Advanced: move 23, 0 since a capture or pawn move');
+    expect(advanced.closest('details')!.open).toBe(false);
+    fireEvent.click(advanced);
     fireEvent.change(within(editor).getByLabelText('Move number'), { target: { value: '31' } });
     fireEvent.change(within(editor).getByLabelText('Halfmove clock'), { target: { value: '7' } });
     fireEvent.click(within(editor).getByRole('button', { name: 'Next: its details' }));

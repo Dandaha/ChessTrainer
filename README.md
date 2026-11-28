@@ -80,7 +80,8 @@ database path.
   its own idea. Notes are markdown: a FEN line becomes a board and moves like `1. e4 e5`
   become links that open the line.
 - **New position** on the Positions screen sets one up by hand: pieces, whose move,
-  castling, en passant, the move number and the 50-move count (or a pasted FEN), then its
+  castling and en passant (or a pasted FEN; the move number and the 50-move count are
+  under Advanced, folded away), then its
   title, category, tags, notes, key idea, answer, set and training in one go. Repetitions
   before the position are not kept: they belong to a game, not a position, so a position
   where they matter is best saved from its game.

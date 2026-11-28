@@ -221,30 +221,39 @@ export function BoardEditor({
               ))}
             </select>
           </label>
-          <div className="flex flex-wrap gap-3">
-            <label className="space-y-1">
-              <span className="block text-xs text-muted">Move number</span>
-              <input
-                aria-label="Move number"
-                type="number"
-                min={1}
-                className={`${inputClass} w-20`}
-                value={counters[1]}
-                onChange={(e) => setCounters(([clock]) => [clock, e.target.value])}
-              />
-            </label>
-            <label className="space-y-1" title="Moves (by either side) since the last capture or pawn move: at 100 a draw can be claimed (50-move rule), at 150 it is a draw (75-move rule).">
-              <span className="block text-xs text-muted">Moves since a capture or pawn move</span>
-              <input
-                aria-label="Halfmove clock"
-                type="number"
-                min={0}
-                className={`${inputClass} w-20`}
-                value={counters[0]}
-                onChange={(e) => setCounters(([, number]) => [e.target.value, number])}
-              />
-            </label>
-          </div>
+          {/* The move counters rarely matter: folded away, their values in the heading. */}
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted hover:text-text">
+              Advanced: move {counters[1] || '?'}, {counters[0] || '0'} since a capture or pawn move
+            </summary>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <label className="space-y-1">
+                <span className="block text-muted">Move number</span>
+                <input
+                  aria-label="Move number"
+                  type="number"
+                  min={1}
+                  className={`${inputClass} w-20`}
+                  value={counters[1]}
+                  onChange={(e) => setCounters(([clock]) => [clock, e.target.value])}
+                />
+              </label>
+              <label
+                className="space-y-1"
+                title="Moves (by either side) since the last capture or pawn move: at 100 a draw can be claimed (50-move rule), at 150 it is a draw (75-move rule)."
+              >
+                <span className="block text-muted">Moves since a capture or pawn move</span>
+                <input
+                  aria-label="Halfmove clock"
+                  type="number"
+                  min={0}
+                  className={`${inputClass} w-20`}
+                  value={counters[0]}
+                  onChange={(e) => setCounters(([, number]) => [e.target.value, number])}
+                />
+              </label>
+            </div>
+          </details>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={buttonClass} onClick={() => loadTyped(START_FEN)}>
               Starting position
