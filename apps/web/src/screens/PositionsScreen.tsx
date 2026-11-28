@@ -8,8 +8,8 @@ import { Markdown } from '../components/Markdown.tsx';
 import { LinkedConcepts } from '../components/ConceptPicker.tsx';
 import { boardPng, download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
-import { useWorkspace } from '../workspace.tsx';
-import { useAskText } from '../components/AskText.tsx';
+import { undoToast, useWorkspace } from '../workspace.tsx';
+import { useAskText, useConfirm } from '../components/AskText.tsx';
 
 const LIMIT = 60;
 
@@ -158,7 +158,7 @@ export function PositionsScreen() {
                     await api.deleteSet(currentSet.id);
                     setList('all');
                     reload();
-                    ws.toast(`Moved the set “${currentSet.name}” to the trash. Its positions stay saved.`);
+                    undoToast(ws, `Moved the set “${currentSet.name}” to the trash. Its positions stay saved.`, () => api.restore('position_set', currentSet.id), reload);
                   }}
                 >
                   Delete set
@@ -413,7 +413,7 @@ function PositionDetail({
         className={dangerClass}
         onClick={async () => {
           await api.deleteSavedPosition(saved.id);
-          ws.toast(`Moved “${saved.title}” to the trash.`);
+          undoToast(ws, `Moved “${saved.title}” to the trash.`, () => api.restore('saved_position', saved.id), onChanged);
           onChanged();
           onClose();
         }}
@@ -437,6 +437,7 @@ function CategoriesList({
   onChanged(): void;
 }) {
   const ws = useWorkspace();
+  const confirm = useConfirm();
   const ask = useAskText();
   const current = categories.find((c) => c.name === active);
 
@@ -491,6 +492,14 @@ function CategoriesList({
             className="text-danger"
             onClick={() =>
               void run(async () => {
+                // Not kept in the trash: the positions lose the category for good, so ask first.
+                const sure = await confirm({
+                  title: `Remove the category “${current.name}”?`,
+                  message: 'Its positions stay saved, without a category. This cannot be undone.',
+                  confirm: 'Remove category',
+                  cancel: 'Keep it',
+                });
+                if (!sure) return;
                 const { uncategorized } = await api.deletePositionCategory(current.id);
                 onSelect('');
                 onChanged();

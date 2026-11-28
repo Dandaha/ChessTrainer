@@ -50,11 +50,37 @@ export interface Workspace {
   newGame(): Promise<void>;
   /** Saves the board's game into the library (new) or back into its library game. */
   saveToLibrary(): Promise<void>;
-  toast(text: string, error?: boolean): void;
-  message: { text: string; error: boolean } | null;
+  /** A message at the bottom; `action` adds a button to it, such as Undo after a delete. */
+  toast(text: string, error?: boolean, action?: ToastAction): void;
+  message: { text: string; error: boolean; action?: ToastAction } | null;
+  dismissMessage(): void;
 }
 
 const Context = createContext<Workspace | null>(null);
+
+export interface ToastAction {
+  label: string;
+  run(): void | Promise<void>;
+}
+
+/**
+ * The toast for a delete that went to the trash, with Undo putting it back. `restore` takes the
+ * items out of the trash; `then` refreshes what the screen shows.
+ */
+export function undoToast(ws: Pick<Workspace, 'toast'>, text: string, restore: () => Promise<unknown>, then: () => void): void {
+  ws.toast(text, false, {
+    label: 'Undo',
+    run: async () => {
+      try {
+        await restore();
+        then();
+        ws.toast('Put back.');
+      } catch (error) {
+        ws.toast((error as Error).message, true);
+      }
+    },
+  });
+}
 
 export function useWorkspace(): Workspace {
   const ws = useContext(Context);
@@ -123,7 +149,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   /** Call before replacing the board; returns what to say afterwards, if anything. */
   const clearedNote = () => (linked === null && edited() ? 'The previous analysis is cleared. Ctrl+Z brings it back.' : null);
   const [orientation, setOrientation] = useState<Color>('white');
-  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const [message, setMessage] = useState<{ text: string; error: boolean; action?: ToastAction } | null>(null);
 
   useEffect(() => {
     writeDraft(JSON.stringify({ pgn: writePgn(g.game), linked } satisfies Draft));
@@ -131,11 +157,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!message) return;
-    const timer = setTimeout(() => setMessage(null), message.error ? 7000 : 4000);
+    // A message with a button (Undo) stays long enough to use it.
+    const timer = setTimeout(() => setMessage(null), message.action ? 9000 : message.error ? 7000 : 4000);
     return () => clearTimeout(timer);
   }, [message]);
 
-  const toast = (text: string, error = false) => setMessage({ text, error });
+  const toast = (text: string, error = false, action?: ToastAction) => setMessage({ text, error, action });
 
   const openGame = async (detail: GameDetail, ply?: number) => {
     if (hasEdits() && (await discardRefused())) return;
@@ -223,6 +250,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
     },
     toast,
+    dismissMessage: () => setMessage(null),
     message,
   };
 

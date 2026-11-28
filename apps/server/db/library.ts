@@ -463,9 +463,11 @@ export function softDelete(db: Db, kind: TrashKind, ids: string[]): void {
   db.update(table).set({ deletedAt: now() }).where(inArray(table.id, ids)).run();
 }
 
-export function restore(db: Db, kind: TrashKind, id: string): void {
+/** Takes items out of the trash (one id or several: an undo of a delete puts back what it took). */
+export function restore(db: Db, kind: TrashKind, ids: string | string[]): void {
   const table = TRASH_TABLES[kind];
-  db.update(table).set({ deletedAt: null }).where(eq(table.id, id)).run();
+  const list = typeof ids === 'string' ? [ids] : ids;
+  if (list.length) db.update(table).set({ deletedAt: null }).where(inArray(table.id, list)).run();
 }
 
 /** Takes everything out of the trash; says how many items came back. */

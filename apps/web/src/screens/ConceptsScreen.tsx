@@ -9,7 +9,7 @@ import { MiniBoard } from '../components/MiniBoard.tsx';
 import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { navigate, useRoute } from '../router.ts';
 import { useAskText } from '../components/AskText.tsx';
-import { useWorkspace } from '../workspace.tsx';
+import { undoToast, useWorkspace } from '../workspace.tsx';
 
 export const CONCEPT_CATEGORIES: { id: ConceptCategory; label: string }[] = [
   { id: 'pawn_structure', label: 'Pawn structures' },
@@ -268,7 +268,10 @@ function ConceptView({ id, startEditing, onChanged }: { id: string; startEditing
         className={dangerClass}
         onClick={async () => {
           await api.deleteConcept(page.id);
-          ws.toast(`Moved “${page.title}” to the trash.`);
+          undoToast(ws, `Moved “${page.title}” to the trash.`, () => api.restore('concept', page.id), () => {
+            onChanged();
+            navigate(`concepts/${page.id}`);
+          });
           onChanged();
           navigate('concepts');
         }}

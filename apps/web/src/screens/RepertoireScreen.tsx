@@ -21,8 +21,8 @@ import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass }
 import { readTextFile } from '../files.ts';
 import { download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
-import { useWorkspace } from '../workspace.tsx';
-import { useAskText } from '../components/AskText.tsx';
+import { undoToast, useWorkspace } from '../workspace.tsx';
+import { useAskText, useConfirm } from '../components/AskText.tsx';
 import { isTyping } from './BoardScreen.tsx';
 
 /**
@@ -63,6 +63,11 @@ function findNode(nodes: RepTreeNode[], test: (n: RepTreeNode) => boolean): RepT
     if (inner) return inner;
   }
   return undefined;
+}
+
+/** How many moves follow a move in the tree (a transposition's continuation is elsewhere). */
+function countBelow(node: RepTreeNode): number {
+  return node.transposition ? 0 : node.children.reduce((n, child) => n + 1 + countBelow(child), 0);
 }
 
 /** The moves from the start to a move of the tree. */
@@ -251,7 +256,10 @@ export function RepertoireScreen() {
             select(null);
             navigate('repertoire');
             reload();
-            ws.toast(`Moved “${repertoire.name}” to the trash (Settings → Trash to restore).`);
+            undoToast(ws, `Moved “${repertoire.name}” to the trash.`, () => api.restore('repertoire', repertoire.id), () => {
+              reload();
+              navigate(`repertoire/${repertoire.id}`);
+            });
           }}
         >
           Delete
@@ -500,6 +508,7 @@ function MoveEditor({
   onOpenBoard(): void;
 }) {
   const e = node.edge;
+  const confirm = useConfirm();
   const update = async (changes: Parameters<typeof api.updateRepertoireMove>[1]) => {
     await api.updateRepertoireMove(e.id, changes);
     onChanged();
@@ -537,6 +546,18 @@ function MoveEditor({
           type="button"
           className={dangerClass}
           onClick={async () => {
+            // Not kept in the trash, and the moves' training progress goes with them: ask when it is more than one move.
+            const after = countBelow(node);
+            if (
+              after > 0 &&
+              !(await confirm({
+                title: `Delete ${moveLabel(node.ply, e.san)} and what follows?`,
+                message: `${after} move${after === 1 ? '' : 's'} after it go too, with their comments and training progress. This cannot be undone.`,
+                confirm: 'Delete them',
+                cancel: 'Keep them',
+              }))
+            )
+              return;
             const { deleted } = await api.deleteRepertoireMove(e.id);
             onDeleted(deleted);
           }}

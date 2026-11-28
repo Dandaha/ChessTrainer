@@ -338,7 +338,8 @@ export const api = {
       'GET',
       `/api/repertoires/${id}/gaps${query({ maxPositions, minShare })}`,
     ),
-  restore: (kind: TrashKind, id: string) => call('POST', '/api/trash/restore', { kind, id }),
+  restore: (kind: TrashKind, ids: string | string[]) =>
+    call('POST', '/api/trash/restore', typeof ids === 'string' ? { kind, id: ids } : { kind, ids }),
   restoreAll: () => call<{ restored: number }>('POST', '/api/trash/restore-all', {}),
   emptyTrash: () => call<{ deleted: number }>('POST', '/api/trash/empty', {}),
   backups: () => call<{ folder: string; backups: Backup[] }>('GET', '/api/backups'),

@@ -283,8 +283,8 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
   app.post('/api/trash/restore-all', async () => ({ restored: restoreAll(db) }));
   app.post('/api/trash/empty', async () => ({ deleted: emptyTrash(db) }));
   app.post('/api/trash/restore', async (req) => {
-    const { kind, id } = parseBody(bodies.restore, req.body);
-    restore(db, kind, id);
+    const { kind, id, ids } = parseBody(bodies.restore, req.body);
+    restore(db, kind, ids ?? [id!]);
     return { ok: true };
   });
 }

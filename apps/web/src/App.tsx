@@ -168,6 +168,19 @@ function Shell() {
           }`}
         >
           {ws.message.text}
+          {ws.message.action && (
+            <button
+              type="button"
+              className="ml-3 font-semibold text-accent hover:underline"
+              onClick={() => {
+                const action = ws.message?.action;
+                ws.dismissMessage();
+                void action?.run();
+              }}
+            >
+              {ws.message.action.label}
+            </button>
+          )}
         </div>
       )}
     </div>

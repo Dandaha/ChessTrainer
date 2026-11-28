@@ -56,6 +56,8 @@ describe('position categories', () => {
 
     // Removing it leaves the position saved, without a category.
     fireEvent.click(within(categories()).getByRole('button', { name: 'Remove category' }));
+    // It asks first: the category is not kept in the trash.
+    fireEvent.click(within(await screen.findByRole('dialog', { name: /Remove the category/ })).getByRole('button', { name: 'Remove category' }));
     expect(await screen.findByText('Removed the category “First principles”. Its position stays saved, without a category.')).toBeTruthy();
     await waitFor(() => expect(within(categories()).queryByRole('button', { name: /First principles/ })).toBeNull());
     expect(screen.getByRole('button', { name: 'Open Opening principles' })).toBeTruthy();

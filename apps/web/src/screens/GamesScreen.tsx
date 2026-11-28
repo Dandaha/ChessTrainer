@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { type CollectionSummary, type GameSort, type GameSummary, type ImportProgress, type ImportReport, api } from '../api.ts';
 import { Modal } from '../Dialogs.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
-import { useWorkspace } from '../workspace.tsx';
+import { undoToast, useWorkspace } from '../workspace.tsx';
 import { navigate, useRoute } from '../router.ts';
 import { useAskText } from '../components/AskText.tsx';
 import { readTextFile } from '../files.ts';
@@ -134,7 +134,7 @@ export function GamesScreen() {
 
   const deleteOne = async (game: GameSummary) => {
     await api.deleteGames([game.id]);
-    ws.toast(`Moved the game to the trash (Settings → Trash to restore).`);
+    undoToast(ws, 'Moved the game to the trash.', () => api.restore('game', game.id), reload);
     reload();
   };
 
@@ -236,7 +236,10 @@ export function GamesScreen() {
                   await api.deleteCollection(current.id);
                   setCollectionId('');
                   reload();
-                  ws.toast(`Moved “${current.name}” to the trash. Its games stay in the library.`);
+                  undoToast(ws, `Moved “${current.name}” to the trash. Its games stay in the library.`, () => api.restore('collection', current.id), () => {
+                    setCollectionId(current.id);
+                    reload();
+                  });
                 }}
               >
                 Delete collection
@@ -327,9 +330,11 @@ export function GamesScreen() {
                   type="button"
                   className={buttonClass}
                   onClick={async () => {
-                    await api.removeFromCollection(current.id, [...selected]);
+                    const ids = [...selected];
+                    await api.removeFromCollection(current.id, ids);
                     setSelected(new Set());
                     reload();
+                    undoToast(ws, `Took ${ids.length} game${ids.length === 1 ? '' : 's'} out of “${current.name}”.`, () => api.addToCollection(current.id, ids), reload);
                   }}
                 >
                   Remove from “{current.name}”
@@ -350,8 +355,9 @@ export function GamesScreen() {
                 type="button"
                 className={dangerClass}
                 onClick={async () => {
-                  await api.deleteGames([...selected]);
-                  ws.toast(`Moved ${selected.size} game(s) to the trash (Settings → Trash to restore).`);
+                  const ids = [...selected];
+                  await api.deleteGames(ids);
+                  undoToast(ws, `Moved ${ids.length} game${ids.length === 1 ? '' : 's'} to the trash.`, () => api.restore('game', ids), reload);
                   setSelected(new Set());
                   reload();
                 }}
@@ -478,8 +484,8 @@ export function GamesScreen() {
       {findingDuplicates && (
         <DuplicatesDialog
           onClose={() => setFindingDuplicates(false)}
-          onRemoved={(count) => {
-            ws.toast(`Moved ${count} extra cop${count === 1 ? 'y' : 'ies'} to the trash (Settings → Trash to restore).`);
+          onRemoved={(ids) => {
+            undoToast(ws, `Moved ${ids.length} extra cop${ids.length === 1 ? 'y' : 'ies'} to the trash.`, () => api.restore('game', ids), reload);
             reload();
           }}
         />
@@ -830,7 +836,7 @@ function GameDetailsDialog({ game, onClose, onSaved }: { game: GameSummary; onCl
 }
 
 /** Games in the library more than once: each kept once, the copy with the most notes and comments. */
-function DuplicatesDialog({ onClose, onRemoved }: { onClose(): void; onRemoved(count: number): void }) {
+function DuplicatesDialog({ onClose, onRemoved }: { onClose(): void; onRemoved(ids: string[]): void }) {
   const [found, setFound] = useState<Awaited<ReturnType<typeof api.duplicates>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -848,7 +854,7 @@ function DuplicatesDialog({ onClose, onRemoved }: { onClose(): void; onRemoved(c
     try {
       const ids = found.groups.flatMap((g) => g.copies.map((c) => c.id));
       await api.deleteGames(ids);
-      onRemoved(ids.length);
+      onRemoved(ids);
       onClose();
     } catch (e) {
       setError((e as Error).message);

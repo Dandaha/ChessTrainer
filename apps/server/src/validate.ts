@@ -88,7 +88,9 @@ export const bodies = {
     coachQuickModel: z.string().max(100).nullable().optional(),
     coachDeepModel: z.string().max(100).nullable().optional(),
   }),
-  restore: z.object({ kind: z.enum(['game', 'saved_position', 'position_set', 'collection', 'repertoire', 'concept']), id }),
+  restore: z
+    .object({ kind: z.enum(['game', 'saved_position', 'position_set', 'collection', 'repertoire', 'concept']), id: id.optional(), ids: ids.optional() })
+    .refine((b) => b.id || b.ids, 'Say what to restore: id or ids.'),
 
   // Concepts
   concept,
