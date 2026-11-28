@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { type Backup, type EngineStatus, type Settings, type SettingsUpdate, type TrashItem, api } from '../api.ts';
-import { Empty, PageHeader, buttonClass, dangerClass, inputClass } from '../components/ui.tsx';
+import { type Backup, type EngineStatus, type Settings, type SettingsUpdate, type TrashItem, type UpdateInfo, api } from '../api.ts';
+import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { useConfirm } from '../components/AskText.tsx';
 import { type Theme, applyTheme, useTheme } from '../storage.ts';
 import { useWorkspace } from '../workspace.tsx';
@@ -186,6 +186,8 @@ export function SettingsScreen() {
         <CoachSettings onSave={save} keyLocation={system ? system.envFile : 'apps/server/.env'} />
 
         {system?.mcpConfig ? <ClaudeAppSettings config={system.mcpConfig} /> : null}
+
+        <UpdateSettings />
 
         {system && (
           <section className="space-y-2">
@@ -485,6 +487,124 @@ function ClaudeAppSettings({ config }: { config: unknown }) {
 }
 
 /** Backups of the whole library: made here on request, before updates change the database, and weekly. */
+/** "11:42" today, a date and time before. */
+function whenChecked(iso: string): string {
+  const at = new Date(iso);
+  return at.toDateString() === new Date().toDateString()
+    ? at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : at.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/**
+ * The installed app's version and where its updates stand: checking, downloading (with how far),
+ * ready to restart into, or why a check failed. It follows along while something is happening.
+ * Only the desktop app answers; the browser version shows nothing here.
+ */
+function UpdateSettings() {
+  const ws = useWorkspace();
+  const [info, setInfo] = useState<UpdateInfo | null>(null);
+  const [restarting, setRestarting] = useState(false);
+
+  useEffect(() => {
+    api.updates().then(setInfo).catch(() => setInfo(null));
+  }, []);
+  // Every second while checking or downloading; now and then otherwise, for a check the app makes itself.
+  useEffect(() => {
+    if (!info || info.status.state === 'unavailable') return;
+    const active = info.status.state === 'checking' || info.status.state === 'downloading';
+    const timer = window.setTimeout(() => api.updates().then(setInfo).catch(() => {}), active ? 1000 : 15_000);
+    return () => window.clearTimeout(timer);
+  }, [info]);
+
+  if (!info) return null;
+  const { status } = info;
+  const check = async () => {
+    try {
+      setInfo(await api.checkForUpdates());
+    } catch (error) {
+      ws.toast((error as Error).message, true);
+    }
+  };
+  const checkButton = (label: string) => (
+    <button type="button" className={`${buttonClass} shrink-0`} onClick={() => void check()}>
+      {label}
+    </button>
+  );
+
+  return (
+    <section className="space-y-3">
+      <h2 className="font-semibold">Updates</h2>
+      <p className="text-sm">Chess Workspace {info.version}</p>
+      <div aria-live="polite" className="space-y-2 text-sm">
+        {status.state === 'unavailable' && <p className="text-muted">Updates come only to the installed app.</p>}
+        {status.state === 'idle' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-muted">Not checked yet since the app opened.</p>
+            {checkButton('Check for updates')}
+          </div>
+        )}
+        {status.state === 'checking' && <p className="text-muted">Checking for updates…</p>}
+        {status.state === 'up-to-date' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <p>
+              Up to date. <span className="text-muted">Checked at {whenChecked(status.checkedAt)}.</span>
+            </p>
+            {checkButton('Check for updates')}
+          </div>
+        )}
+        {status.state === 'downloading' && (
+          <>
+            <p>
+              Downloading {status.version}… {status.percent}%
+            </p>
+            <div
+              role="progressbar"
+              aria-label="Update download"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={status.percent}
+              className="h-1.5 max-w-sm overflow-hidden rounded-full bg-surface-2"
+            >
+              <div className="h-full bg-accent transition-[width] duration-500" style={{ width: `${status.percent}%` }} />
+            </div>
+          </>
+        )}
+        {status.state === 'ready' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="font-medium">Version {status.version} is ready.</p>
+            <button
+              type="button"
+              className={`${primaryClass} shrink-0`}
+              disabled={restarting}
+              onClick={async () => {
+                setRestarting(true);
+                try {
+                  await api.restartToUpdate();
+                } catch (error) {
+                  setRestarting(false);
+                  ws.toast((error as Error).message, true);
+                }
+              }}
+            >
+              {restarting ? 'Restarting…' : 'Restart now'}
+            </button>
+            <p className="w-full text-muted">Or keep working: it installs by itself when you close the app.</p>
+          </div>
+        )}
+        {status.state === 'error' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <p>
+              <span className="text-danger">Couldn’t check for updates: {status.message}</span>{' '}
+              <span className="text-muted">({whenChecked(status.checkedAt)})</span>
+            </p>
+            {checkButton('Try again')}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function BackupSettings() {
   const ws = useWorkspace();
   const [data, setData] = useState<{ folder: string; backups: Backup[] } | null>(null);

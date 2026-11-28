@@ -9,6 +9,8 @@ import type { PositionCategory } from '@chess/server/db/categories.ts';
 import type { Backup } from '@chess/server/db/backup.ts';
 import type { Annotations, CoachEvent, CoachMode, CoachRequest, ReviewMoment, Suggestions, Usage } from '@chess/server/coach/coach.ts';
 import type { EngineStatus } from '@chess/server/src/engineService.ts';
+import type { UpdateInfo } from '@chess/server/src/updates.ts';
+export type { UpdateInfo, UpdateStatus } from '@chess/server/src/updates.ts';
 import type { Analysis, EngineLine } from '@chess/chess-tools/score';
 import type {
   CollectionPlace,
@@ -263,6 +265,10 @@ export const api = {
   /** Only the desktop app answers this; the browser version gets a 404. */
   systemInfo: () =>
     call<{ desktop: boolean; dataDir: string; databasePath: string; envFile: string; mcpConfig: unknown }>('GET', '/api/system/info'),
+  /** The installed app's version and updates; also only the desktop app answers. */
+  updates: () => call<UpdateInfo>('GET', '/api/system/updates'),
+  checkForUpdates: () => call<UpdateInfo>('POST', '/api/system/updates/check'),
+  restartToUpdate: () => call('POST', '/api/system/updates/restart'),
 
   repertoires: () => call<RepertoireSummary[]>('GET', '/api/repertoires'),
   createRepertoire: (name: string, color: Color) => call<{ id: string }>('POST', '/api/repertoires', { name, color }),

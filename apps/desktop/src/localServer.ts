@@ -9,6 +9,7 @@ import { deriveMissingInBackground } from '@chess/server/db/games.ts';
 import { EngineService } from '@chess/server/src/engineService.ts';
 import { envFilePath, loadEnv } from '@chess/server/src/env.ts';
 import { serveWeb } from '@chess/server/src/staticWeb.ts';
+import { type Updates, updateRoutes } from '@chess/server/src/updates.ts';
 
 /**
  * The app's own server, started by the desktop app: the API and the built web
@@ -25,6 +26,8 @@ export interface LocalServerOptions {
   stockfishDir?: string;
   /** How the Claude desktop app can start the MCP server: this program and the script. */
   mcp?: { command: string; script: string; env?: Record<string, string> };
+  /** The app's updates, shown in Settings. */
+  updates?: Updates;
 }
 
 /** A fixed port, so the page keeps the same address (and its saved theme and draft) between starts. */
@@ -75,6 +78,7 @@ export async function startLocalServer(options: LocalServerOptions): Promise<{ u
   const engines = new EngineService(db);
   // Warnings and server errors go to server.log in the data folder, where a problem can be traced.
   const app = buildApp(db, engines, undefined, { logFile: join(options.dataDir, 'server.log') });
+  if (options.updates) updateRoutes(app, options.updates);
 
   // Stockfish comes with the app; Settings can still point to another binary.
   const stockfish = options.stockfishDir && !process.env.STOCKFISH_PATH ? pickStockfish(options.stockfishDir) : Promise.resolve(null);

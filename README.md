@@ -16,8 +16,10 @@ publisher is unknown, since the installer is not code-signed: choose
 A new release is built automatically on every push to `main`, and the
 installed app updates itself: it checks when it opens and every six hours,
 downloads a new version in the background and offers to restart into it
-(otherwise it installs when the app is closed). Update problems are written to
-`updates.log` in the data folder and never interrupt. This needs the
+(otherwise it installs when the app is closed). **Settings → Updates** shows the
+version running and where updates stand: checking, downloading (with how far),
+ready to restart into, or why a check failed; it can also check now. Update
+problems never interrupt; the details go to `updates.log` in the data folder. This needs the
 repository to be public, since the app reads the releases without a token.
 
 ## Run from source (development)

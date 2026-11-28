@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BrowserWindow, Menu, app, shell } from 'electron';
 import { startLocalServer } from './localServer.ts';
-import { startUpdates } from './updates.ts';
+import { createUpdates } from './updates.ts';
 
 /**
  * The Electron main process: starts the app's local server and shows it in a
@@ -26,12 +26,14 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
     const resources = app.isPackaged ? process.resourcesPath : join(here, '..');
+    const updates = createUpdates();
     try {
       server = await startLocalServer({
         dataDir: app.getPath('userData'),
         webDir: join(here, 'web'),
         stockfishDir: join(resources, 'stockfish'),
         mcp: { command: process.execPath, script: join(here, 'mcp.mjs'), env: { ELECTRON_RUN_AS_NODE: '1' } },
+        updates,
       });
       rmSync(join(app.getPath('userData'), 'startup-error.txt'), { force: true });
     } catch (error) {
@@ -83,7 +85,7 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     await window.loadURL(local);
-    startUpdates(() => window);
+    updates.start(() => window);
   });
 
   app.on('window-all-closed', () => app.quit());
