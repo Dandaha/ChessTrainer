@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { type EngineStatus, type Settings, type SettingsUpdate, type TrashItem, api } from '../api.ts';
+import { type Backup, type EngineStatus, type Settings, type SettingsUpdate, type TrashItem, api } from '../api.ts';
 import { Empty, PageHeader, buttonClass, inputClass } from '../components/ui.tsx';
 import { type Theme, applyTheme, currentTheme } from '../storage.ts';
 import { useWorkspace } from '../workspace.tsx';
@@ -94,6 +94,8 @@ export function SettingsScreen() {
             <code className="block rounded-md bg-surface-2 px-3 py-2 text-xs break-all">{system.dataDir}</code>
           </section>
         )}
+
+        <BackupSettings />
 
         {settingsSections.map((Section, i) => (
           <Section key={i} />
@@ -333,6 +335,67 @@ function ClaudeAppSettings({ config }: { config: unknown }) {
       >
         {copied ? 'Copied' : 'Copy'}
       </button>
+    </section>
+  );
+}
+
+/** Backups of the whole library: made here on request, before updates change the database, and weekly. */
+function BackupSettings() {
+  const ws = useWorkspace();
+  const [data, setData] = useState<{ folder: string; backups: Backup[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api.backups().then(setData).catch(() => setData(null));
+  }, []);
+  if (!data) return null;
+  const size = (bytes: number) => (bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+  return (
+    <section className="space-y-3">
+      <h2 className="font-semibold">Backups</h2>
+      <p className="text-sm text-muted">
+        A backup is a full copy of your library. One is made before an update changes the database and once a week; the
+        newest ten are kept. To restore one, close the app and copy it over <code>chess.db</code> in your data folder.
+      </p>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className={`${buttonClass} shrink-0 whitespace-nowrap`}
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const made = await api.backUp();
+              setData(made);
+              ws.toast(`Backed up to ${made.backup.name}.`);
+            } catch (error) {
+              ws.toast((error as Error).message, true);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? 'Backing up…' : 'Back up now'}
+        </button>
+        <code className="min-w-0 truncate text-xs text-muted" title={data.folder}>
+          {data.folder}
+        </code>
+      </div>
+      {data.backups.length === 0 ? (
+        <Empty>No backups yet.</Empty>
+      ) : (
+        <ul className="divide-y divide-line rounded-xl border border-line bg-surface text-sm">
+          {data.backups.map((b) => (
+            <li key={b.name} className="flex items-center justify-between gap-3 px-3 py-2">
+              <span>
+                {new Date(b.createdAt).toLocaleString()}
+                {b.name.includes('before-update') && <span className="text-xs text-muted"> · before an update</span>}
+                {b.name.includes('weekly') && <span className="text-xs text-muted"> · weekly</span>}
+              </span>
+              <span className="text-xs text-muted tabular-nums">{size(b.bytes)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

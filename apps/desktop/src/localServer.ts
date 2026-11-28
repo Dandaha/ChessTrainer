@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Engine } from '@chess/chess-tools';
+import { backupFolderFor, backupIfDue } from '@chess/server/db/backup.ts';
 import { databasePath, openDatabase, runMigrations } from '@chess/server/db/client.ts';
 import { purgeTrash } from '@chess/server/db/library.ts';
 import { buildApp } from '@chess/server/src/app.ts';
@@ -65,7 +66,10 @@ export async function startLocalServer(options: LocalServerOptions): Promise<{ u
   loadEnv();
 
   const { db, close: closeDb } = openDatabase();
-  runMigrations(db);
+  // A backup before an update changes the database, and one a week anyway (data folder/backups).
+  const backupFolder = backupFolderFor(databasePath());
+  runMigrations(db, { backupFolder });
+  backupIfDue(db, backupFolder);
   purgeTrash(db);
   const engines = new EngineService(db);
   const app = buildApp(db, engines);

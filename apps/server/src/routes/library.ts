@@ -39,6 +39,7 @@ import {
 import { type TagTarget, allTags } from '../../db/tags.ts';
 import { fetchChesscomGames, fetchLichessGames } from '../importers.ts';
 import { bodies, parseBody } from '../validate.ts';
+import { backupDatabase, listBackups } from '../../db/backup.ts';
 
 type Query = Record<string, string | undefined>;
 
@@ -46,7 +47,7 @@ const num = (v?: string) => (v === undefined || v === '' ? undefined : Number(v)
 const bool = (v?: string) => (v === 'true' ? true : v === 'false' ? false : undefined);
 
 /** Phase 2: the game library, saved positions, sets, tags, settings and trash. */
-export function libraryRoutes(app: FastifyInstance, db: Db): void {
+export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFolder: string }): void {
   // Games ---------------------------------------------------------------------
   app.get('/api/games', async (req) => {
     const q = req.query as Query;
@@ -219,6 +220,13 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
   app.get('/api/settings', async () => getSettings(db));
   app.put('/api/settings', async (req) => updateSettings(db, parseBody(bodies.settings, req.body)));
   app.get('/api/trash', async () => listTrash(db));
+
+  // Backups ----------------------------------------------------------------------
+  app.get('/api/backups', async () => ({ folder: options.backupFolder, backups: listBackups(options.backupFolder) }));
+  app.post('/api/backups', async () => {
+    const backup = backupDatabase(db, options.backupFolder);
+    return { backup, folder: options.backupFolder, backups: listBackups(options.backupFolder) };
+  });
   app.post('/api/trash/restore', async (req) => {
     const { kind, id } = parseBody(bodies.restore, req.body);
     restore(db, kind, id);

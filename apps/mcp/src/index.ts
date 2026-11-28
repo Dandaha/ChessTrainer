@@ -1,4 +1,5 @@
-import { openDatabase, runMigrations } from '@chess/server/db/client.ts';
+import { backupFolderFor } from '@chess/server/db/backup.ts';
+import { databasePath, openDatabase, runMigrations } from '@chess/server/db/client.ts';
 import { EngineService } from '@chess/server/src/engineService.ts';
 import { loadEnv } from '@chess/server/src/env.ts';
 import { chessData } from '@chess/server/src/toolData.ts';
@@ -12,7 +13,7 @@ loadEnv();
 delete process.env.ANTHROPIC_API_KEY;
 delete process.env.LICHESS_TOKEN;
 const { db, close } = openDatabase();
-runMigrations(db);
+runMigrations(db, { backupFolder: backupFolderFor(databasePath()) });
 const engines = new EngineService(db);
 const data = chessData(db);
 delete data.openingStats;

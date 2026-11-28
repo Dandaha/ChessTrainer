@@ -1,3 +1,4 @@
+import { backupFolderFor } from './backup.ts';
 import { databasePath, openDatabase, runMigrations } from './client.ts';
 import { loadEnv } from '../src/env.ts';
 
@@ -5,6 +6,6 @@ import { loadEnv } from '../src/env.ts';
 loadEnv();
 const path = databasePath();
 const { db, close } = openDatabase(path);
-runMigrations(db);
+runMigrations(db, { backupFolder: backupFolderFor(path) });
 close();
 console.log(`Database is up to date: ${path}`);

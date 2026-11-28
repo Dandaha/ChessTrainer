@@ -1,3 +1,4 @@
+import { backupFolderFor, backupIfDue } from '../db/backup.ts';
 import { databasePath, openDatabase, runMigrations } from '../db/client.ts';
 import { purgeTrash } from '../db/library.ts';
 import { buildApp } from './app.ts';
@@ -11,7 +12,9 @@ const HOST = '127.0.0.1';
 const PORT = Number(process.env.PORT) || 3001;
 
 const { db, close } = openDatabase();
-runMigrations(db);
+const backupFolder = backupFolderFor(databasePath());
+runMigrations(db, { backupFolder });
+backupIfDue(db, backupFolder);
 purgeTrash(db);
 
 const app = buildApp(db);

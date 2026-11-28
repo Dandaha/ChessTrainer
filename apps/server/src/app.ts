@@ -10,12 +10,16 @@ import { conceptRoutes } from './routes/concepts.ts';
 import { coachRoutes } from './routes/coach.ts';
 import type { StreamingClient } from '../coach/coach.ts';
 import { EngineService } from './engineService.ts';
+import { backupFolderFor } from '../db/backup.ts';
+import { databasePath } from '../db/client.ts';
 
 /** The API. Routes read and write only through apps/server/db. */
 export function buildApp(
   db: Db,
   engines: EngineService = new EngineService(db),
   coachClient?: (apiKey: string) => StreamingClient,
+  /** Where backups go; beside the database file unless given (tests give a temporary folder). */
+  options: { backupFolder?: string } = {},
 ): FastifyInstance {
   // Large PGN files arrive in one request.
   const app = Fastify({ logger: { level: 'warn' }, bodyLimit: 64 * 1024 * 1024 });
@@ -46,7 +50,7 @@ export function buildApp(
     database: { positions: countPositions(db) },
   }));
 
-  libraryRoutes(app, db);
+  libraryRoutes(app, db, { backupFolder: options.backupFolder ?? backupFolderFor(databasePath()) });
   repertoireRoutes(app, db);
   engineRoutes(app, db, engines);
   conceptRoutes(app, db);

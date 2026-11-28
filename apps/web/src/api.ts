@@ -5,6 +5,7 @@ import type { CardDetail, QueueSummary, TrainingStats } from '@chess/server/db/t
 import type { ConceptCategory, ConceptInput, ConceptLinkTarget, ConceptPage, ConceptSummary } from '@chess/server/db/concepts.ts';
 import type { CoachHistoryItem } from '@chess/server/db/coach.ts';
 import type { PositionCategory } from '@chess/server/db/categories.ts';
+import type { Backup } from '@chess/server/db/backup.ts';
 import type { Annotations, CoachEvent, CoachMode, CoachRequest, ReviewMoment, Suggestions, Usage } from '@chess/server/coach/coach.ts';
 import type { EngineStatus } from '@chess/server/src/engineService.ts';
 import type { Analysis, EngineLine } from '@chess/chess-tools/score';
@@ -23,6 +24,7 @@ import type {
 export type SettingsUpdate = { [K in keyof Settings]?: Settings[K] | null };
 
 export type {
+  Backup,
   PositionCategory,
   Annotations,
   CoachEvent,
@@ -259,4 +261,6 @@ export const api = {
       `/api/repertoires/${id}/gaps${query({ maxPositions, minShare })}`,
     ),
   restore: (kind: TrashKind, id: string) => call('POST', '/api/trash/restore', { kind, id }),
+  backups: () => call<{ folder: string; backups: Backup[] }>('GET', '/api/backups'),
+  backUp: () => call<{ backup: Backup; folder: string; backups: Backup[] }>('POST', '/api/backups'),
 };
