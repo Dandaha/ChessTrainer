@@ -52,17 +52,35 @@ export function listCollections(db: Db): CollectionSummary[] {
     .all();
 }
 
+/**
+ * The name, tidied, if no other collection or set (whichever `table` is) out of the trash has it:
+ * names are told apart without regard to case or accents, so "Lesson" and "lesson" are one name.
+ */
+function freeName(db: Db, table: typeof collections | typeof positionSets, what: string, name: string, exceptId?: string): string {
+  const clean = name.trim().replace(/\s+/g, ' ');
+  if (!clean) throw new LibraryInputError(`A ${what} needs a name.`);
+  const t = table as typeof collections;
+  const taken = db
+    .select({ name: t.name })
+    .from(t)
+    .where(and(isNull(t.deletedAt), sql`fold(${t.name}) = fold(${clean})`, exceptId ? ne(t.id, exceptId) : undefined))
+    .get();
+  if (taken) throw new LibraryInputError(`There is already a ${what} called “${taken.name}”.`);
+  return clean;
+}
+
 export function createCollection(db: Db, input: { name: string; description?: string | null }): string {
   return db
     .insert(collections)
-    .values({ name: input.name.trim(), description: input.description ?? null })
+    .values({ name: freeName(db, collections, 'collection', input.name), description: input.description ?? null })
     .returning({ id: collections.id })
     .get().id;
 }
 
 export function updateCollection(db: Db, id: string, input: { name?: string; description?: string | null }): void {
+  const name = input.name === undefined ? {} : { name: freeName(db, collections, 'collection', input.name, id) };
   db.update(collections)
-    .set({ ...input, ...(input.name ? { name: input.name.trim() } : {}), updatedAt: now() })
+    .set({ ...input, ...name, updatedAt: now() })
     .where(eq(collections.id, id))
     .run();
 }
@@ -79,10 +97,33 @@ export function addGamesToCollection(db: Db, collectionId: string, gameIds: stri
   });
 }
 
-export function removeGamesFromCollection(db: Db, collectionId: string, gameIds: string[]): void {
-  db.delete(collectionGames)
+/** A game's place in a collection, as removing it hands back so that undoing can put it there again. */
+export interface CollectionPlace {
+  gameId: string;
+  sortOrder: number;
+}
+
+export function removeGamesFromCollection(db: Db, collectionId: string, gameIds: string[]): CollectionPlace[] {
+  if (!gameIds.length) return [];
+  return db
+    .delete(collectionGames)
     .where(and(eq(collectionGames.collectionId, collectionId), inArray(collectionGames.gameId, gameIds)))
-    .run();
+    .returning({ gameId: collectionGames.gameId, sortOrder: collectionGames.sortOrder })
+    .all();
+}
+
+/**
+ * Puts games back in a collection at the places they had (undoing a removal). The other games keep
+ * theirs: removing leaves the numbering with gaps rather than closing them, so each place is free
+ * again, unless the collection was reordered since, when the games go after any game on their old
+ * number.
+ */
+export function restoreGamesToCollection(db: Db, collectionId: string, places: CollectionPlace[]): void {
+  db.transaction((tx) => {
+    for (const place of places) {
+      tx.insert(collectionGames).values({ collectionId, gameId: place.gameId, sortOrder: place.sortOrder }).onConflictDoNothing().run();
+    }
+  });
 }
 
 // --- Saved positions ---------------------------------------------------------
@@ -109,6 +150,8 @@ export interface SavedPosition {
   updatedAt: string;
   tags: string[];
   setIds: string[];
+  /** Only when listing a set: the save's place in the whole set (1 is first), whatever the filter. */
+  setPlace?: number;
 }
 
 export interface SavedPositionInput {
@@ -320,14 +363,22 @@ export function listSavedPositions(db: Db, f: SavedPositionFilters = {}): { tota
         ),
       ]
     : [desc(savedPositions.createdAt)];
+  // In a set, each save's place in the whole set (saves in the trash not counted), so a filtered
+  // set still numbers its cards as the set itself does.
+  const setPlace = f.setId
+    ? sql<number | null>`(select count(*) from position_set_items i join saved_positions s on s.id = i.saved_position_id
+        where i.set_id = ${f.setId} and s.deleted_at is null
+        and i.sort_order <= (select j.sort_order from position_set_items j where j.saved_position_id = saved_positions.id and j.set_id = ${f.setId}))`
+    : sql<number | null>`null`;
   const rows = db
-    .select(savedColumns)
+    .select({ ...savedColumns, setPlace })
     .from(savedPositions)
     .where(and(...where))
     .orderBy(...order)
     .limit(Math.min(f.limit ?? 60, 500))
     .offset(f.offset ?? 0)
-    .all();
+    .all()
+    .map(({ setPlace: place, ...row }) => (place === null ? row : { ...row, setPlace: place }));
   return { total, positions: withTagsAndSets(db, rows) };
 }
 
@@ -357,13 +408,14 @@ export function listSets(db: Db): PositionSetSummary[] {
 export function createSet(db: Db, input: { name: string; description?: string | null }): string {
   return db
     .insert(positionSets)
-    .values({ name: input.name.trim(), description: input.description ?? null })
+    .values({ name: freeName(db, positionSets, 'set', input.name), description: input.description ?? null })
     .returning({ id: positionSets.id })
     .get().id;
 }
 
 export function updateSet(db: Db, id: string, input: { name?: string; description?: string | null }): void {
-  db.update(positionSets).set({ ...input, updatedAt: now() }).where(eq(positionSets.id, id)).run();
+  const name = input.name === undefined ? {} : { name: freeName(db, positionSets, 'set', input.name, id) };
+  db.update(positionSets).set({ ...input, ...name, updatedAt: now() }).where(eq(positionSets.id, id)).run();
 }
 
 export function addToSet(db: Db, setId: string, savedIds: string[]): void {

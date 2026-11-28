@@ -11,6 +11,7 @@ import type { Annotations, CoachEvent, CoachMode, CoachRequest, ReviewMoment, Su
 import type { EngineStatus } from '@chess/server/src/engineService.ts';
 import type { Analysis, EngineLine } from '@chess/chess-tools/score';
 import type {
+  CollectionPlace,
   CollectionSummary,
   PositionSetSummary,
   SavedPosition,
@@ -226,7 +227,10 @@ export const api = {
   renameCollection: (id: string, name: string) => call('PUT', `/api/collections/${id}`, { name }),
   deleteCollection: (id: string) => call('DELETE', `/api/collections/${id}`),
   addToCollection: (id: string, gameIds: string[]) => call('POST', `/api/collections/${id}/games`, { gameIds }),
-  removeFromCollection: (id: string, gameIds: string[]) => call('POST', `/api/collections/${id}/games/remove`, { gameIds }),
+  /** Takes games out of a collection; hands back the places they had, for `restoreToCollection`. */
+  removeFromCollection: (id: string, gameIds: string[]) =>
+    call<{ removed: CollectionPlace[] }>('POST', `/api/collections/${id}/games/remove`, { gameIds }),
+  restoreToCollection: (id: string, places: CollectionPlace[]) => call('POST', `/api/collections/${id}/games/restore`, { places }),
 
   savedPositions: (filters: SavedPositionFilters = {}) =>
     call<{ total: number; positions: SavedPosition[] }>('GET', `/api/saved-positions${query(filters)}`),

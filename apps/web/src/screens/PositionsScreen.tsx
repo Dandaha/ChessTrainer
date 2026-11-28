@@ -83,9 +83,9 @@ export function PositionsScreen() {
   }, [q, category, tag, list, setId, offset, refresh]);
 
   const newSet = async () => {
-    const name = await askText('New set', '', 'e.g. Lesson: Greek gift');
-    if (!name?.trim()) return;
-    const { id } = await api.createSet(name.trim());
+    let id = '';
+    const name = await askText('New set', '', 'e.g. Lesson: Greek gift', async (text) => ({ id } = await api.createSet(text)));
+    if (!name) return;
     reload();
     setList(`set:${id}`);
   };
@@ -143,11 +143,8 @@ export function PositionsScreen() {
                   type="button"
                   className="text-muted hover:text-text"
                   onClick={async () => {
-                    const name = await askText('Rename set', currentSet.name);
-                    if (name?.trim()) {
-                      await api.updateSet(currentSet.id, { name: name.trim() });
-                      reload();
-                    }
+                    const name = await askText('Rename set', currentSet.name, '', (text) => api.updateSet(currentSet.id, { name: text }));
+                    if (name) reload();
                   }}
                 >
                   Rename
@@ -216,7 +213,7 @@ export function PositionsScreen() {
                   <MiniBoard fen={p.fen} flipped={p.sideToSolve === 'black'} />
                   <div className="space-y-0.5 p-2">
                     <div className="truncate text-sm font-medium">
-                      {setId && <span className="mr-1 text-muted">{i + 1}.</span>}
+                      {setId && <span className="mr-1 text-muted">{p.setPlace ?? i + 1}.</span>}
                       {p.title}
                     </div>
                     <div className="truncate text-xs text-muted">

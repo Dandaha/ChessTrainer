@@ -5,9 +5,11 @@ import { buttonClass, inputClass, primaryClass } from './ui.tsx';
 /**
  * A small "name it" box, in place of window.prompt(), which the desktop app
  * (Electron) does not support. `ask` resolves with the text, or null if cancelled.
+ * With `save`, the box stays open until saving the text works, and shows why it did not
+ * (e.g. "There is already a set called …"), so the name can be changed there and then.
  */
 
-type Ask = (title: string, initial?: string, placeholder?: string) => Promise<string | null>;
+type Ask = (title: string, initial?: string, placeholder?: string, save?: (value: string) => Promise<unknown>) => Promise<string | null>;
 
 const Context = createContext<Ask | null>(null);
 
@@ -21,6 +23,7 @@ interface Pending {
   title: string;
   initial: string;
   placeholder: string;
+  save?: (value: string) => Promise<unknown>;
   resolve(value: string | null): void;
 }
 
@@ -47,8 +50,8 @@ export function AskTextProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [question, setQuestion] = useState<(ConfirmOptions & { resolve(ok: boolean): void }) | null>(null);
   const ask = useCallback<Ask>(
-    (title, initial = '', placeholder = '') =>
-      new Promise((resolve) => setPending({ title, initial, placeholder, resolve })),
+    (title, initial = '', placeholder = '', save) =>
+      new Promise((resolve) => setPending({ title, initial, placeholder, save, resolve })),
     [],
   );
   const confirm = useCallback<Confirm>((options) => new Promise((resolve) => setQuestion({ ...options, resolve })), []);
@@ -91,6 +94,8 @@ function ConfirmBox({ question, onDone }: { question: ConfirmOptions; onDone(ok:
 
 function AskBox({ pending, onDone }: { pending: Pending; onDone(value: string | null): void }) {
   const [value, setValue] = useState(pending.initial);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     input.current?.focus();
@@ -99,23 +104,47 @@ function AskBox({ pending, onDone }: { pending: Pending; onDone(value: string | 
   return (
     <Modal title={pending.title} onClose={() => onDone(null)}>
       <form
-        className="flex gap-2"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          onDone(value);
+          const text = value.trim();
+          if (!text || busy) return;
+          if (pending.save) {
+            setBusy(true);
+            try {
+              await pending.save(text);
+            } catch (err) {
+              setError((err as Error).message);
+              setBusy(false);
+              input.current?.focus();
+              return;
+            }
+          }
+          onDone(text);
         }}
       >
-        <input
-          ref={input}
-          aria-label={pending.title}
-          className={`${inputClass} min-w-0 flex-1`}
-          value={value}
-          placeholder={pending.placeholder}
-          onChange={(e) => setValue(e.target.value)}
-        />
-        <button type="submit" className={primaryClass} disabled={!value.trim()}>
-          OK
-        </button>
+        <div className="flex gap-2">
+          <input
+            ref={input}
+            aria-label={pending.title}
+            aria-invalid={!!error}
+            aria-describedby={error ? 'ask-error' : undefined}
+            className={`${inputClass} min-w-0 flex-1`}
+            value={value}
+            placeholder={pending.placeholder}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setError(null);
+            }}
+          />
+          <button type="submit" className={primaryClass} disabled={!value.trim() || busy}>
+            OK
+          </button>
+        </div>
+        {error && (
+          <p id="ask-error" role="alert" className="mt-2 text-sm text-danger">
+            {error}
+          </p>
+        )}
       </form>
     </Modal>
   );

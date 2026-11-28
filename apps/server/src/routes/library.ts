@@ -34,6 +34,7 @@ import {
   listTrash,
   removeFromSet,
   removeGamesFromCollection,
+  restoreGamesToCollection,
   reorderSet,
   restore,
   restoreAll,
@@ -192,8 +193,12 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
     addGamesToCollection(db, (req.params as { id: string }).id, parseBody(bodies.gameIds, req.body).gameIds);
     return { ok: true };
   });
-  app.post('/api/collections/:id/games/remove', async (req) => {
-    removeGamesFromCollection(db, (req.params as { id: string }).id, parseBody(bodies.gameIds, req.body).gameIds);
+  app.post('/api/collections/:id/games/remove', async (req) => ({
+    ok: true,
+    removed: removeGamesFromCollection(db, (req.params as { id: string }).id, parseBody(bodies.gameIds, req.body).gameIds),
+  }));
+  app.post('/api/collections/:id/games/restore', async (req) => {
+    restoreGamesToCollection(db, (req.params as { id: string }).id, parseBody(bodies.collectionPlaces, req.body).places);
     return { ok: true };
   });
 

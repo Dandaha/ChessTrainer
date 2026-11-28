@@ -46,12 +46,12 @@ Still open (not chosen for now):
 
 ## Final check, 28 November 2026
 
-Four testers used the built app (as the installer runs it) area by area, and an old library (version 0.1.6) was opened with the new version: 402 games, a repertoire, training history and concepts all came through, the position index went from 27,702 rows to 15 and the file from 14.7 MB to 4.3 MB. What they found was fixed the same day. Left open, all small:
-- Undoing "Remove from collection" puts the games back at the end of the collection, not where they were.
-- A set shown through a filter numbers its cards within the filter.
-- Two sets can have the same name.
-- Leaving the games screen and coming back resets its filters.
-- At a threefold repetition the engine shows the lines for playing on (with a note that the game is drawn), not a flat 0.00: Stockfish does not score its starting position as a draw.
+Four testers used the built app (as the installer runs it) area by area, and an old library (version 0.1.6) was opened with the new version: 402 games, a repertoire, training history and concepts all came through, the position index went from 27,702 rows to 15 and the file from 14.7 MB to 4.3 MB. What they found was fixed the same day, including the five small things first left open:
+- Undoing "Remove from collection" puts the games back where they were in the collection.
+- A set shown through a filter numbers its cards by their places in the whole set.
+- A set or collection name already in use (ignoring case and accents) is refused in the name box, which stays open for another name.
+- The games screen keeps its collection, filters, sort and page while the app is open.
+- At a drawn game end the engine panel shows 0.00 with the reason, and the engine's lines under "If the game goes on".
 
 ## What works well
 

@@ -8,6 +8,7 @@ import { navigate, useRoute } from '../router.ts';
 import { useAskText } from '../components/AskText.tsx';
 import { readTextFile } from '../files.ts';
 import { download, safeFileName } from '../pieces.ts';
+import { readSessionView, writeSessionView } from '../storage.ts';
 
 const LIMIT = 50;
 /** The sidebar entry for the games of the last import, beside the collections. */
@@ -28,6 +29,48 @@ interface Filters {
 
 const EMPTY: Filters = { q: '', player: '', opening: '', result: '', dateFrom: '', dateTo: '', tag: '', myColor: '', speed: '', timeControl: '' };
 
+type Sort = { key: GameSort; dir: 'asc' | 'desc' } | null;
+
+/** What the list shows: kept for the session, so leaving the screen and coming back finds it as it was. */
+interface GamesView {
+  collectionId: string;
+  filters: Filters;
+  sort: Sort;
+  offset: number;
+}
+
+const VIEW_KEY = 'games-view';
+// Every column the server sorts by; typed so that a column added there must be added here.
+const SORT_KEYS: Record<GameSort, true> = {
+  date: true,
+  added: true,
+  white: true,
+  black: true,
+  whiteElo: true,
+  blackElo: true,
+  result: true,
+  eco: true,
+  event: true,
+};
+
+/** The view kept from earlier in the session, each part checked (it is whatever was stored). */
+function keptView(): GamesView {
+  const v = (readSessionView(VIEW_KEY) ?? {}) as Partial<Record<keyof GamesView, unknown>>;
+  const f = (v.filters ?? {}) as Record<string, unknown>;
+  const filters = { ...EMPTY };
+  for (const key of Object.keys(EMPTY) as (keyof Filters)[]) if (typeof f[key] === 'string') filters[key] = f[key];
+  const sort = v.sort as { key?: unknown; dir?: unknown } | null | undefined;
+  return {
+    collectionId: typeof v.collectionId === 'string' ? v.collectionId : '',
+    filters,
+    sort:
+      sort && typeof sort.key === 'string' && Object.hasOwn(SORT_KEYS, sort.key) && (sort.dir === 'asc' || sort.dir === 'desc')
+        ? { key: sort.key as GameSort, dir: sort.dir }
+        : null,
+    offset: typeof v.offset === 'number' && Number.isInteger(v.offset) && v.offset > 0 ? v.offset : 0,
+  };
+}
+
 const SPEED_LABELS: Record<string, string> = {
   ultrabullet: 'UltraBullet',
   bullet: 'Bullet',
@@ -39,12 +82,16 @@ const SPEED_LABELS: Record<string, string> = {
 
 export function GamesScreen() {
   const ws = useWorkspace();
+  // "Show all" from the board's Games tab: only the games that reached that position. It starts
+  // from all games, unfiltered, so the list holds every game the board counted.
+  const fen = useRoute().params.get('fen') ?? '';
+  const [start] = useState<GamesView>(() => (fen ? { collectionId: '', filters: EMPTY, sort: null, offset: 0 } : keptView()));
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
-  const [collectionId, setCollectionId] = useState('');
-  const [filters, setFilters] = useState<Filters>(EMPTY);
-  const [offset, setOffset] = useState(0);
+  const [collectionId, setCollectionId] = useState(start.collectionId);
+  const [filters, setFilters] = useState<Filters>(start.filters);
+  const [offset, setOffset] = useState(start.offset);
   // A column to sort by; none means the newest first (a collection: its own order).
-  const [sort, setSort] = useState<{ key: GameSort; dir: 'asc' | 'desc' } | null>(null);
+  const [sort, setSort] = useState<Sort>(start.sort);
   const [data, setData] = useState<{ total: number; games: GameSummary[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -61,8 +108,6 @@ export function GamesScreen() {
 
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const [lastImportCount, setLastImportCount] = useState(0);
-  // "Show all" from the board's Games tab: only the games that reached that position.
-  const fen = useRoute().params.get('fen') ?? '';
   const scope = {
     collectionId: collectionId && collectionId !== LAST_IMPORT ? collectionId : undefined,
     lastImport: collectionId === LAST_IMPORT ? (1 as const) : undefined,
@@ -71,7 +116,18 @@ export function GamesScreen() {
   const askText = useAskText();
 
   useEffect(() => {
-    api.collections().then(setCollections).catch(() => {});
+    if (!fen) writeSessionView(VIEW_KEY, { collectionId, filters, sort, offset } satisfies GamesView);
+  }, [collectionId, filters, sort, offset, fen]);
+
+  useEffect(() => {
+    api
+      .collections()
+      .then((list) => {
+        setCollections(list);
+        // A kept collection that has since been deleted: back to all games.
+        setCollectionId((id) => (id && id !== LAST_IMPORT && !list.some((c) => c.id === id) ? '' : id));
+      })
+      .catch(() => {});
     api.timeControls().then(setControls).catch(() => {});
     api
       .games({ lastImport: 1, limit: 1 })
@@ -104,6 +160,11 @@ export function GamesScreen() {
     };
   }, [filters, collectionId, offset, refresh, sort, fen]);
 
+  // A kept page past the end (games were deleted since): the last page there is.
+  useEffect(() => {
+    if (data && offset > 0 && offset >= data.total) setOffset(Math.max(0, Math.ceil(data.total / LIMIT) - 1) * LIMIT);
+  }, [data]);
+
   // A selection belongs to the rows on screen: a new filter, collection or page starts afresh, so a
   // bulk action can never reach games that are no longer visible.
   useEffect(() => {
@@ -124,9 +185,9 @@ export function GamesScreen() {
     });
 
   const newCollection = async () => {
-    const name = await askText('New collection', '', 'e.g. My best games');
-    if (!name?.trim()) return;
-    const { id } = await api.createCollection(name.trim());
+    let id = '';
+    const name = await askText('New collection', '', 'e.g. My best games', async (text) => ({ id } = await api.createCollection(text)));
+    if (!name) return;
     if (selected.size) await api.addToCollection(id, [...selected]);
     setCollectionId(id);
     reload();
@@ -240,11 +301,8 @@ export function GamesScreen() {
                 type="button"
                 className="text-muted hover:text-text"
                 onClick={async () => {
-                  const name = await askText('Rename collection', current.name);
-                  if (name?.trim()) {
-                    await api.renameCollection(current.id, name.trim());
-                    reload();
-                  }
+                  const name = await askText('Rename collection', current.name, '', (text) => api.renameCollection(current.id, text));
+                  if (name) reload();
                 }}
               >
                 Rename
@@ -365,10 +423,10 @@ export function GamesScreen() {
                   className={buttonClass}
                   onClick={async () => {
                     const ids = [...selected];
-                    await api.removeFromCollection(current.id, ids);
+                    const { removed } = await api.removeFromCollection(current.id, ids);
                     setSelected(new Set());
                     reload();
-                    undoToast(ws, `Took ${ids.length} game${ids.length === 1 ? '' : 's'} out of “${current.name}”.`, () => api.addToCollection(current.id, ids), reload);
+                    undoToast(ws, `Took ${ids.length} game${ids.length === 1 ? '' : 's'} out of “${current.name}”.`, () => api.restoreToCollection(current.id, removed), reload);
                   }}
                 >
                   Remove from “{current.name}”

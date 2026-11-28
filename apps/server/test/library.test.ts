@@ -9,11 +9,15 @@ import {
   listSavedPositions,
   listTrash,
   purgeTrash,
+  removeGamesFromCollection,
   reorderSet,
   restore,
+  restoreGamesToCollection,
   savesOfPosition,
   softDelete,
+  updateCollection,
   updateSavedPosition,
+  updateSet,
 } from '../db/library.ts';
 import { buildApp } from '../src/app.ts';
 
@@ -187,6 +191,19 @@ describe('the game library', () => {
     expect(games.map((g) => g.event)).toEqual(['Club', 'Blitz']);
   });
 
+  it('puts games taken out of a collection back where they were', () => {
+    const db = freshDb();
+    const collectionId = createCollection(db, { name: 'Selected classics' });
+    importGames(db, TWO_GAMES, { source: 'file', collectionId });
+    const order = () => listGames(db, { collectionId }).games.map((g) => g.event);
+    const club = listGames(db, { collectionId }).games[0]!;
+    const removed = removeGamesFromCollection(db, collectionId, [club.id]);
+    expect(order()).toEqual(['Blitz']);
+    restoreGamesToCollection(db, collectionId, removed);
+    expect(order()).toEqual(['Club', 'Blitz']);
+    expect(removeGamesFromCollection(db, collectionId, [])).toEqual([]);
+  });
+
   it('saves annotations back into a game and rebuilds its positions', () => {
     const db = freshDb();
     const id = saveGame(db, { pgn: '[White "Me"]\n\n1. e4 e5 *' });
@@ -247,6 +264,48 @@ describe('saved positions and sets', () => {
     expect(listSavedPositions(db, { setId: set }).positions.map((p) => p.title)).toEqual(['One', 'Philidor', 'Two', 'Lucena', 'Three']);
   });
 
+  it('numbers a filtered set by the places in the whole set', () => {
+    const db = freshDb();
+    const set = createSet(db, { name: 'Endings' });
+    const titles = ['One', 'Lucena', 'Two', 'Philidor', 'Three'];
+    const saves = titles.map((title) => createSavedPosition(db, { fen: FEN, title, tags: title.length > 5 ? ['endgame'] : [] }));
+    addToSet(db, set, saves.map((s) => s.id));
+    const places = (f: { tag?: string }) => listSavedPositions(db, { setId: set, ...f }).positions.map((p) => [p.title, p.setPlace]);
+    expect(places({ tag: 'endgame' })).toEqual([
+      ['Lucena', 2],
+      ['Philidor', 4],
+    ]);
+    // A save in the trash holds no place.
+    softDelete(db, 'saved_position', [saves[0]!.id]);
+    expect(places({ tag: 'endgame' })).toEqual([
+      ['Lucena', 1],
+      ['Philidor', 3],
+    ]);
+    expect(places({}).map(([, place]) => place)).toEqual([1, 2, 3, 4]);
+    expect(listSavedPositions(db).positions[0]!.setPlace).toBeUndefined();
+  });
+
+  it('refuses a set or collection name already in use, whatever its case or accents', () => {
+    const db = freshDb();
+    const endings = createSet(db, { name: 'Endings' });
+    expect(() => createSet(db, { name: '  endings ' })).toThrow('There is already a set called “Endings”.');
+    expect(() => createSet(db, { name: '   ' })).toThrow('A set needs a name.');
+    createSet(db, { name: 'Café tactics' });
+    expect(() => createSet(db, { name: 'cafe  TACTICS' })).toThrow('“Café tactics”');
+    const other = createSet(db, { name: 'Openings' });
+    expect(() => updateSet(db, other, { name: 'ENDINGS' })).toThrow('already a set called “Endings”');
+    // A set may change the case of its own name, and a description alone is not a rename.
+    updateSet(db, endings, { name: 'ENDINGS' });
+    updateSet(db, other, { description: 'For Sunday' });
+    // A name in the trash is free again; a set and a collection may share one.
+    softDelete(db, 'position_set', [endings]);
+    createSet(db, { name: 'Endings' });
+    const classics = createCollection(db, { name: 'Endings' });
+    expect(() => createCollection(db, { name: 'endings' })).toThrow('There is already a collection called “Endings”.');
+    updateCollection(db, classics, { name: 'Endgames' });
+    expect(() => createCollection(db, { name: 'Endgames' })).toThrow('already a collection');
+  });
+
   it('moves deletes to the trash, restores them, and purges after 30 days', () => {
     const db = freshDb();
     const saved = createSavedPosition(db, { fen: FEN, title: 'Gone soon' });
@@ -271,6 +330,26 @@ describe('the library API', () => {
     expect(search.json().total).toBe(2);
     const bad = await app.inject({ method: 'POST', url: '/api/saved-positions', payload: { fen: 'nonsense', title: 'x' } });
     expect(bad.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('answers a name already in use with 400 and the reason, and undoes a removal in place', async () => {
+    const app = buildApp(freshDb());
+    await app.inject({ method: 'POST', url: '/api/sets', payload: { name: 'Lesson' } });
+    const twice = await app.inject({ method: 'POST', url: '/api/sets', payload: { name: 'lesson' } });
+    expect(twice.statusCode).toBe(400);
+    expect(twice.json().error).toBe('There is already a set called “Lesson”.');
+
+    const { id } = (await app.inject({ method: 'POST', url: '/api/collections', payload: { name: 'C' } })).json();
+    await app.inject({ method: 'POST', url: '/api/games/import', payload: { pgn: TWO_GAMES, collectionId: id } });
+    const events = async () =>
+      (await app.inject({ method: 'GET', url: `/api/games?collectionId=${id}` })).json().games.map((g: { event: string }) => g.event);
+    const [first] = (await app.inject({ method: 'GET', url: `/api/games?collectionId=${id}` })).json().games;
+    const removal = await app.inject({ method: 'POST', url: `/api/collections/${id}/games/remove`, payload: { gameIds: [first.id] } });
+    expect(await events()).toEqual(['Blitz']);
+    const back = await app.inject({ method: 'POST', url: `/api/collections/${id}/games/restore`, payload: { places: removal.json().removed } });
+    expect(back.statusCode).toBe(200);
+    expect(await events()).toEqual(['Club', 'Blitz']);
     await app.close();
   });
 });

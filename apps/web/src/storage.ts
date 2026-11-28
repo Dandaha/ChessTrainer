@@ -1,6 +1,7 @@
 /**
- * Browser storage for per-browser conveniences only: the theme and the game
- * left on the board. Anything worth keeping goes to the server's database.
+ * Browser storage for per-browser conveniences only: the theme, the game left
+ * on the board, and (for the session) what a list was showing. Anything worth
+ * keeping goes to the server's database.
  */
 
 import { useSyncExternalStore } from 'react';
@@ -22,6 +23,28 @@ function write(key: string, value: string): void {
     localStorage.setItem(PREFIX + key, value);
   } catch {
     // Storage full or blocked: the convenience is lost, nothing else.
+  }
+}
+
+/**
+ * A screen's view kept while the app is open (sessionStorage: it lasts through a reload, and the
+ * next start begins afresh), so leaving a screen and coming back finds it as it was. What comes
+ * back is whatever was stored: the caller checks its shape.
+ */
+export function readSessionView(key: string): unknown {
+  try {
+    const raw = sessionStorage.getItem(PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionView(key: string, value: unknown): void {
+  try {
+    sessionStorage.setItem(PREFIX + key, JSON.stringify(value));
+  } catch {
+    // Blocked: the screen starts afresh next time, nothing else.
   }
 }
 

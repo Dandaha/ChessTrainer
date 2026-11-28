@@ -73,6 +73,7 @@ export const bodies = {
   }),
   ids: z.object({ ids }),
   gameIds: z.object({ gameIds: ids }),
+  collectionPlaces: z.object({ places: z.array(z.object({ gameId: id, sortOrder: z.number().int() })).max(100_000) }),
   named: z.object({ name: z.string().max(200), description: z.string().max(10_000).optional() }),
   namedUpdate: z.object({ name: z.string().max(200).optional(), description: z.string().max(10_000).optional() }),
   name: z.object({ name: z.string().max(200) }),

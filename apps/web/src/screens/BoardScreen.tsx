@@ -400,7 +400,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
                   state={engine}
                   settings={engineSettings}
                   onSettings={changeEngineSettings}
-                  gameOver={end ? describeGameEnd(end) : null}
+                  gameOver={end}
                   threat={{ on: threat, side: threatFen ? (current.fen.split(' ')[1] === 'w' ? 'Black' : 'White') : null, onToggle: toggleThreat }}
                   onTurnOff={toggleEngine}
                   onPlayLine={(sans) => g.playLineFrom(current.id, sans)}

@@ -1,3 +1,4 @@
+import { type GameEnd, describeGameEnd } from '@chess/chess-core';
 import { type EngineLine, formatScore } from '@chess/chess-tools/score';
 import type { EngineSettings } from '../storage.ts';
 import type { EngineState } from '../useEngine.ts';
@@ -42,8 +43,11 @@ export function EnginePanel({
   onTurnOff,
 }: {
   state: EngineState;
-  /** How the game ended at this position, if it did (the lines are then for playing on). */
-  gameOver?: string | null;
+  /**
+   * How the game ended at this position, if it did. The game's verdict is then the evaluation (0.00
+   * for a draw), and the engine's lines are shown as what would follow if the game went on.
+   */
+  gameOver?: GameEnd | null;
   settings: EngineSettings;
   onSettings(settings: EngineSettings): void;
   /** Threat mode: on or off, and whose threats ('Black' when White is to move), or null in check. */
@@ -113,9 +117,13 @@ export function EnginePanel({
           Threat <kbd>T</kbd>
         </button>
       </div>
-      {gameOver && analysis?.lines.length ? (
-        <p className="text-xs text-muted">{gameOver} The lines below are for playing on.</p>
-      ) : null}
+      {gameOver && (
+        <div className="flex gap-2 rounded-md bg-surface-2 px-2 py-1.5" aria-label="Evaluation">
+          <span className="w-12 shrink-0 font-semibold tabular-nums">{gameOver.kind === 'checkmate' ? gameOver.result : '0.00'}</span>
+          <span>{describeGameEnd(gameOver)}</span>
+        </div>
+      )}
+      {gameOver && analysis?.lines.length ? <p className="text-xs text-muted">If the game goes on:</p> : null}
       {threat.on && (
         <p className="text-xs text-danger">
           {threat.side
@@ -133,7 +141,7 @@ export function EnginePanel({
           )}
         </p>
       )}
-      {analysis?.lines.length === 0 && status === 'done' && <p className="text-muted">No legal moves: the game is over.</p>}
+      {!gameOver && analysis?.lines.length === 0 && status === 'done' && <p className="text-muted">No legal moves: the game is over.</p>}
       <ol className="space-y-1">
         {analysis?.lines.map((line) => (
           <li key={line.multipv} className="flex gap-2">
