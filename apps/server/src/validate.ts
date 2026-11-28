@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CONCEPT_CATEGORIES, CONCEPT_LINK_TARGETS } from '../db/schema.ts';
+import { CONCEPT_LINK_TARGETS } from '../db/schema.ts';
 
 /**
  * What each write route accepts. A body is read through its schema: fields the route does not know
@@ -47,7 +47,7 @@ const savedPosition = z.object({
 const concept = z.object({
   title: z.string().trim().min(1, 'A concept needs a title.').max(200),
   aliases: z.array(z.string().max(200)).max(100).optional(),
-  category: z.enum(CONCEPT_CATEGORIES).nullable().optional(),
+  category: z.string().max(200).nullable().optional(),
   bodyMd: longText.nullable().optional(),
   keySigns: z.array(z.string().max(1000)).max(100).optional(),
   tags: tags.optional(),

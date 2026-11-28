@@ -2,7 +2,7 @@ import { START_FEN, answerProblem, mainlineFrom, parseGame, positionKey } from '
 import { useCallback, useEffect, useState } from 'react';
 import { type PositionCategory, type PositionSetSummary, type SavedPosition, api } from '../api.ts';
 import { MiniBoard } from '../components/MiniBoard.tsx';
-import { CategorySelect, askNewCategory } from '../components/CategorySelect.tsx';
+import { CategoryList, CategorySelect } from '../components/CategorySelect.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { savedToPgn } from '../exporters.ts';
 import { Markdown } from '../components/Markdown.tsx';
@@ -191,7 +191,8 @@ export function PositionsScreen() {
               </div>
             )}
           </div>
-          <CategoriesList
+          <CategoryList
+            kind="position"
             categories={categories}
             active={category}
             onSelect={(name) => {
@@ -499,99 +500,6 @@ function PositionDetail({
 }
 
 /** The person's categories with their counts: click to filter; add, rename or remove them. */
-function CategoriesList({
-  categories,
-  active,
-  onSelect,
-  onChanged,
-}: {
-  categories: PositionCategory[];
-  active: string;
-  onSelect(name: string): void;
-  onChanged(): void;
-}) {
-  const ws = useWorkspace();
-  const confirm = useConfirm();
-  const ask = useAskText();
-  const current = categories.find((c) => c.name === active);
-
-  const run = async (action: () => Promise<void>) => {
-    try {
-      await action();
-    } catch (error) {
-      ws.toast((error as Error).message, true);
-    }
-  };
-
-  return (
-    <div>
-      <div className="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-muted">Categories</div>
-      <SideList
-        items={categories.map((c) => ({ id: c.name, label: c.name, count: c.count }))}
-        activeId={active}
-        // A second click on the active category clears the filter.
-        onSelect={(name) => onSelect(name === active ? '' : name)}
-      />
-      <button
-        type="button"
-        className="mt-1 px-2.5 text-sm text-accent"
-        onClick={() =>
-          void run(async () => {
-            const created = await askNewCategory(ask);
-            if (created) onChanged();
-          })
-        }
-      >
-        + New category
-      </button>
-      {current && (
-        <div className="mt-2 flex gap-3 px-2.5 text-xs">
-          <button
-            type="button"
-            className="text-muted hover:text-text"
-            onClick={() =>
-              void run(async () => {
-                const name = (await ask('Rename category', current.name))?.trim();
-                if (!name || name === current.name) return;
-                const renamed = await api.renamePositionCategory(current.id, name);
-                onSelect(renamed.name);
-                onChanged();
-              })
-            }
-          >
-            Rename
-          </button>
-          <button
-            type="button"
-            className="text-danger"
-            onClick={() =>
-              void run(async () => {
-                // Not kept in the trash: the positions lose the category for good, so ask first.
-                const sure = await confirm({
-                  title: `Remove the category “${current.name}”?`,
-                  message: 'Its positions stay saved, without a category. This cannot be undone.',
-                  confirm: 'Remove category',
-                  cancel: 'Keep it',
-                });
-                if (!sure) return;
-                const { uncategorized } = await api.deletePositionCategory(current.id);
-                onSelect('');
-                onChanged();
-                ws.toast(
-                  uncategorized
-                    ? `Removed the category “${current.name}”. Its ${uncategorized === 1 ? 'position stays saved' : `${uncategorized} positions stay saved`}, without a category.`
-                    : `Removed the category “${current.name}”.`,
-                );
-              })
-            }
-          >
-            Remove category
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /** The answer field, with a word when a move in it does not play from the position. */
 function AnswerInput({ fen, initial, className, onSave }: { fen: string; initial: string; className: string; onSave(answer: string): void }) {

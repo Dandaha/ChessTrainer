@@ -3,6 +3,7 @@ import { databasePath, openDatabase, runMigrations } from '../db/client.ts';
 import { purgeTrash } from '../db/library.ts';
 import { buildApp } from './app.ts';
 import { deriveMissingInBackground } from '../db/games.ts';
+import { addStarterConceptsOnce } from '../db/starterLibrary.ts';
 import { loadEnv } from './env.ts';
 
 loadEnv();
@@ -17,6 +18,8 @@ const backupFolder = backupFolderFor(databasePath());
 runMigrations(db, { backupFolder });
 backupIfDue(db, backupFolder);
 purgeTrash(db);
+// The built-in chess concepts, once per library.
+addStarterConceptsOnce(db);
 
 const app = buildApp(db);
 app.addHook('onClose', async () => close());

@@ -249,6 +249,13 @@ export const api = {
   renamePositionCategory: (id: string, name: string) => call<PositionCategory>('PUT', `/api/position-categories/${id}`, { name }),
   deletePositionCategory: (id: string) =>
     call<{ removed: boolean; uncategorized: number }>('DELETE', `/api/position-categories/${id}`),
+  /** Adds the built-in concepts the library is missing; says how many. */
+  addStarterConcepts: () => call<{ added: number }>('POST', '/api/concepts/starter'),
+  conceptCategories: () => call<PositionCategory[]>('GET', '/api/concept-categories'),
+  createConceptCategory: (name: string) => call<PositionCategory>('POST', '/api/concept-categories', { name }),
+  renameConceptCategory: (id: string, name: string) => call<PositionCategory>('PUT', `/api/concept-categories/${id}`, { name }),
+  deleteConceptCategory: (id: string) =>
+    call<{ removed: boolean; uncategorized: number }>('DELETE', `/api/concept-categories/${id}`),
   sets: () => call<PositionSetSummary[]>('GET', '/api/sets'),
   createSet: (name: string) => call<{ id: string }>('POST', '/api/sets', { name }),
   updateSet: (id: string, changes: { name?: string; description?: string }) => call('PUT', `/api/sets/${id}`, changes),

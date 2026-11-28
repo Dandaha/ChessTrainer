@@ -152,6 +152,13 @@ database path.
   Pages link both ways to saved positions, positions, games, repertoire moves and related
   concepts. Create one on the spot from the save box by typing its name. **Drill** shows a
   random linked position and reveals the page once you have played your move.
+- It starts filled: 120 classic concepts from forks to the Lucena position (tactical motifs,
+  checkmate patterns, practical play, opening ideas, pawn structures, strategic plans,
+  endgame technique), each with key signs, a write-up, related concepts and a level tag
+  (#basic, #intermediate, #advanced); famous lines show as boards. They are added once to
+  every library, never over a concept of the same name, and **Add missing starter concepts**
+  brings back any deleted. Categories are your own, as for positions: add, rename or remove
+  them on the Concepts screen, or pick "New category…" when editing a concept.
 - **packages/chess-tools** holds the coach's tools, written once for both coaches:
   `evaluate`, `compare_moves`, `play_line`, `position_facts`, `find_threats`,
   `search_concepts`, `get_repertoire`, `search_games` and `opening_stats`.

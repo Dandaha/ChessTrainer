@@ -14,10 +14,27 @@ import {
   updateConcept,
 } from '../../db/concepts.ts';
 import { softDelete } from '../../db/library.ts';
+import { createCategory, deleteCategory, listCategories, renameCategory } from '../../db/categories.ts';
+import { addStarterConcepts } from '../../db/starterLibrary.ts';
 import { bodies, parseBody } from '../validate.ts';
 
 /** Phase 5: the concepts library and its links both ways. */
 export function conceptRoutes(app: FastifyInstance, db: Db): void {
+  // The built-in concepts, for any the library is missing (they are added once at start-up anyway).
+  app.post('/api/concepts/starter', async () => ({ added: addStarterConcepts(db) }));
+
+  // Concept categories: the person's own list, as for saved positions.
+  app.get('/api/concept-categories', async () => listCategories(db, 'concept'));
+  app.post('/api/concept-categories', async (req) => createCategory(db, 'concept', parseBody(bodies.name, req.body).name));
+  app.put('/api/concept-categories/:id', async (req, reply) => {
+    const category = renameCategory(db, 'concept', (req.params as { id: string }).id, parseBody(bodies.name, req.body).name);
+    return category ?? reply.code(404).send({ error: 'No such category.' });
+  });
+  app.delete('/api/concept-categories/:id', async (req, reply) => {
+    const result = deleteCategory(db, 'concept', (req.params as { id: string }).id);
+    return result.removed ? result : reply.code(404).send({ error: 'No such category.' });
+  });
+
   app.get('/api/concepts', async (req) => {
     const q = req.query as { q?: string; category?: ConceptCategory; tag?: string };
     return listConcepts(db, q);

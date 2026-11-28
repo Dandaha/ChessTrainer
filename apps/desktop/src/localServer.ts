@@ -6,6 +6,7 @@ import { databasePath, openDatabase, runMigrations } from '@chess/server/db/clie
 import { purgeTrash } from '@chess/server/db/library.ts';
 import { buildApp } from '@chess/server/src/app.ts';
 import { deriveMissingInBackground } from '@chess/server/db/games.ts';
+import { addStarterConceptsOnce } from '@chess/server/db/starterLibrary.ts';
 import { EngineService } from '@chess/server/src/engineService.ts';
 import { envFilePath, loadEnv } from '@chess/server/src/env.ts';
 import { serveWeb } from '@chess/server/src/staticWeb.ts';
@@ -75,6 +76,8 @@ export async function startLocalServer(options: LocalServerOptions): Promise<{ u
   runMigrations(db, { backupFolder });
   backupIfDue(db, backupFolder);
   purgeTrash(db);
+  // The built-in chess concepts, once per library.
+  addStarterConceptsOnce(db);
   const engines = new EngineService(db);
   // Warnings and server errors go to server.log in the data folder, where a problem can be traced.
   const app = buildApp(db, engines, undefined, { logFile: join(options.dataDir, 'server.log') });

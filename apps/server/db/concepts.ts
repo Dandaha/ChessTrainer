@@ -5,11 +5,13 @@ import { type GameSummary, listGames } from './games.ts';
 import { type SavedPosition, getSavedPosition } from './library.ts';
 import { findOrCreatePosition } from './positions.ts';
 import { getRepertoire } from './repertoire.ts';
-import { CONCEPT_CATEGORIES, CONCEPT_LINK_TARGETS, conceptLinks, concepts, positions, repertoireMoves, savedPositions, taggings, tags } from './schema.ts';
+import { CONCEPT_LINK_TARGETS, conceptLinks, concepts, positions, repertoireMoves, savedPositions, taggings, tags } from './schema.ts';
+import { ensureCategory } from './categories.ts';
 import { setTags, tagsFor } from './tags.ts';
 import { containsText } from './search.ts';
 
-export type ConceptCategory = (typeof CONCEPT_CATEGORIES)[number];
+/** A category's name, from the person's own list (the Concepts screen's Categories). */
+export type ConceptCategory = string;
 export type ConceptLinkTarget = (typeof CONCEPT_LINK_TARGETS)[number];
 
 export interface ConceptSummary {
@@ -62,7 +64,7 @@ export function listConcepts(db: Db, f: { q?: string; category?: ConceptCategory
     const q = f.q;
     where.push(or(containsText(concepts.title, q), containsText(concepts.aliases, q), containsText(concepts.bodyMd, q), containsText(concepts.keySigns, q))!);
   }
-  if (f.category) where.push(eq(concepts.category, f.category));
+  if (f.category) where.push(sql`lower(${concepts.category}) = lower(${f.category})`);
   if (f.tag) {
     where.push(
       inArray(
@@ -84,7 +86,7 @@ export function createConcept(db: Db, input: ConceptInput): ConceptSummary {
     .values({
       title: input.title.trim() || 'Untitled concept',
       aliases: JSON.stringify((input.aliases ?? []).map((a) => a.trim()).filter(Boolean)),
-      category: input.category ?? null,
+      category: input.category ? ensureCategory(db, 'concept', input.category) : null,
       bodyMd: input.bodyMd ?? null,
       keySigns: JSON.stringify((input.keySigns ?? []).map((k) => k.trim()).filter(Boolean)),
     })
@@ -98,7 +100,7 @@ export function updateConcept(db: Db, id: string, input: Partial<ConceptInput>):
   const set: Partial<typeof concepts.$inferInsert> = { updatedAt: now() };
   if (input.title !== undefined) set.title = input.title.trim();
   if (input.aliases) set.aliases = JSON.stringify(input.aliases.map((a) => a.trim()).filter(Boolean));
-  if (input.category !== undefined) set.category = input.category;
+  if (input.category !== undefined) set.category = input.category ? ensureCategory(db, 'concept', input.category) : null;
   if (input.bodyMd !== undefined) set.bodyMd = input.bodyMd;
   if (input.keySigns) set.keySigns = JSON.stringify(input.keySigns.map((k) => k.trim()).filter(Boolean));
   db.update(concepts).set(set).where(eq(concepts.id, id)).run();

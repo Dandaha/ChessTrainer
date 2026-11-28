@@ -316,21 +316,25 @@ export const trainingReviews = sqliteTable(
 // ---------------------------------------------------------------------------
 // Phase 5: the concepts library, a personal chess wiki.
 
-export const CONCEPT_CATEGORIES = [
-  'pawn_structure',
-  'strategic_plan',
-  'tactical_motif',
-  'endgame_technique',
-  'opening_idea',
-  'practical_play',
-] as const;
+/** The categories concepts are filed under: the person's own list, like positionCategories. */
+export const conceptCategories = sqliteTable(
+  'concept_categories',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: text('created_at').notNull().$defaultFn(now),
+  },
+  (t) => [uniqueIndex('concept_categories_name_idx').on(t.name)],
+);
 
 export const concepts = sqliteTable('concepts', {
   id: id(),
   title: text('title').notNull(),
   /** JSON array of other names it is known by. */
   aliases: text('aliases').notNull().default('[]'),
-  category: text('category', { enum: CONCEPT_CATEGORIES }),
+  /** The category's name (concept_categories), or null. */
+  category: text('category'),
   bodyMd: text('body_md'),
   /** JSON array of "what to look for" items. */
   keySigns: text('key_signs').notNull().default('[]'),

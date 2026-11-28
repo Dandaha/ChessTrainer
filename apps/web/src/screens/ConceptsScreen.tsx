@@ -1,6 +1,7 @@
 import { type MoveNode, createGame, moveLabel, playMove } from '@chess/chess-core';
 import { useCallback, useEffect, useState } from 'react';
-import { type ConceptCategory, type ConceptPage, type ConceptSummary, api } from '../api.ts';
+import { type ConceptPage, type ConceptSummary, type PositionCategory, api } from '../api.ts';
+import { CategoryList, CategorySelect } from '../components/CategorySelect.tsx';
 import { Board } from '../Board.tsx';
 import { paletteSources } from '../components/CommandPalette.tsx';
 import { ConceptPicker } from '../components/ConceptPicker.tsx';
@@ -10,15 +11,6 @@ import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass }
 import { navigate, useRoute } from '../router.ts';
 import { useAskText } from '../components/AskText.tsx';
 import { undoToast, useWorkspace } from '../workspace.tsx';
-
-export const CONCEPT_CATEGORIES: { id: ConceptCategory; label: string }[] = [
-  { id: 'pawn_structure', label: 'Pawn structures' },
-  { id: 'strategic_plan', label: 'Strategic plans' },
-  { id: 'tactical_motif', label: 'Tactical motifs' },
-  { id: 'endgame_technique', label: 'Endgame technique' },
-  { id: 'opening_idea', label: 'Opening ideas' },
-  { id: 'practical_play', label: 'Practical play' },
-];
 
 // Concepts are found from Ctrl+K too.
 paletteSources.push(async (q) =>
@@ -31,6 +23,7 @@ paletteSources.push(async (q) =>
 );
 
 export function ConceptsScreen() {
+  const ws = useWorkspace();
   const route = useRoute();
   const id = route.parts[1];
   const [q, setQ] = useState('');
@@ -39,6 +32,12 @@ export function ConceptsScreen() {
   const [refresh, setRefresh] = useState(0);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const askText = useAskText();
+  // The person's own categories, in their order; one chosen filters the list ('' shows them all).
+  const [categories, setCategories] = useState<PositionCategory[]>([]);
+  const [category, setCategory] = useState('');
+  useEffect(() => {
+    api.conceptCategories().then(setCategories).catch(() => {});
+  }, [refresh]);
 
   useEffect(() => {
     let live = true;
@@ -62,10 +61,16 @@ export function ConceptsScreen() {
     navigate(`concepts/${c.id}?edit=1`);
   };
 
-  const groups = [...CONCEPT_CATEGORIES, { id: null, label: 'Not categorised' }].map((g) => ({
-    ...g,
-    items: list?.filter((c) => c.category === g.id) ?? [],
-  }));
+  const named = categories.map((c) => c.name);
+  const groups = [
+    ...named.map((name) => ({ label: name, items: list?.filter((c) => c.category === name) ?? [] })),
+    // A name the list does not hold (a concept saved meanwhile), then the ones without a category.
+    ...[...new Set((list ?? []).map((c) => c.category).filter((n): n is string => !!n && !named.includes(n)))].map((name) => ({
+      label: name,
+      items: list?.filter((c) => c.category === name) ?? [],
+    })),
+    { label: 'Not categorised', items: list?.filter((c) => !c.category) ?? [] },
+  ].filter((g) => !category || g.label === category);
 
   return (
     <div className="flex h-full flex-col">
@@ -78,7 +83,9 @@ export function ConceptsScreen() {
         <aside className="w-64 shrink-0 space-y-3 overflow-y-auto border-r border-line p-3">
           <input aria-label="Search concepts" className={`${inputClass} w-full`} placeholder="Search, aliases too…" value={q} onChange={(e) => setQ(e.target.value)} />
           {error && <p className="text-sm text-muted">{error}</p>}
-          {list && list.length === 0 && <p className="px-1 text-sm text-muted">{q ? 'Nothing found.' : 'Your chess wiki is empty.'}</p>}
+          {list && list.length === 0 && (
+            <p className="px-1 text-sm text-muted">{q ? 'Nothing found.' : 'Your chess wiki is empty. “Add missing starter concepts” below fills it with the classics.'}</p>
+          )}
           {groups
             .filter((g) => g.items.length)
             .map((g) => (
@@ -98,6 +105,23 @@ export function ConceptsScreen() {
                 </ul>
               </div>
             ))}
+          <CategoryList kind="concept" categories={categories} active={category} onSelect={setCategory} onChanged={reload} />
+          <button
+            type="button"
+            className="px-2.5 text-left text-xs text-muted hover:text-text"
+            title="The chess concepts that come with the app, from forks to the Lucena position: adds any your library does not have. Your own concepts are left as they are."
+            onClick={async () => {
+              try {
+                const { added } = await api.addStarterConcepts();
+                ws.toast(added ? `Added ${added} starter concept${added === 1 ? '' : 's'}.` : 'Your library already has every starter concept.');
+                reload();
+              } catch (error) {
+                ws.toast((error as Error).message, true);
+              }
+            }}
+          >
+            Add missing starter concepts
+          </button>
         </aside>
         <section className="min-w-0 flex-1 overflow-y-auto p-6">
           {id ? (
@@ -144,7 +168,7 @@ function ConceptView({ id, startEditing, onChanged }: { id: string; startEditing
     );
   }
 
-  const category = CONCEPT_CATEGORIES.find((c) => c.id === page.category)?.label;
+  const category = page.category;
   const linkedCount = page.savedPositions.length + page.positions.length;
 
   return (
@@ -299,7 +323,7 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
       const next = await api.updateConcept(page.id, {
         title: title.trim(),
         aliases: aliases.split(','),
-        category: (category || null) as ConceptCategory | null,
+        category: category || null,
         tags: tags.split(','),
         keySigns: keySigns.split('\n'),
         bodyMd: body.trim() || null,
@@ -328,14 +352,7 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
         </label>
         <label className="space-y-1">
           <span className="text-muted">Category</span>
-          <select aria-label="Category" className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">Not categorised</option>
-            {CONCEPT_CATEGORIES.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
+          <CategorySelect kind="concept" value={category} onChange={setCategory} noneLabel="Not categorised" allowNew className={field} />
         </label>
         <label className="col-span-2 space-y-1">
           <span className="text-muted">Tags (commas)</span>
