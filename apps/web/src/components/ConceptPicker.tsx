@@ -3,6 +3,27 @@ import { type ConceptSummary, api } from '../api.ts';
 import { navigate } from '../router.ts';
 import { inputClass } from './ui.tsx';
 
+/** A name as compared: no case, no accents, one kind of apostrophe. */
+const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').replace(/[’‘ʼ`]/g, "'").trim().toLowerCase();
+
+/**
+ * How well a concept matches what was typed, best first: its title exactly, another of its names
+ * exactly, then a title or name that starts with it, then one that contains it, then anything else
+ * the search found (its text). Enter takes the best.
+ */
+function rank(concept: ConceptSummary, typed: string): number {
+  if (!typed) return 0;
+  const title = fold(concept.title);
+  const aliases = concept.aliases.map(fold);
+  if (title === typed) return 0;
+  if (aliases.includes(typed)) return 1;
+  if (title.startsWith(typed)) return 2;
+  if (aliases.some((a) => a.startsWith(typed))) return 3;
+  if (title.includes(typed)) return 4;
+  if (aliases.some((a) => a.includes(typed))) return 5;
+  return 6;
+}
+
 /**
  * Chips for linked concepts, with a search box to add more. Typing a name
  * that does not exist offers to create the concept on the spot, with just
@@ -33,7 +54,12 @@ export function ConceptPicker({
     const timer = setTimeout(() => {
       api
         .concepts({ q: text.trim() || undefined })
-        .then((list) => live && setOptions(list.filter((c) => !linked.some((l) => l.id === c.id)).slice(0, 8)))
+        .then((list) => {
+          if (!live) return;
+          const typed = fold(text);
+          const fresh = list.filter((c) => !linked.some((l) => l.id === c.id));
+          setOptions(fresh.map((c) => ({ c, r: rank(c, typed) })).sort((a, b) => a.r - b.r).map((x) => x.c).slice(0, 8));
+        })
         .catch(() => {});
     }, 120);
     return () => {
@@ -51,8 +77,8 @@ export function ConceptPicker({
   }, []);
 
   // A concept is already there when the text is its title or one of its aliases.
-  const typed = text.trim().toLowerCase();
-  const exact = options.some((o) => o.title.toLowerCase() === typed || o.aliases.some((a) => a.toLowerCase() === typed));
+  const typed = fold(text);
+  const exact = options.some((o) => fold(o.title) === typed || o.aliases.some((a) => fold(a) === typed));
   const canCreate = Boolean(text.trim()) && !exact;
   const rows = options.length + (canCreate ? 1 : 0);
   const create = () => void api.createConcept({ title: text.trim() }).then(choose);

@@ -26,7 +26,8 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 interface Snapshot {
   game: Game;
   currentId: string;
-  context?: unknown;
+  /** Only for a load (the game replaced): what was open before, given back when the load is undone. */
+  context?: { value: unknown };
 }
 
 export interface GameApi {
@@ -35,6 +36,8 @@ export interface GameApi {
   /** Root to current node. */
   path: MoveNode[];
   version: number;
+  /** Goes up when the game is replaced or an edit undone: what shows the game's text afresh. */
+  restores: number;
   canUndo: boolean;
   /** Edited since it was loaded or last marked clean. */
   dirty: boolean;
@@ -68,8 +71,9 @@ export interface GameApi {
 }
 
 /**
- * `context` is stored with each undo step and handed back on undo: the workspace keeps which library
- * game was open there, so undoing a New brings back the game and its link, not a copy.
+ * `context` is stored when the game is replaced (load) and handed back when that is undone: the
+ * workspace keeps which library game was open there, so undoing a New brings back the game and its
+ * link, not a copy. Undoing an ordinary edit leaves the link alone (a saved game stays linked).
  */
 export function useGame(
   initial: () => Game = () => createGame(),
@@ -82,7 +86,11 @@ export function useGame(
   useEffect(() => setChoice(0), [currentId]);
   const [version, bump] = useReducer((n: number) => n + 1, 0);
   const [cleanVersion, setCleanVersion] = useState(-1);
+  const [restores, bumpRestores] = useReducer((n: number) => n + 1, 0);
+  // How deep the undo stack was when the game was last clean (loaded clean or saved): undoing back to
+  // that depth makes it clean again. Null once that state can no longer be reached by undoing.
   const undoStack = useRef<Snapshot[]>([]);
+  const cleanDepth = useRef<number | null>(null);
   const contextRef = useRef(context);
   contextRef.current = context;
 
@@ -94,10 +102,22 @@ export function useGame(
    * a delete, a comment. (Undoing only deletes would bring back a deleted line over the moves played
    * since, and lose them.)
    */
-  const snapshot = useCallback(() => {
-    undoStack.current.push({ game: structuredClone(game), currentId, context: contextRef.current?.current() });
-    if (undoStack.current.length > 100) undoStack.current.shift();
-  }, [game, currentId]);
+  const snapshot = useCallback(
+    (replacing = false) => {
+      // An edit made after undoing past the clean state: that state cannot come back by undoing.
+      if (cleanDepth.current !== null && undoStack.current.length < cleanDepth.current) cleanDepth.current = null;
+      undoStack.current.push({
+        game: structuredClone(game),
+        currentId,
+        ...(replacing ? { context: { value: contextRef.current?.current() } } : {}),
+      });
+      if (undoStack.current.length > 100) {
+        undoStack.current.shift();
+        if (cleanDepth.current !== null) cleanDepth.current = cleanDepth.current > 0 ? cleanDepth.current - 1 : null;
+      }
+    },
+    [game, currentId],
+  );
   // Typing a comment is one change per move, not one per key.
   const commentEdit = useRef<{ id: string; at: number } | null>(null);
 
@@ -108,9 +128,13 @@ export function useGame(
     current,
     path,
     version,
+    restores,
     canUndo: undoStack.current.length > 0,
     dirty: version !== cleanVersion,
-    markClean: () => setCleanVersion(version),
+    markClean: () => {
+      setCleanVersion(version);
+      cleanDepth.current = undoStack.current.length;
+    },
     goTo,
     back: () => {
       const parent = parentOf(game.root, current.id);
@@ -212,20 +236,25 @@ export function useGame(
       bump();
     },
     load: (next, options = {}) => {
-      if (game.root.children.length || game.root.comments.length) snapshot();
+      if (game.root.children.length || game.root.comments.length) snapshot(true);
       setGame(next);
       setCurrentId(options.at ?? next.root.id);
       bump();
+      bumpRestores();
       // load() itself is one edit; a clean load is clean after it.
       setCleanVersion(options.clean ? version + 1 : -1);
+      cleanDepth.current = options.clean ? undoStack.current.length : null;
     },
     undo: () => {
       const last = undoStack.current.pop();
       if (!last) return;
       setGame(last.game);
       setCurrentId(last.currentId);
-      contextRef.current?.restore(last.context);
+      if (last.context) contextRef.current?.restore(last.context.value);
       bump();
+      bumpRestores();
+      // Back to how it was when saved: no longer "unsaved changes".
+      if (cleanDepth.current !== null && undoStack.current.length === cleanDepth.current) setCleanVersion(version + 1);
     },
   };
 }

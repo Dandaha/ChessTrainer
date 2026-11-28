@@ -8,7 +8,7 @@ import { ConceptPicker } from '../components/ConceptPicker.tsx';
 import { Markdown } from '../components/Markdown.tsx';
 import { MiniBoard } from '../components/MiniBoard.tsx';
 import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
-import { navigate, useRoute } from '../router.ts';
+import { navigate, setLeaveGuard, useRoute } from '../router.ts';
 import { useAskText } from '../components/AskText.tsx';
 import { undoToast, useWorkspace } from '../workspace.tsx';
 
@@ -159,7 +159,9 @@ function ConceptView({ id, startEditing, onChanged }: { id: string; startEditing
       <ConceptEditor
         page={page}
         onDone={(next) => {
+          // Cancelled: related concepts are linked as they are chosen, so the page is read again.
           if (next) setPage(next);
+          else load();
           setEditing(false);
           onChanged();
           if (startEditing) navigate(`concepts/${id}`);
@@ -175,7 +177,7 @@ function ConceptView({ id, startEditing, onChanged }: { id: string; startEditing
     <article className="mx-auto max-w-3xl space-y-5">
       <header className="space-y-1">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="text-2xl font-semibold">{page.title}</h1>
+          <h1 className="text-2xl font-semibold [overflow-wrap:anywhere]">{page.title}</h1>
           <div className="flex gap-2">
             <button type="button" className={buttonClass} onClick={() => setEditing(true)}>
               Edit
@@ -316,6 +318,15 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
   const [body, setBody] = useState(page.bodyMd ?? '');
   const [preview, setPreview] = useState(false);
   const [related, setRelated] = useState<ConceptSummary[]>(page.related);
+  // Unsaved text: leaving for another screen or concept asks first (router.ts).
+  const dirty =
+    title !== page.title ||
+    aliases !== page.aliases.join(', ') ||
+    category !== (page.category ?? '') ||
+    tags !== page.tags.join(', ') ||
+    keySigns !== page.keySigns.join('\n') ||
+    body !== (page.bodyMd ?? '');
+  useEffect(() => (dirty ? setLeaveGuard(() => `Your changes to “${page.title}” are not saved.`) : undefined), [dirty, page.title]);
 
   const save = async () => {
     if (!title.trim()) return ws.toast('A concept needs a title.', true);

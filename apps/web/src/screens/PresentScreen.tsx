@@ -87,7 +87,7 @@ export function PresentScreen({ setId }: { setId: string }) {
         />
         {/* Narrower beside the board in a small window, so the board keeps most of the room. */}
         <div className="w-full max-w-md space-y-4 md:max-w-64 lg:max-w-md">
-          <h1 className="text-2xl font-semibold">{current.title}</h1>
+          <h1 className="text-2xl font-semibold [overflow-wrap:anywhere]">{current.title}</h1>
           <p className="text-muted">{current.sideToSolve === 'white' ? 'White' : 'Black'} to play.</p>
           {revealed ? (
             <div className="space-y-3 rounded-xl border border-line bg-surface p-4">

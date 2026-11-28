@@ -19,7 +19,7 @@ export function Markdown({ text, fen = START_FEN }: { text: string; fen?: string
   // Moves written after a board are read from that board's position.
   let base = fen;
   return (
-    <div className="space-y-2 text-sm leading-relaxed">
+    <div className="min-w-0 space-y-2 text-sm leading-relaxed [overflow-wrap:anywhere]">
       {blocks.map((b, i) => {
         if (b.kind === 'board') base = b.fen;
         return renderBlock(b, i, base);
@@ -180,7 +180,7 @@ function EmbeddedLine({ moves, fen }: { moves: string; fen: string }) {
   // From the board above it, or, when the moves don't fit there, from the starting position.
   const base = playLine(fen, moves) ? fen : START_FEN;
   const played = playLine(base, moves);
-  if (!played) return <pre className="rounded-md bg-surface-2 p-2 text-xs">{moves}</pre>;
+  if (!played) return <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-surface-2 p-2 text-xs">{moves}</pre>;
   return (
     <div className="space-y-1">
       <button type="button" onClick={() => ws.openLine(base, played.sans)} className="block w-56 max-w-full" title="Open the line on the board">

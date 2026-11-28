@@ -30,12 +30,12 @@ export function PrintScreen({ setId }: { setId: string }) {
         <span className="text-sm text-[#666]">In the print dialog, choose “Save as PDF” for a file.</span>
       </div>
 
-      <h1 className="mb-1 text-2xl font-semibold">{name}</h1>
+      <h1 className="mb-1 text-2xl font-semibold [overflow-wrap:anywhere]">{name}</h1>
       <p className="mb-6 text-sm text-[#666]">Name: ______________________ Date: ____________</p>
 
       <div className="grid grid-cols-2 gap-x-8 gap-y-6">
         {items.map((p, i) => (
-          <div key={p.id} className="break-inside-avoid space-y-2">
+          <div key={p.id} className="min-w-0 break-inside-avoid space-y-2 [overflow-wrap:anywhere]">
             <div className="text-sm font-semibold">
               {i + 1}. {p.title}{' '}
               <span className="font-normal text-[#666]">({p.sideToSolve === 'white' ? 'White' : 'Black'} to play)</span>
@@ -51,7 +51,7 @@ export function PrintScreen({ setId }: { setId: string }) {
 
       <section className="mt-10 break-before-page">
         <h2 className="mb-4 text-xl font-semibold">Answers</h2>
-        <ol className="space-y-2 text-sm">
+        <ol className="space-y-2 text-sm [overflow-wrap:anywhere]">
           {items.map((p, i) => (
             <li key={p.id}>
               <span className="font-semibold">

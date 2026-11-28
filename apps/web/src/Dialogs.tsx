@@ -60,7 +60,9 @@ export function Modal({ title, onClose, children }: { title: string; onClose(): 
   useDialog(box, onClose);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[10vh]" onClick={onClose} data-overlay>
+    // The overlay scrolls: a dialog taller than the window (a form with every field open) can still be
+    // read to its end and its buttons reached.
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 py-[10vh]" onClick={onClose} data-overlay>
       <div
         ref={box}
         role="dialog"

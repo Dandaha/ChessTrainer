@@ -77,7 +77,8 @@ export function listConcepts(db: Db, f: { q?: string; category?: ConceptCategory
       ),
     );
   }
-  return toSummaries(db, db.select(summaryColumns).from(concepts).where(and(...where)).orderBy(concepts.title).all());
+  // Alphabetical as people read it: "aardvark" and "Échange" before "Zwischenzug".
+  return toSummaries(db, db.select(summaryColumns).from(concepts).where(and(...where)).orderBy(sql`fold(${concepts.title})`).all());
 }
 
 export function createConcept(db: Db, input: ConceptInput): ConceptSummary {

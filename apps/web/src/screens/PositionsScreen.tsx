@@ -216,7 +216,7 @@ export function PositionsScreen() {
               className={inputClass}
               refreshKey={categories}
             />
-            <select aria-label="Tag" className={inputClass} value={tag} onChange={(e) => setTag(e.target.value)}>
+            <select aria-label="Tag" className={inputClass} value={tag} onChange={(e) => { setTag(e.target.value); setOffset(0); }}>
               <option value="">Any tag</option>
               {tagOptions.map((t) => (
                 <option key={t.name} value={t.name}>

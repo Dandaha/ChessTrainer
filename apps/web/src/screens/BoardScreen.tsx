@@ -360,16 +360,18 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
           </div>
         </section>
 
-        <aside className="flex max-h-[calc(100dvh-7rem)] min-h-[24rem] w-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel md:w-[22rem] md:shrink-0 xl:w-[26rem]">
+        {/* Beside the board the panel has a fixed height, so it does not jump as moves are added or tabs
+            change; only the move list grows and scrolls, everything else keeps its height. */}
+        <aside className="flex max-h-[calc(100dvh-7rem)] min-h-[24rem] w-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-panel md:h-[calc(100dvh-7rem)] md:w-[22rem] md:shrink-0 xl:w-[26rem]">
           {opening && (
-            <div className="truncate border-b border-line px-3 py-1.5 text-xs" aria-label="Opening">
+            <div className="shrink-0 truncate border-b border-line px-3 py-1.5 text-xs" aria-label="Opening">
               <OpeningLabel opening={opening} />
             </div>
           )}
           <MoveList game={game} currentId={current.id} onSelect={g.goTo} onMenu={(id, x, y) => setMenu({ id, x, y })} />
           <Branches node={current} choice={g.choice} onEnter={g.goTo} />
           <GameOver end={end} result={game.result} atEnd={!current.children.length && onMainline} onSetResult={g.setResult} />
-          <div className="flex overflow-x-auto border-t border-line text-sm" role="tablist">
+          <div className="flex shrink-0 overflow-x-auto border-t border-line text-sm" role="tablist">
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -384,9 +386,11 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
               </button>
             ))}
           </div>
-          <div className="max-h-[45%] min-h-0 overflow-y-auto">
+          <div className="max-h-[45%] min-h-0 shrink-0 overflow-y-auto">
             {tab === 'notes' && (
               <AnnotationPanel
+                // Afresh after an undo or a load, so the comment box shows what the game now holds.
+                key={g.restores}
                 node={current}
                 isRoot={isRoot}
                 onMainline={onMainline}
@@ -558,7 +562,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 function GameOver({ end, result, atEnd, onSetResult }: { end: GameEnd | null; result: string; atEnd: boolean; onSetResult(result: string): void }) {
   if (!end) return null;
   return (
-    <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-accent-soft px-3 py-1.5 text-sm">
+    <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-accent-soft px-3 py-1.5 text-sm">
       <span className="font-medium">{describeGameEnd(end)}</span>
       {atEnd && result !== end.result && (
         <button type="button" className="text-accent hover:underline" onClick={() => onSetResult(end.result)}>
@@ -578,7 +582,7 @@ function Branches({ node, choice, onEnter }: { node: MoveNode; choice: number; o
   const white = node.fen.split(' ')[1] === 'w';
   const number = Number(node.fen.split(' ')[5] ?? 1);
   return (
-    <div className="border-t border-line px-3 py-1.5 text-sm" aria-label="Continuations">
+    <div className="max-h-28 shrink-0 overflow-y-auto border-t border-line px-3 py-1.5 text-sm" aria-label="Continuations">
       <span className="mr-2 text-xs text-muted">
         <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>→</kbd> enter:
       </span>

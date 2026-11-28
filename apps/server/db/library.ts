@@ -48,7 +48,7 @@ export function listCollections(db: Db): CollectionSummary[] {
     })
     .from(collections)
     .where(isNull(collections.deletedAt))
-    .orderBy(collections.name)
+    .orderBy(sql`fold(${collections.name})`)
     .all();
 }
 
@@ -401,7 +401,7 @@ export function listSets(db: Db): PositionSetSummary[] {
     })
     .from(positionSets)
     .where(isNull(positionSets.deletedAt))
-    .orderBy(positionSets.name)
+    .orderBy(sql`fold(${positionSets.name})`)
     .all();
 }
 

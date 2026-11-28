@@ -78,6 +78,8 @@ body {
   -webkit-font-smoothing: antialiased;
   /* Checkboxes, radios and ranges in the app's colour rather than the browser's blue. */
   accent-color: var(--accent);
+  /* A word longer than its line (a URL, a name with no spaces) breaks instead of running out. */
+  overflow-wrap: break-word;
 }
 
 /* A keyboard focus that can be seen on buttons, links, tabs and focusable rows (a mouse click shows
@@ -152,12 +154,20 @@ kbd {
   padding-right: 3px;
 }
 
-/* A variation inside the move list. */
+/* A variation inside the move list. Only the first level is smaller (each level would shrink it
+   again), and deep levels indent less, so a variation ten deep stays readable. */
 .variation {
   border-left: 2px solid var(--line);
   margin: 0.15rem 0 0.15rem 0.6rem;
   padding-left: 0.6rem;
   font-size: 0.92em;
+}
+.variation .variation {
+  font-size: 1em;
+}
+.variation .variation .variation .variation {
+  margin-left: 0.3rem;
+  padding-left: 0.4rem;
 }
 
 /* Printing: the app's frame is a fixed-height box that scrolls inside itself, which would clip a

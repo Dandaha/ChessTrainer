@@ -19,5 +19,6 @@ export function containsText(column: SQLiteColumn | SQL, typed: string): SQL {
  * "muller" finds "Müller" and "reti" finds "Réti".
  */
 export function fold(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  // Curly apostrophes too: "Anastasia's" finds "Anastasia’s".
+  return text.normalize('NFD').replace(/\p{M}/gu, '').replace(/[’‘ʼ`]/g, "'").toLowerCase();
 }

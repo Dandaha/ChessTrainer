@@ -1,10 +1,11 @@
-import { answerProblem } from '@chess/chess-core';
+import { answerProblem, createGame, describeGameEnd, gameEnd } from '@chess/chess-core';
 import { useEffect, useRef, useState } from 'react';
 import { type ConceptSummary, type PositionSetSummary, type SavedPositionInput, api } from '../api.ts';
 import { CategorySelect } from './CategorySelect.tsx';
 import { ConceptPicker } from './ConceptPicker.tsx';
 import { navigate } from '../router.ts';
 import { Modal } from '../Dialogs.tsx';
+import { useConfirm } from './AskText.tsx';
 import { MiniBoard } from './MiniBoard.tsx';
 
 const CASTLING: Record<string, string> = { K: 'White O-O', Q: 'White O-O-O', k: 'Black O-O', q: 'Black O-O-O' };
@@ -100,12 +101,31 @@ export function SavePositionDialog({
   };
 
   const field = 'w-full rounded-md border border-field bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent';
+  // A position with no legal moves (mate or stalemate) can be kept, but there is nothing to solve.
+  const ending = newPosition ? gameEnd([createGame(fen).root]) : null;
+  const noMoves = ending && (ending.kind === 'checkmate' || ending.kind === 'stalemate') ? ending : null;
+
+  // Closing loses what was typed (and a new position's setup): asked first, Escape and the backdrop too.
+  const confirm = useConfirm();
+  const typed = Boolean(title.trim() || notes.trim() || keyIdea.trim() || tags.trim() || category || concepts.length || answer.trim() !== (defaults.answer ?? '').trim());
+  const close = async () => {
+    if (newPosition || typed) {
+      const sure = await confirm({
+        title: newPosition ? 'Discard this position?' : 'Discard what you typed?',
+        message: newPosition ? 'The position you set up and its details are not saved.' : 'The title and details you typed are not saved.',
+        confirm: 'Discard',
+        cancel: 'Keep editing',
+      });
+      if (!sure) return;
+    }
+    onClose();
+  };
 
   // Back on the board: nothing shows, and everything typed stays for when the details come back.
   if (newPosition?.hidden) return null;
 
   return (
-    <Modal title={newPosition ? 'New position' : 'Save position'} onClose={onClose}>
+    <Modal title={newPosition ? 'New position' : 'Save position'} onClose={() => void close()}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -120,6 +140,11 @@ export function SavePositionDialog({
             </div>
             <div className="min-w-0 space-y-2 text-sm">
               <p data-testid="setup-summary">{describeSetup(fen)}</p>
+              {noMoves && (
+                <p className="text-xs text-danger">
+                  {describeGameEnd(noMoves)} There is no move to find here, so solving and training will skip over it.
+                </p>
+              )}
               <button type="button" className="text-accent" onClick={newPosition.onBack}>
                 ← Change the position
               </button>

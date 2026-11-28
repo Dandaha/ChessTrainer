@@ -1,4 +1,4 @@
-import { type Color, type MoveNode, answerLine, createGame, displayComment, lineLabel, moveLabel, moveSpellings, playMove } from '@chess/chess-core';
+import { type Color, type MoveNode, answerLine, createGame, describeGameEnd, displayComment, gameEnd, lineLabel, moveLabel, moveSpellings, playMove } from '@chess/chess-core';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type CardDetail, type QueueSummary, type SavedPosition, type TrainingStats, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
@@ -300,7 +300,13 @@ function Session({
     setReplying(false);
     if (!card) return;
     if (card.kind === 'saved_position') {
-      setNode(at(card.saved.fen));
+      const start = at(card.saved.fen);
+      setNode(start);
+      // A mate or stalemate saved as a position: there is no move to find, so it says so and goes on.
+      const end = gameEnd([start]);
+      if (end && (end.kind === 'checkmate' || end.kind === 'stalemate')) {
+        setOutcome({ correct: true, suggested: 3, message: `Nothing to find here: ${describeGameEnd(end)}`, detail: 'This position has no legal moves.' });
+      }
       return;
     }
     let current = createGame(card.startFen).root;
@@ -611,7 +617,7 @@ function Session({
               <p className="text-sm text-muted">
                 {practice ? 'Practice: your review schedule is not changed.' : `Saved position${card.card?.state === 0 ? ' · new' : ''}`}
               </p>
-              <h2 className="text-xl font-semibold">{card.saved.title}</h2>
+              <h2 className="text-xl font-semibold [overflow-wrap:anywhere]">{card.saved.title}</h2>
               <p>
                 {card.saved.sideToSolve === 'white' ? 'White' : 'Black'} to play.{' '}
                 {multi

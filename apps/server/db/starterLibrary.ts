@@ -4,6 +4,8 @@ import { createConcept, linkConcept } from './concepts.ts';
 import { getSettings, updateSettings } from './library.ts';
 import { concepts } from './schema.ts';
 import { STARTER_CONCEPTS } from './starterConcepts.ts';
+// Names compared as search compares them: no case, no accents, one kind of apostrophe.
+import { fold } from './search.ts';
 
 /**
  * Puts the starter concepts (db/starterConcepts.ts) into a library: once, the first time the app
@@ -16,22 +18,13 @@ import { STARTER_CONCEPTS } from './starterConcepts.ts';
 const VERSION = 1;
 const SETTING = 'starterConcepts';
 
-/** A name as compared: no case, no accents, one kind of apostrophe. */
-const fold = (name: string) =>
-  name
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .replace(/[’‘`]/g, "'")
-    .trim()
-    .toLowerCase();
-
 /** Adds the starter concepts the library does not have; says how many were added. */
 export function addStarterConcepts(db: Db): number {
   return db.transaction((tx) => {
     const t = tx as unknown as Db;
     const known = new Map<string, string>();
     for (const row of t.select({ id: concepts.id, title: concepts.title, aliases: concepts.aliases }).from(concepts).where(isNull(concepts.deletedAt)).all()) {
-      for (const name of [row.title, ...(JSON.parse(row.aliases) as string[])]) known.set(fold(name), row.id);
+      for (const name of [row.title, ...(JSON.parse(row.aliases) as string[])]) known.set(fold(name.trim()), row.id);
     }
     const ids = new Map<string, string>();
     const fresh = new Set<string>();

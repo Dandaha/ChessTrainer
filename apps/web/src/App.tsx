@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { SERVER_DOWN, api, useServerOnline } from './api.ts';
 import { CommandPalette } from './components/CommandPalette.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
-import { useRoute } from './router.ts';
+import { setLeaveQuestion, useRoute } from './router.ts';
 import { BoardScreen, isTyping } from './screens/BoardScreen.tsx';
 import { GamesScreen } from './screens/GamesScreen.tsx';
 import { HomeScreen } from './screens/HomeScreen.tsx';
@@ -15,7 +15,7 @@ import { ConceptsScreen } from './screens/ConceptsScreen.tsx';
 import { SettingsScreen } from './screens/SettingsScreen.tsx';
 import { applyTheme, useTheme } from './storage.ts';
 import { WorkspaceProvider, useWorkspace } from './workspace.tsx';
-import { AskTextProvider } from './components/AskText.tsx';
+import { AskTextProvider, useConfirm } from './components/AskText.tsx';
 import { Icon, type IconName } from './components/icons.tsx';
 
 export interface Screen {
@@ -48,6 +48,15 @@ export function App() {
 
 function Shell() {
   const ws = useWorkspace();
+  const confirm = useConfirm();
+  // Leaving a screen with unsaved work (router.ts) asks with the app's own dialog.
+  useEffect(
+    () =>
+      setLeaveQuestion((message) =>
+        confirm({ title: 'Leave without saving?', message, confirm: 'Discard changes', cancel: 'Keep editing' }),
+      ),
+    [confirm],
+  );
   const route = useRoute();
   const theme = useTheme();
   const [palette, setPalette] = useState(false);
@@ -163,7 +172,7 @@ function Shell() {
       {ws.message && (
         <div
           role={ws.message.error ? 'alert' : 'status'}
-          className={`fixed bottom-4 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded-lg border bg-surface px-4 py-2 text-sm shadow-panel print:hidden ${
+          className={`fixed bottom-4 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded-lg border bg-surface px-4 py-2 text-sm shadow-panel [overflow-wrap:anywhere] print:hidden ${
             ws.message.error ? 'border-danger text-danger' : 'border-line'
           }`}
         >
