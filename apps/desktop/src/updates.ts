@@ -1,4 +1,4 @@
-import { appendFileSync, statSync, truncateSync } from 'node:fs';
+import { appendFileSync, readFileSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type UpdateStatus, type Updates, plainUpdateError } from '@chess/server/src/updates.ts';
 import { type BrowserWindow, type MessageBoxOptions, app, dialog } from 'electron';
@@ -23,7 +23,9 @@ export interface UpdateController extends Updates {
 export function createUpdates(): UpdateController {
   const version = app.getVersion();
   // Only the installed app knows where its updates come from (resources/app-update.yml).
-  if (!app.isPackaged) return { version, status: () => ({ state: 'unavailable' }), check() {}, restart() {}, start() {} };
+  if (!app.isPackaged) {
+    return { version, status: () => ({ state: 'unavailable' }), check() {}, restart() {}, start() {}, testVersions: () => false, setTestVersions() {} };
+  }
 
   const logFile = join(app.getPath('userData'), 'updates.log');
   const log = (level: string, message: unknown) => {
@@ -42,6 +44,19 @@ export function createUpdates(): UpdateController {
   };
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+
+  // Stable versions only, unless test versions are switched on (kept in updates.json in the data
+  // folder). Every build is published as a test version (a GitHub prerelease); the ones chosen to be
+  // stable as ordinary releases, which is all a copy with test versions off ever installs.
+  const channelFile = join(app.getPath('userData'), 'updates.json');
+  const readTestVersions = (): boolean => {
+    try {
+      return (JSON.parse(readFileSync(channelFile, 'utf8')) as { testVersions?: unknown }).testVersions === true;
+    } catch {
+      return false;
+    }
+  };
+  autoUpdater.allowPrerelease = readTestVersions();
 
   let status: UpdateStatus = { state: 'idle' };
   let getWindow: () => BrowserWindow | null = () => null;
@@ -94,6 +109,18 @@ export function createUpdates(): UpdateController {
   return {
     version,
     status: () => status,
+    testVersions: () => autoUpdater.allowPrerelease,
+    setTestVersions: (on) => {
+      try {
+        writeFileSync(channelFile, JSON.stringify({ testVersions: on }));
+      } catch (error) {
+        log('error', error);
+      }
+      autoUpdater.allowPrerelease = on;
+      log('info', `Test versions ${on ? 'on' : 'off'}`);
+      // Look again with the new choice (unless an update is on its way or ready).
+      if (status.state === 'up-to-date' || status.state === 'error' || status.state === 'idle') check();
+    },
     check,
     restart: () => {
       if (status.state === 'ready') autoUpdater.quitAndInstall(true, true);

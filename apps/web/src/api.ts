@@ -279,6 +279,8 @@ export const api = {
   /** The installed app's version and updates; also only the desktop app answers. */
   updates: () => call<UpdateInfo>('GET', '/api/system/updates'),
   checkForUpdates: () => call<UpdateInfo>('POST', '/api/system/updates/check'),
+  /** Test versions (every build) or only the stable ones. */
+  setTestVersions: (on: boolean) => call<UpdateInfo>('PUT', '/api/system/updates', { testVersions: on }),
   restartToUpdate: () => call('POST', '/api/system/updates/restart'),
 
   repertoires: () => call<RepertoireSummary[]>('GET', '/api/repertoires'),

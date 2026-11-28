@@ -1,5 +1,12 @@
 # Builds the Windows installer on a GitHub Windows machine and publishes it as a release.
-# Download it from the repository's Releases page (latest release, Chess-Workspace-Setup-<version>.exe).
+#
+# Two kinds of release:
+# - Every push to main publishes a test version (a GitHub prerelease). Installed apps get these only
+#   with Settings → Updates → Test versions switched on: the owner's copy, to try changes out.
+# - A stable version is published by running this workflow by hand (Actions → Windows installer →
+#   Run workflow, "stable" ticked). Every installed app takes it; a student's copy takes only these.
+#
+# Download an installer from the repository's Releases page: the one marked Latest is the stable version.
 name: Windows installer
 
 on:
@@ -12,13 +19,19 @@ on:
       - 'pnpm-lock.yaml'
       - '.github/workflows/desktop.yml'
   workflow_dispatch:
+    inputs:
+      stable:
+        description: Publish as the stable version (every installed app takes it)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
+# A newer push replaces a test build still running; a stable build run by hand is never cancelled by one.
 concurrency:
-  group: windows-installer
-  cancel-in-progress: true
+  group: windows-installer-${{ github.event_name == 'workflow_dispatch' && 'by-hand' || 'push' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   installer:
@@ -135,6 +148,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          STABLE: ${{ github.event_name == 'workflow_dispatch' && inputs.stable && 'true' || 'false' }}
         run: |
           $ErrorActionPreference = 'Stop'
           # The installer, plus what the installed apps read to update themselves:
@@ -144,5 +158,17 @@ jobs:
           $files = @($exe, "$exe.blockmap", "$release/latest.yml")
           foreach ($file in $files) { if (-not (Test-Path $file)) { throw "Missing $file" } }
           Get-Content "$release/latest.yml"
-          gh release create "v$env:APP_VERSION" @files --title "Chess Workspace $env:APP_VERSION" --latest --notes "Windows installer, built from $env:GITHUB_SHA. The app updates itself; for a first install, download Chess-Workspace-Setup-$env:APP_VERSION.exe below and run it."
+          if ($env:STABLE -eq 'true') {
+            $notes = @"
+          Chess Workspace $env:APP_VERSION, the stable version.
+
+          **To install:** download Chess-Workspace-Setup-$env:APP_VERSION.exe below and run it. Windows may warn that the app is from an unknown publisher (the installer is not signed): in the browser choose Keep, and in the blue "Windows protected your PC" box choose **More info**, then **Run anyway**. Your games and positions are kept in your own user folder, and the app updates itself from then on.
+
+          Built from $env:GITHUB_SHA.
+          "@
+            gh release create "v$env:APP_VERSION" @files --title "Chess Workspace $env:APP_VERSION" --latest --notes $notes
+          } else {
+            # A test version: installed apps with "Test versions" on take it; the stable ones skip it.
+            gh release create "v$env:APP_VERSION" @files --title "Chess Workspace $env:APP_VERSION (test version)" --prerelease --latest=false --notes "Test version, built from $env:GITHUB_SHA. Installed apps get it only with Settings → Updates → Test versions switched on."
+          }
           if ($LASTEXITCODE -ne 0) { throw "Could not publish the release" }

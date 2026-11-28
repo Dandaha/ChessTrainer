@@ -26,11 +26,18 @@ export interface Updates {
   check(): void;
   /** Restarts into the downloaded version. */
   restart(): void;
+  /**
+   * Test versions: every build as soon as it is made (the owner trying changes out). Off, the app
+   * takes only the versions released as stable, which is what a student's copy should do.
+   */
+  testVersions(): boolean;
+  setTestVersions(on: boolean): void;
 }
 
 export interface UpdateInfo {
   version: string;
   status: UpdateStatus;
+  testVersions: boolean;
 }
 
 /** An updater error in a sentence for Settings: a network failure as such, anything else by its first line. */
@@ -44,10 +51,16 @@ export function plainUpdateError(error: unknown): string {
 }
 
 export function updateRoutes(app: FastifyInstance, updates: Updates): void {
-  const info = (): UpdateInfo => ({ version: updates.version, status: updates.status() });
+  const info = (): UpdateInfo => ({ version: updates.version, status: updates.status(), testVersions: updates.testVersions() });
   app.get('/api/system/updates', async () => info());
   app.post('/api/system/updates/check', async () => {
     updates.check();
+    return info();
+  });
+  app.put('/api/system/updates', async (req, reply) => {
+    const on = (req.body as { testVersions?: unknown } | undefined)?.testVersions;
+    if (typeof on !== 'boolean') return reply.code(400).send({ error: 'Say whether to get test versions: true or false.' });
+    updates.setTestVersions(on);
     return info();
   });
   app.post('/api/system/updates/restart', async (_req, reply) => {

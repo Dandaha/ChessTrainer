@@ -19,6 +19,8 @@ function fakeUpdates(first: UpdateStatus) {
       status: () => status,
       check: vi.fn(() => (status = { state: 'downloading', version: '0.1.36', percent: 45 })),
       restart: vi.fn(),
+      testVersions: () => false,
+      setTestVersions: vi.fn(),
     },
   };
 }

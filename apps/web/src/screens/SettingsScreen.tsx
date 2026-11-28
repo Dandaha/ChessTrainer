@@ -610,6 +610,28 @@ function UpdateSettings() {
           </div>
         )}
       </div>
+      {status.state !== 'unavailable' && (
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={info.testVersions}
+            onChange={async (e) => {
+              try {
+                setInfo(await api.setTestVersions(e.target.checked));
+              } catch (error) {
+                ws.toast((error as Error).message, true);
+              }
+            }}
+          />
+          <span>
+            Test versions
+            <span className="block text-xs text-muted">
+              Every new build as soon as it is made, to try changes out. Off, the app takes only the versions released as stable.
+            </span>
+          </span>
+        </label>
+      )}
     </section>
   );
 }

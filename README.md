@@ -7,14 +7,23 @@ Code are in [CLAUDE.md](CLAUDE.md).
 
 ## Install the app (Windows)
 
-Download the latest installer from this repository's **Releases** page
-(`Chess-Workspace-Setup-<version>.exe`) and run it. Windows may warn that the
-publisher is unknown, since the installer is not code-signed: choose
-**More info → Run anyway**. Stockfish comes with the app; your data stays in
-`%APPDATA%\Chess Workspace` (Settings → Your data), also across updates.
+Download the installer of the release marked **Latest** on this repository's
+**Releases** page (`Chess-Workspace-Setup-<version>.exe`) and run it: that is the
+stable version. Windows may warn that the publisher is unknown, since the
+installer is not code-signed: in the browser choose **Keep**, and in "Windows
+protected your PC" choose **More info → Run anyway**. Stockfish comes with the
+app; your data stays in `%APPDATA%\Chess Workspace` (Settings → Your data), also
+across updates.
 
-A new release is built automatically on every push to `main`, and the
-installed app updates itself: it checks when it opens and every six hours,
+Two kinds of release are published:
+- **Test versions**: every push to `main` builds one, marked *Pre-release*. An
+  installed app takes them only with **Settings → Updates → Test versions**
+  switched on (for trying changes out).
+- **Stable versions**: published by running the *Windows installer* workflow by
+  hand (Actions → Windows installer → Run workflow, with *stable* ticked). Every
+  installed app takes them; a student's copy takes nothing else.
+
+The installed app updates itself: it checks when it opens and every six hours,
 downloads a new version in the background and offers to restart into it
 (otherwise it installs when the app is closed). **Settings → Updates** shows the
 version running and where updates stand: checking, downloading (with how far),
