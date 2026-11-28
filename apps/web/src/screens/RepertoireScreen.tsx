@@ -8,9 +8,11 @@ import {
   displayComment,
   isMyTurn,
   moveLabel,
+  nagGlyph,
   playMove,
   positionKey,
   repertoireTree,
+  toggledNags,
 } from '@chess/chess-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type RepertoireSummary, api } from '../api.ts';
@@ -23,6 +25,7 @@ import { download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
 import { undoToast, useWorkspace } from '../workspace.tsx';
 import { useAskText, useConfirm } from '../components/AskText.tsx';
+import { NagButtons } from '../AnnotationPanel.tsx';
 import { isTyping } from './BoardScreen.tsx';
 
 /**
@@ -53,7 +56,18 @@ function buildLines(starts: RepTreeNode[], collapsed: Set<string>, parent: RepTr
 
 /** "4.g3" and "3...Nf6" at the start of a line; inside it Black's moves go without a number, as in a score. */
 function inlineLabel(node: RepTreeNode, first: boolean): string {
-  return first || node.ply % 2 === 1 ? moveLabel(node.ply, node.edge.san) : node.edge.san;
+  // How good the move is (! ?! …) goes on the move itself, as in a printed line.
+  const quality = node.edge.nags.filter((n) => n >= 1 && n <= 6).map(nagGlyph).join('');
+  return `${first || node.ply % 2 === 1 ? moveLabel(node.ply, node.edge.san) : node.edge.san}${quality}`;
+}
+
+/** The moves where the tree branches: what "Collapse all" folds. */
+function branchPoints(nodes: RepTreeNode[], out = new Set<string>()): Set<string> {
+  for (const n of nodes) {
+    if (n.children.length > 1) out.add(n.edge.id);
+    branchPoints(n.children, out);
+  }
+  return out;
 }
 
 function findNode(nodes: RepTreeNode[], test: (n: RepTreeNode) => boolean): RepTreeNode | undefined {
@@ -115,6 +129,7 @@ export function RepertoireScreen() {
 
   const tree = useMemo(() => repertoireTree(edges), [edges]);
   const lines = useMemo(() => buildLines(tree, collapsed), [tree, collapsed]);
+  const branches = useMemo(() => branchPoints(tree), [tree]);
   /** Where each shown move sits: its line and the move before it, for the arrow keys. */
   const placed = useMemo(() => {
     const map = new Map<string, { line: number; parent: RepTreeNode | null }>();
@@ -147,6 +162,32 @@ export function RepertoireScreen() {
       reload();
       return;
     }
+    await addSan(san);
+  };
+
+  // A move typed in the box: "nf3" and "e2e4" work too.
+  const [typed, setTyped] = useState('');
+  const addTyped = async () => {
+    const text = typed.trim();
+    if (!text) return;
+    for (const spelling of [text, text[0]!.toUpperCase() + text.slice(1)]) {
+      try {
+        const move = /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(spelling)
+          ? { from: spelling.slice(0, 2).toLowerCase(), to: spelling.slice(2, 4).toLowerCase(), promotion: spelling[4]?.toLowerCase() }
+          : spelling;
+        const san = playMove(boardNode(fen, '', ply), move).san;
+        setTyped('');
+        await addSan(san);
+        return;
+      } catch {
+        // the next spelling
+      }
+    }
+    ws.toast(`${text} is not a legal move here.`, true);
+  };
+
+  const addSan = async (san: string) => {
+    if (!repertoire) return;
     await api.addLine(repertoire.id, fen, [san]);
     const { edges: next } = await api.repertoire(repertoire.id);
     setEdges(next);
@@ -300,6 +341,16 @@ export function RepertoireScreen() {
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 lg:flex-row">
         <div ref={treeRef} className="min-h-[16rem] overflow-y-auto rounded-xl border border-line bg-surface p-2 text-sm lg:w-[26rem]" aria-label="Repertoire tree">
+          {branches.size > 0 && (
+            <div className="mb-1 flex justify-end gap-3 px-1 text-xs">
+              <button type="button" className="text-muted hover:text-text" onClick={() => setCollapsed(new Set())}>
+                Expand all
+              </button>
+              <button type="button" className="text-muted hover:text-text" onClick={() => setCollapsed(new Set(branches))}>
+                Collapse all
+              </button>
+            </div>
+          )}
           <button
             type="button"
             data-selected={selected === null}
@@ -346,6 +397,9 @@ export function RepertoireScreen() {
                       >
                         <span className={node.edge.isMyMove ? 'font-semibold' : isSel ? '' : 'text-muted'}>{inlineLabel(node, i === 0)}</span>
                         {!node.edge.isMain && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>side</span>}
+                        {node.edge.nags.some((n) => n > 6) && (
+                          <span className={isSel ? '' : 'text-muted'}>{node.edge.nags.filter((n) => n > 6).map(nagGlyph).join(' ')}</span>
+                        )}
                         {node.edge.priority === 'nice' && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>nice</span>}
                         {node.edge.comment && <span title={displayComment(node.edge.comment)}>✎</span>}
                         {node.transposition && (
@@ -372,6 +426,20 @@ export function RepertoireScreen() {
             onShapes={() => {}}
           />
           <div className="w-full max-w-[calc(100dvh-10.5rem)] space-y-3 text-sm">
+            <input
+              aria-label="Type a move to add"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void addTyped();
+                if (e.key === 'Escape') e.currentTarget.blur();
+              }}
+              placeholder={`Type a move to add here, e.g. ${isMyTurn(fen, color) ? 'Nf3' : 'the reply you expect'}`}
+              spellCheck={false}
+              autoComplete="off"
+              disabled={!repertoire}
+              className={`${inputClass} w-full`}
+            />
             <p>
               {isMyTurn(fen, color) ? (
                 movesHere.length ? (
@@ -529,6 +597,7 @@ function MoveEditor({
           </button>
         )}
       </div>
+      <NagButtons nags={e.nags} onToggle={(nag) => void update({ nags: toggledNags(e.nags, nag) })} />
       <textarea
         aria-label="Comment"
         rows={2}

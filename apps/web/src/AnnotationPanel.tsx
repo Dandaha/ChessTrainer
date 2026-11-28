@@ -19,34 +19,41 @@ interface AnnotationPanelProps {
 const MOVE_NAGS = [1, 2, 3, 4, 5, 6];
 const POSITION_NAGS = [10, 13, 14, 15, 16, 17, 18, 19, 146];
 
-export function AnnotationPanel(props: AnnotationPanelProps) {
-  const { node, isRoot, onMainline } = props;
-  const label = isRoot
-    ? 'Starting position'
-    : `${moveNumber(node)}${isWhiteMove(node) ? '.' : '…'} ${node.san}`;
-
+/** The NAG buttons: how good the move is (! ? !! ?? !? ?!), then the position (= ∞ ± …). */
+export function NagButtons({ nags, disabled = false, onToggle }: { nags: readonly number[]; disabled?: boolean; onToggle(nag: number): void }) {
   const nagButton = (nag: number) => {
-    const active = node.nags.includes(nag);
+    const active = nags.includes(nag);
     const info = NAG_GLYPHS[nag]!;
     return (
       <button
         key={nag}
         type="button"
-        disabled={isRoot}
-        onClick={() => props.onToggleNag(nag)}
+        disabled={disabled}
+        onClick={() => onToggle(nag)}
         title={info.label}
         aria-label={info.label}
         aria-pressed={active}
         className={`min-w-8 rounded-md border px-1.5 py-0.5 text-sm font-semibold disabled:opacity-40 ${
-          active
-            ? 'border-accent bg-accent text-on-accent'
-            : 'border-line bg-surface hover:bg-surface-2'
+          active ? 'border-accent bg-accent text-on-accent' : 'border-line bg-surface hover:bg-surface-2'
         }`}
       >
         {info.glyph}
       </button>
     );
   };
+  return (
+    <>
+      <div className="flex flex-wrap gap-1">{MOVE_NAGS.map(nagButton)}</div>
+      <div className="flex flex-wrap gap-1">{POSITION_NAGS.map(nagButton)}</div>
+    </>
+  );
+}
+
+export function AnnotationPanel(props: AnnotationPanelProps) {
+  const { node, isRoot, onMainline } = props;
+  const label = isRoot
+    ? 'Starting position'
+    : `${moveNumber(node)}${isWhiteMove(node) ? '.' : '…'} ${node.san}`;
 
   return (
     <div className="space-y-2 border-t border-line px-3 py-3">
@@ -63,8 +70,7 @@ export function AnnotationPanel(props: AnnotationPanelProps) {
         rows={2}
         className="w-full resize-y rounded-md border border-line bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
       />
-      <div className="flex flex-wrap gap-1">{MOVE_NAGS.map(nagButton)}</div>
-      <div className="flex flex-wrap gap-1">{POSITION_NAGS.map(nagButton)}</div>
+      <NagButtons nags={node.nags} disabled={isRoot} onToggle={props.onToggleNag} />
       {!isRoot && (
         <div className="flex flex-wrap gap-2 pt-1 text-sm">
           <button

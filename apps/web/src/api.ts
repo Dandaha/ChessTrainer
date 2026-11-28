@@ -275,7 +275,7 @@ export const api = {
     ),
   exportRepertoire: (id: string) => call<{ pgn: string }>('GET', `/api/repertoires/${id}/export`),
   repertoireReaches: (id: string, fen: string) => call<{ reaches: boolean }>('GET', `/api/repertoires/${id}/reaches${query({ fen })}`),
-  updateRepertoireMove: (id: string, changes: { isMain?: boolean; priority?: Priority; comment?: string | null; isMyMove?: boolean }) =>
+  updateRepertoireMove: (id: string, changes: { isMain?: boolean; priority?: Priority; comment?: string | null; nags?: number[] }) =>
     call('PUT', `/api/repertoire-moves/${id}`, changes),
   deleteRepertoireMove: (id: string) => call<{ deleted: number }>('DELETE', `/api/repertoire-moves/${id}`),
   repertoiresAt: (fen: string) =>

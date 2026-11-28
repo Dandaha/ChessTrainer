@@ -283,12 +283,14 @@ const NAG_GROUPS: number[][] = [
 
 /** Turns a NAG on or off; turning one on replaces any other from its group. */
 export function toggleNag(node: MoveNode, nag: number): void {
-  if (node.nags.includes(nag)) {
-    node.nags = node.nags.filter((n) => n !== nag);
-    return;
-  }
+  node.nags = toggledNags(node.nags, nag);
+}
+
+/** NAGs with one turned on or off; turning one on drops the others of its kind (one of ! ? !! ?? !? ?!). */
+export function toggledNags(nags: readonly number[], nag: number): number[] {
+  if (nags.includes(nag)) return nags.filter((n) => n !== nag);
   const group = NAG_GROUPS.find((g) => g.includes(nag));
-  node.nags = [...node.nags.filter((n) => !group?.includes(n)), nag].sort((a, b) => a - b);
+  return [...nags.filter((n) => !group?.includes(n)), nag].sort((a, b) => a - b);
 }
 
 /** Every node in the tree, depth first, the root included. */
