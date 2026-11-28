@@ -377,9 +377,23 @@ export function removeFromSet(db: Db, setId: string, savedIds: string[]): void {
 }
 
 /** Puts a set's positions in this order. */
+/**
+ * Puts the given saves of a set in the given order. They may be only some of the set (the list was
+ * filtered): they then swap among the places they hold, and every other save keeps its place.
+ */
 export function reorderSet(db: Db, setId: string, savedIds: string[]): void {
   db.transaction((tx) => {
-    savedIds.forEach((id, i) => {
+    const full = tx
+      .select({ id: positionSetItems.savedPositionId })
+      .from(positionSetItems)
+      .where(eq(positionSetItems.setId, setId))
+      .orderBy(asc(positionSetItems.sortOrder))
+      .all()
+      .map((r) => r.id);
+    const moving = new Set(savedIds.filter((id) => full.includes(id)));
+    const queue = savedIds.filter((id) => moving.has(id));
+    const order = full.map((id) => (moving.has(id) ? queue.shift()! : id));
+    order.forEach((id, i) => {
       tx.update(positionSetItems)
         .set({ sortOrder: i + 1 })
         .where(and(eq(positionSetItems.setId, setId), eq(positionSetItems.savedPositionId, id)))

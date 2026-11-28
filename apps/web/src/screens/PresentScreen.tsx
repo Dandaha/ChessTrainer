@@ -68,7 +68,8 @@ export function PresentScreen({ setId }: { setId: string }) {
           <kbd>←</kbd> <kbd>→</kbd> move between positions · <kbd>Enter</kbd> reveal · <kbd>R</kbd> reset · <kbd>Esc</kbd> leave
         </span>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-6 pb-6 lg:flex-row">
+      {/* Centred when it fits, scrollable from the top when it does not (a narrow window). */}
+      <div className="flex min-h-0 flex-1 flex-col items-center-safe justify-center-safe gap-8 overflow-auto px-6 pb-6 lg:flex-row">
         <Board
           node={node}
           orientation={current.sideToSolve}

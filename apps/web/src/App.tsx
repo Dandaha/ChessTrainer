@@ -104,7 +104,7 @@ function Shell() {
   const screen = SCREENS.find((s) => s.id === first) ?? SCREENS[0]!;
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full print:block print:h-auto">
       {!fullScreen && (
         <nav className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-3 md:w-48 md:items-stretch md:px-2 print:hidden">
           <div className="mb-3 hidden items-center gap-2 whitespace-nowrap px-2 text-[15px] font-semibold tracking-tight md:flex">
@@ -150,8 +150,8 @@ function Shell() {
         </nav>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <main className="min-h-0 flex-1 overflow-auto">
+      <div className="flex min-w-0 flex-1 flex-col print:block">
+        <main className="min-h-0 flex-1 overflow-auto print:overflow-visible">
           <ErrorBoundary resetKey={route.parts.join('/')}>
             {first === 'present' && <PresentScreen setId={route.parts[1] ?? ''} />}
             {first === 'print' && <PrintScreen setId={route.parts[1] ?? ''} />}

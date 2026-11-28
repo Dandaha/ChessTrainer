@@ -233,6 +233,18 @@ describe('saved positions and sets', () => {
     expect(listSavedPositions(db, { setId: friends }).total).toBe(1);
   });
 
+  it('reorders the saves shown by a filter among their own places, leaving the rest of the set alone', () => {
+    const db = freshDb();
+    const set = createSet(db, { name: 'Endings' });
+    const titles = ['One', 'Lucena', 'Two', 'Philidor', 'Three'];
+    const saves = titles.map((title) => createSavedPosition(db, { fen: FEN, title, tags: title.length > 5 ? ['endgame'] : [] }));
+    addToSet(db, set, saves.map((s) => s.id));
+    // Filtered to #endgame the list shows Lucena then Philidor; Philidor is moved up.
+    const [lucena, philidor] = [saves[1]!, saves[3]!];
+    reorderSet(db, set, [philidor.id, lucena.id]);
+    expect(listSavedPositions(db, { setId: set }).positions.map((p) => p.title)).toEqual(['One', 'Philidor', 'Two', 'Lucena', 'Three']);
+  });
+
   it('moves deletes to the trash, restores them, and purges after 30 days', () => {
     const db = freshDb();
     const saved = createSavedPosition(db, { fen: FEN, title: 'Gone soon' });
