@@ -83,6 +83,7 @@ export function download(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** A file name from a title, keeping letters and digits of any alphabet (Каспаров, 李), dropping the rest. */
 export function safeFileName(name: string): string {
-  return name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'position';
+  return name.normalize('NFC').replace(/[^\p{L}\p{N}\- ]+/gu, '').trim().replace(/\s+/g, '-') || 'position';
 }

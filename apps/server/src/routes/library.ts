@@ -6,6 +6,7 @@ import {
   gamesAtPosition,
   getGame,
   GAME_SORTS,
+  exportGames,
   importGamesInBatches,
   listGames,
   saveGame,
@@ -50,9 +51,7 @@ const bool = (v?: string) => (v === 'true' ? true : v === 'false' ? false : unde
 /** Phase 2: the game library, saved positions, sets, tags, settings and trash. */
 export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFolder: string }): void {
   // Games ---------------------------------------------------------------------
-  app.get('/api/games', async (req) => {
-    const q = req.query as Query;
-    const filters: GameFilters = {
+  const gameFilters = (q: Query): GameFilters => ({
       q: q.q,
       player: q.player,
       opening: q.opening,
@@ -68,9 +67,11 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
       dir: q.dir === 'asc' || q.dir === 'desc' ? q.dir : undefined,
       limit: num(q.limit),
       offset: num(q.offset),
-    };
-    return listGames(db, filters);
   });
+  app.get('/api/games', async (req) => listGames(db, gameFilters(req.query as Query)));
+  // The whole filter or collection as one PGN file, or the games picked by id.
+  app.get('/api/games/export', async (req) => exportGames(db, gameFilters(req.query as Query)));
+  app.post('/api/games/export', async (req) => exportGames(db, { ids: parseBody(bodies.ids, req.body).ids }));
 
   app.get('/api/games/:id', async (req, reply) => {
     const game = getGame(db, (req.params as { id: string }).id);

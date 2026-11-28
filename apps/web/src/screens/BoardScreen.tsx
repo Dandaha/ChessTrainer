@@ -32,7 +32,8 @@ function spellings(typed: string): string[] {
 }
 
 function fileName(pgn: { white?: string; black?: string; date?: string }): string {
-  const part = (s?: string) => (s && s !== '?' ? s.replace(/[^\w-]+/g, '_') : '');
+  // Letters of any alphabet stay: Каспаров-vs-Карпов, not _-vs-_.
+  const part = (s?: string) => (s && s !== '?' ? s.normalize('NFC').replace(/[^\p{L}\p{N}-]+/gu, '_') : '');
   const name = [part(pgn.white), part(pgn.black)].filter(Boolean).join('-vs-') || 'analysis';
   const date = pgn.date && !pgn.date.includes('?') ? `-${pgn.date.replace(/\./g, '-')}` : '';
   return `${name}${date}.pgn`;

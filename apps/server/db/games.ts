@@ -432,6 +432,34 @@ function sortOrder(sort: GameSort, dir: 'asc' | 'desc'): SQL[] {
   }
 }
 
+/**
+ * Every game that matches, as one PGN text in the order the list shows them: the whole filter or
+ * collection, not one page. `ids` exports exactly those games, in that order.
+ */
+export function exportGames(db: Db, f: GameFilters & { ids?: string[] } = {}): { pgn: string; count: number } {
+  let rows: { id: string; pgn: string }[];
+  if (f.ids) {
+    const byId = new Map(
+      db
+        .select({ id: games.id, pgn: games.pgn })
+        .from(games)
+        .where(and(inArray(games.id, f.ids), isNull(games.deletedAt)))
+        .all()
+        .map((r) => [r.id, r]),
+    );
+    rows = f.ids.map((id) => byId.get(id)).filter((r): r is { id: string; pgn: string } => r !== undefined);
+  } else {
+    const where = conditions(db, f);
+    if (!where) return { pgn: '', count: 0 };
+    let order = sortOrder(f.sort ?? 'date', f.dir ?? 'desc');
+    if (f.collectionId && !f.sort) {
+      order = [asc(sql`(select cg.sort_order from collection_games cg where cg.game_id = games.id and cg.collection_id = ${f.collectionId})`)];
+    }
+    rows = db.select({ id: games.id, pgn: games.pgn }).from(games).where(and(...where)).orderBy(...order).all();
+  }
+  return { pgn: rows.map((r) => r.pgn.trim()).join('\n\n') + (rows.length ? '\n' : ''), count: rows.length };
+}
+
 export function listGames(db: Db, f: GameFilters = {}): { total: number; games: GameSummary[] } {
   const where = conditions(db, f);
   if (!where) return { total: 0, games: [] };

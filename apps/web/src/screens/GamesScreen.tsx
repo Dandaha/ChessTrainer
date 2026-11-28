@@ -4,6 +4,7 @@ import { Modal } from '../Dialogs.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { useWorkspace } from '../workspace.tsx';
 import { useAskText } from '../components/AskText.tsx';
+import { download, safeFileName } from '../pieces.ts';
 
 const LIMIT = 50;
 
@@ -99,6 +100,28 @@ export function GamesScreen() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Games">
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={!data?.total}
+          title="All the games listed, on every page, as one PGN file"
+          onClick={async () => {
+            try {
+              const { pgn, count } = await api.exportGames({
+                ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
+                collectionId: collectionId || undefined,
+                sort: sort?.key,
+                dir: sort?.dir,
+              });
+              download(new Blob([pgn], { type: 'application/x-chess-pgn' }), `${safeFileName(current?.name ?? 'games')}-${new Date().toISOString().slice(0, 10)}.pgn`);
+              ws.toast(`Exported ${count} game${count === 1 ? '' : 's'}.`);
+            } catch (error) {
+              ws.toast((error as Error).message, true);
+            }
+          }}
+        >
+          Export PGN{data?.total ? ` (${data.total})` : ''}
+        </button>
         <button type="button" className={primaryClass} onClick={() => setImporting(true)}>
           Import games
         </button>
@@ -212,6 +235,17 @@ export function GamesScreen() {
                   Remove from “{current.name}”
                 </button>
               )}
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={async () => {
+                  const { pgn, count } = await api.exportGameIds([...selected]);
+                  download(new Blob([pgn], { type: 'application/x-chess-pgn' }), `selected-games-${new Date().toISOString().slice(0, 10)}.pgn`);
+                  ws.toast(`Exported ${count} game${count === 1 ? '' : 's'}.`);
+                }}
+              >
+                Export selected
+              </button>
               <button
                 type="button"
                 className={dangerClass}
