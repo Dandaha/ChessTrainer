@@ -87,6 +87,9 @@ export function Board({ node, orientation, autoShapes = [], viewOnly = false, on
       drawable: {
         enabled: true,
         visible: true,
+        // Arrows and circles are part of the game's notes: clicking a piece must not wipe them
+        // (chessground erases them by default, which suits a board without saved drawings).
+        eraseOnMovablePieceClick: false,
         onChange: (shapes) => {
           const { arrows, highlights } = fromShapes(shapes);
           handlers.current.onShapes(arrows, highlights);

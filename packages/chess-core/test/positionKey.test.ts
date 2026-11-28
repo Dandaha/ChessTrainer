@@ -86,6 +86,14 @@ describe('positionKey', () => {
     expect(isValidFen('8/8/8/8/8/8/8/8 w - - 0 1')).toBe(false);
     expect(isValidFen(START_FEN)).toBe(true);
   });
+
+  it('rejects a position where the side that just moved is still in check', () => {
+    // White to move with the black king attacked: no game can reach it, and Rxe8 would take the king.
+    expect(() => positionKey('4k3/8/8/8/8/8/8/4RK2 w - - 0 1')).toThrow('Black is in check but it is White');
+    expect(() => positionKey('4k3/4r3/8/8/8/8/8/4K3 b - - 0 1')).toThrow('White is in check but it is Black');
+    // Check against the side to move is normal.
+    expect(isValidFen('4k3/8/8/8/8/8/8/4RK2 b - - 0 1')).toBe(true);
+  });
 });
 
 describe('normalizeFen', () => {

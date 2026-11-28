@@ -1,4 +1,4 @@
-import { Chess, validateFen } from 'chess.js';
+import { Chess, type Square, validateFen } from 'chess.js';
 
 /**
  * The position key: the identity of a position everywhere in the app.
@@ -65,6 +65,14 @@ function parseFields(fen: string): [string, string, string, string, string, stri
   }
   const result = validateFen(fields.join(' '));
   if (!result.ok) throw new InvalidFenError(result.error ?? 'Invalid FEN');
+  // chess.js accepts a position where the side that just moved is still in check, which no game can
+  // reach: capturing the king then breaks everything downstream.
+  const toMove = fields[1] === 'w' ? 'w' : 'b';
+  const waiting = toMove === 'w' ? 'k' : 'K';
+  const kingSquare = [...boardSquares(fields[0]!)].find(([, piece]) => piece === waiting)?.[0];
+  if (kingSquare && new Chess(fields.join(' ')).isAttacked(kingSquare as Square, toMove)) {
+    throw new InvalidFenError(`Invalid FEN: ${toMove === 'w' ? 'Black' : 'White'} is in check but it is ${toMove === 'w' ? 'White' : 'Black'}'s move`);
+  }
   return fields as [string, string, string, string, string, string];
 }
 

@@ -44,8 +44,12 @@ describe.skipIf(!available)('Stockfish', () => {
     expect(result.lines).toHaveLength(2);
   });
 
+  it('refuses a position no game can reach instead of choking on it mid-search', async () => {
+    await expect(engine.analyse('4k3/8/8/8/8/8/3q4/4K3 b - - 0 1', { depth: 4 })).rejects.toThrow('not a legal chess position');
+  });
+
   it('gives a negative score when Black is winning with Black to move', async () => {
-    const result = await engine.analyse('4k3/8/8/8/8/8/3q4/4K3 b - - 0 1', { depth: 10, multipv: 1 });
+    const result = await engine.analyse('4k3/8/8/8/8/8/3q4/K7 b - - 0 1', { depth: 10, multipv: 1 });
     const best = result.lines[0]!;
     expect(best.mate !== undefined ? best.mate < 0 : best.cp! < -500).toBe(true);
   });

@@ -95,7 +95,7 @@ describe('the game library', () => {
       ]),
     );
     expect(listGames(db, { fen: FOUR_KNIGHTS_ISH }).total).toBe(2);
-    expect(listGames(db, { fen: '8/8/8/8/8/8/k7/K7 w - - 0 1' }).total).toBe(0);
+    expect(listGames(db, { fen: '8/8/8/8/8/k7/8/K7 w - - 0 1' }).total).toBe(0);
   });
 
   it('filters by player, opening, ECO range, result and date', () => {

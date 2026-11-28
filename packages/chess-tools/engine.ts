@@ -1,6 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { constants, cpus, setPriority } from 'node:os';
 import { createInterface } from 'node:readline';
+import { isValidFen } from '@chess/chess-core';
 import { type Analysis, type EngineLine, uciToSan } from './score.ts';
 
 export type { Analysis, EngineLine };
@@ -170,6 +171,8 @@ export class Engine {
   /** Analyses a position. Resolves when the depth or time is reached, or when stopped. */
   analyse(fen: string, options: AnalyseOptions = {}): Promise<Analysis> {
     if (this.exited) return Promise.reject(new EngineError('Stockfish is not running.'));
+    // An impossible position would make the engine's lines unreadable mid-search; refuse it here.
+    if (!isValidFen(fen)) return Promise.reject(new EngineError('That is not a legal chess position.'));
     this.stop();
     const ticket = ++this.latest;
     const run = this.queue.then(

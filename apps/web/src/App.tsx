@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { api } from './api.ts';
 import { CommandPalette } from './components/CommandPalette.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { useRoute } from './router.ts';
 import { BoardScreen, isTyping } from './screens/BoardScreen.tsx';
 import { GamesScreen } from './screens/GamesScreen.tsx';
@@ -144,9 +145,11 @@ function Shell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="min-h-0 flex-1 overflow-auto">
-          {first === 'present' && <PresentScreen setId={route.parts[1] ?? ''} />}
-          {first === 'print' && <PrintScreen setId={route.parts[1] ?? ''} />}
-          {!fullScreen && screen.render()}
+          <ErrorBoundary resetKey={route.parts.join('/')}>
+            {first === 'present' && <PresentScreen setId={route.parts[1] ?? ''} />}
+            {first === 'print' && <PrintScreen setId={route.parts[1] ?? ''} />}
+            {!fullScreen && screen.render()}
+          </ErrorBoundary>
         </main>
         {!serverOnline && !fullScreen && (
           <footer className="border-t border-line bg-surface px-4 py-1.5 text-xs text-muted print:hidden">
