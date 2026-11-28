@@ -1,10 +1,11 @@
+import type { ConceptLevel as Level } from './schema.ts';
+
 /**
  * The starter library: the chess concepts every player should know, from basic to advanced, written
  * up so the person can add their own positions and notes to them. Added once to every library
  * (db/starterLibrary.ts); the move lines here are checked in test/starterConcepts.test.ts.
  */
 
-export type Level = 'basic' | 'intermediate' | 'advanced';
 
 export interface StarterConcept {
   title: string;

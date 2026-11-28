@@ -127,6 +127,58 @@ describe('concept categories', () => {
     expect(listCategories(db, 'position').map((c) => c.name)).not.toContain('Mating patterns');
   });
 
+  it('hold a level, basic to advanced, set, changed or cleared like any field', () => {
+    const db = freshDb();
+    const made = createConcept(db, { title: 'Opposition', level: 'basic' });
+    expect(made.level).toBe('basic');
+    updateConcept(db, made.id, { level: 'advanced' });
+    expect(getConcept(db, made.id)!.level).toBe('advanced');
+    updateConcept(db, made.id, { title: 'The opposition' });
+    expect(listConcepts(db)[0]!.level).toBe('advanced');
+    updateConcept(db, made.id, { level: null });
+    expect(getConcept(db, made.id)!.level).toBeNull();
+    expect(createConcept(db, { title: 'Zugzwang' }).level).toBeNull();
+  });
+
+  it('take their level from the level tags they carried before the update, and lose those tags', () => {
+    const source = fileURLToPath(new URL('../db/migrations', import.meta.url));
+    const folder = mkdtempSync(join(tmpdir(), 'migrations-'));
+    try {
+      cpSync(source, folder, { recursive: true });
+      const journalPath = join(folder, 'meta', '_journal.json');
+      const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { entries: { tag: string }[] };
+      journal.entries = journal.entries.slice(0, journal.entries.findIndex((e) => e.tag.endsWith('_concept_level')));
+      writeFileSync(journalPath, JSON.stringify(journal));
+      const { db } = openDatabase(':memory:');
+      migrate(db, { migrationsFolder: folder });
+      const stamp = new Date().toISOString();
+      const concept = db.$client.prepare('insert into concepts (id, title, aliases, key_signs, created_at, updated_at) values (?, ?, ?, ?, ?, ?)');
+      concept.run('c1', 'Fork', '[]', '[]', stamp, stamp);
+      concept.run('c2', 'Lucena position', '[]', '[]', stamp, stamp);
+      concept.run('c3', 'Pin', '[]', '[]', stamp, stamp);
+      const tag = db.$client.prepare('insert into tags (id, name) values (?, ?)');
+      for (const [id, name] of [['t1', 'basic'], ['t2', 'advanced'], ['t3', 'favourite'], ['t4', 'intermediate']]) tag.run(id, name);
+      const tagging = db.$client.prepare('insert into taggings (tag_id, target_type, target_id) values (?, ?, ?)');
+      // Fork: basic and a tag of the person's own; Lucena: advanced and, by mistake, basic too; Pin: nothing.
+      tagging.run('t1', 'concept', 'c1');
+      tagging.run('t3', 'concept', 'c1');
+      tagging.run('t2', 'concept', 'c2');
+      tagging.run('t1', 'concept', 'c2');
+      // A game the person tagged "basic" keeps its tag.
+      tagging.run('t1', 'game', 'g1');
+      runMigrations(db);
+      const byTitle = Object.fromEntries(listConcepts(db).map((c) => [c.title, c]));
+      expect(byTitle['Fork']).toMatchObject({ level: 'basic', tags: ['favourite'] });
+      expect(byTitle['Lucena position']).toMatchObject({ level: 'basic', tags: [] });
+      expect(byTitle['Pin']).toMatchObject({ level: null, tags: [] });
+      const names = db.$client.prepare('select name from tags order by name').all() as { name: string }[];
+      // "intermediate" was used by nothing and goes; "basic" stays for the game.
+      expect(names.map((n) => n.name)).toEqual(['basic', 'favourite']);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+
   it('turn the keys concepts held before into the categories’ names when the app updates', () => {
     // The migrations up to the one before concept categories, a concept filed the old way, then the rest.
     const source = fileURLToPath(new URL('../db/migrations', import.meta.url));

@@ -145,20 +145,8 @@ export function CategoryList({
   onSelect(name: string): void;
   onChanged(): void;
 }) {
-  const ws = useWorkspace();
-  const confirm = useConfirm();
-  const ask = useAskText();
-  const calls = CALLS[kind];
-  const [one, many] = calls.items;
+  const actions = useCategoryActions(kind);
   const current = categories.find((c) => c.name === active);
-
-  const run = async (action: () => Promise<void>) => {
-    try {
-      await action();
-    } catch (error) {
-      ws.toast((error as Error).message, true);
-    }
-  };
 
   return (
     <div>
@@ -167,8 +155,7 @@ export function CategoryList({
         addLabel="New category"
         addTitle="A new category"
         onAdd={() =>
-          void run(async () => {
-            const created = await askNewCategory(ask, kind);
+          void actions.add().then((created) => {
             if (created) onChanged();
           })
         }
@@ -185,15 +172,9 @@ export function CategoryList({
             type="button"
             className="text-muted hover:text-text"
             onClick={() =>
-              void run(async () => {
-                // A name already taken is refused in the box itself, which stays open to change it.
-                const done: { renamed?: PositionCategory } = {};
-                await ask('Rename category', current.name, '', async (text) => {
-                  const name = text.trim();
-                  if (name && name !== current.name) done.renamed = await calls.rename(current.id, name);
-                });
-                if (!done.renamed) return;
-                onSelect(done.renamed.name);
+              void actions.rename(current).then((renamed) => {
+                if (!renamed) return;
+                onSelect(renamed.name);
                 onChanged();
               })
             }
@@ -204,25 +185,10 @@ export function CategoryList({
             type="button"
             className="text-danger"
             onClick={() =>
-              void run(async () => {
-                // Not kept in the trash: the items lose the category for good, so ask first.
-                const sure = await confirm({
-                  title: `Remove the category “${current.name}”?`,
-                  message: `Its ${many} stay${kind === 'position' ? ' saved' : ''}, without a category. This cannot be undone.`,
-                  confirm: 'Remove category',
-                  cancel: 'Keep it',
-                });
-                if (!sure) return;
-                const { uncategorized } = await calls.remove(current.id);
+              void actions.remove(current).then((removed) => {
+                if (!removed) return;
                 onSelect('');
                 onChanged();
-                const stays = kind === 'position' ? 'stays saved' : 'stays';
-                const stay = kind === 'position' ? 'stay saved' : 'stay';
-                ws.toast(
-                  uncategorized
-                    ? `Removed the category “${current.name}”. Its ${uncategorized === 1 ? `${one} ${stays}` : `${uncategorized} ${many} ${stay}`}, without a category.`
-                    : `Removed the category “${current.name}”.`,
-                );
               })
             }
           >
@@ -232,4 +198,60 @@ export function CategoryList({
       )}
     </div>
   );
+}
+
+/**
+ * Adding, renaming and removing a category, with the questions and messages that go with them. Each
+ * answers what came of it: the new or renamed category, or whether it was removed; nothing when the
+ * person cancelled or the server refused (said in a message).
+ */
+export function useCategoryActions(kind: CategoryKind) {
+  const ws = useWorkspace();
+  const confirm = useConfirm();
+  const ask = useAskText();
+  const calls = CALLS[kind];
+  const [one, many] = calls.items;
+
+  const run = async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await action();
+    } catch (error) {
+      ws.toast((error as Error).message, true);
+      return undefined;
+    }
+  };
+
+  return {
+    add: () => run(() => askNewCategory(ask, kind)),
+    rename: (current: PositionCategory) =>
+      run(async () => {
+        // A name already taken is refused in the box itself, which stays open to change it.
+        const done: { renamed?: PositionCategory } = {};
+        await ask('Rename category', current.name, '', async (text) => {
+          const name = text.trim();
+          if (name && name !== current.name) done.renamed = await calls.rename(current.id, name);
+        });
+        return done.renamed;
+      }),
+    remove: (current: PositionCategory) =>
+      run(async () => {
+        // Not kept in the trash: the items lose the category for good, so ask first.
+        const sure = await confirm({
+          title: `Remove the category “${current.name}”?`,
+          message: `Its ${many} stay${kind === 'position' ? ' saved' : ''}, without a category. This cannot be undone.`,
+          confirm: 'Remove category',
+          cancel: 'Keep it',
+        });
+        if (!sure) return false;
+        const { uncategorized } = await calls.remove(current.id);
+        const stays = kind === 'position' ? 'stays saved' : 'stays';
+        const stay = kind === 'position' ? 'stay saved' : 'stay';
+        ws.toast(
+          uncategorized
+            ? `Removed the category “${current.name}”. Its ${uncategorized === 1 ? `${one} ${stays}` : `${uncategorized} ${many} ${stay}`}, without a category.`
+            : `Removed the category “${current.name}”.`,
+        );
+        return true;
+      }),
+  };
 }

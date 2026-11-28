@@ -330,6 +330,10 @@ export const conceptCategories = sqliteTable(
   (t) => [uniqueIndex('concept_categories_name_idx').on(t.name)],
 );
 
+/** How far along a player usually is when a concept matters: what the Concepts list groups and sorts by. */
+export const CONCEPT_LEVELS = ['basic', 'intermediate', 'advanced'] as const;
+export type ConceptLevel = (typeof CONCEPT_LEVELS)[number];
+
 export const concepts = sqliteTable('concepts', {
   id: id(),
   title: text('title').notNull(),
@@ -337,6 +341,8 @@ export const concepts = sqliteTable('concepts', {
   aliases: text('aliases').notNull().default('[]'),
   /** The category's name (concept_categories), or null. */
   category: text('category'),
+  /** Basic, intermediate or advanced; null when the person has not said. */
+  level: text('level', { enum: CONCEPT_LEVELS }),
   bodyMd: text('body_md'),
   /** JSON array of "what to look for" items. */
   keySigns: text('key_signs').notNull().default('[]'),

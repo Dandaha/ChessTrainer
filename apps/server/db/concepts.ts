@@ -5,10 +5,12 @@ import { type GameSummary, listGames } from './games.ts';
 import { LibraryInputError, type SavedPosition, getSavedPosition } from './library.ts';
 import { findOrCreatePosition } from './positions.ts';
 import { getRepertoire } from './repertoire.ts';
-import { CONCEPT_LINK_TARGETS, conceptLinks, concepts, positions, repertoireMoves, savedPositions, taggings, tags } from './schema.ts';
+import { CONCEPT_LINK_TARGETS, type ConceptLevel, conceptLinks, concepts, positions, repertoireMoves, savedPositions, taggings, tags } from './schema.ts';
 import { ensureCategory } from './categories.ts';
 import { setTags, tagsFor } from './tags.ts';
 import { containsText } from './search.ts';
+
+export type { ConceptLevel };
 
 /** A category's name, from the person's own list (the Concepts screen's Categories). */
 export type ConceptCategory = string;
@@ -19,6 +21,7 @@ export interface ConceptSummary {
   title: string;
   aliases: string[];
   category: ConceptCategory | null;
+  level: ConceptLevel | null;
   tags: string[];
   updatedAt: string;
 }
@@ -38,6 +41,7 @@ export interface ConceptInput {
   title: string;
   aliases?: string[];
   category?: ConceptCategory | null;
+  level?: ConceptLevel | null;
   bodyMd?: string | null;
   keySigns?: string[];
   tags?: string[];
@@ -50,10 +54,14 @@ const summaryColumns = {
   title: concepts.title,
   aliases: concepts.aliases,
   category: concepts.category,
+  level: concepts.level,
   updatedAt: concepts.updatedAt,
 };
 
-function toSummaries(db: Db, rows: { id: string; title: string; aliases: string; category: ConceptCategory | null; updatedAt: string }[]): ConceptSummary[] {
+function toSummaries(
+  db: Db,
+  rows: { id: string; title: string; aliases: string; category: ConceptCategory | null; level: ConceptLevel | null; updatedAt: string }[],
+): ConceptSummary[] {
   const tagMap = tagsFor(db, 'concept', rows.map((r) => r.id));
   return rows.map((r) => ({ ...r, aliases: JSON.parse(r.aliases) as string[], tags: tagMap.get(r.id) ?? [] }));
 }
@@ -103,6 +111,7 @@ export function createConcept(db: Db, input: ConceptInput): ConceptSummary {
       title: freeTitle(db, input.title),
       aliases: JSON.stringify((input.aliases ?? []).map((a) => a.trim()).filter(Boolean)),
       category: input.category ? ensureCategory(db, 'concept', input.category) : null,
+      level: input.level ?? null,
       bodyMd: input.bodyMd ?? null,
       keySigns: JSON.stringify((input.keySigns ?? []).map((k) => k.trim()).filter(Boolean)),
     })
@@ -117,6 +126,7 @@ export function updateConcept(db: Db, id: string, input: Partial<ConceptInput>):
   if (input.title !== undefined) set.title = freeTitle(db, input.title, id);
   if (input.aliases) set.aliases = JSON.stringify(input.aliases.map((a) => a.trim()).filter(Boolean));
   if (input.category !== undefined) set.category = input.category ? ensureCategory(db, 'concept', input.category) : null;
+  if (input.level !== undefined) set.level = input.level;
   if (input.bodyMd !== undefined) set.bodyMd = input.bodyMd;
   if (input.keySigns) set.keySigns = JSON.stringify(input.keySigns.map((k) => k.trim()).filter(Boolean));
   db.update(concepts).set(set).where(eq(concepts.id, id)).run();
@@ -217,6 +227,7 @@ export function getConcept(db: Db, id: string): ConceptPage | undefined {
     title: row.title,
     aliases: JSON.parse(row.aliases) as string[],
     category: row.category,
+    level: row.level,
     tags: tagsFor(db, 'concept', [id]).get(id) ?? [],
     updatedAt: row.updatedAt,
     bodyMd: row.bodyMd,
@@ -248,6 +259,7 @@ export function searchConcepts(db: Db, query: string, limit = 8) {
         title: c.title,
         aliases: c.aliases,
         category: c.category,
+        level: c.level,
         keySigns: page.keySigns,
         snippet: (page.bodyMd ?? '').replace(/\s+/g, ' ').slice(0, 400),
         linkedPositions: page.savedPositions.length + page.positions.length,

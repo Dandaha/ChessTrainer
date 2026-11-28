@@ -73,13 +73,13 @@ describe('the starter concepts', () => {
     expect(lines).toBeGreaterThanOrEqual(12);
   });
 
-  it('go into a library once, with categories, level tags and related links, never twice', () => {
+  it('go into a library once, with categories, levels and related links, never twice', () => {
     const db = freshDb();
     expect(addStarterConceptsOnce(db)).toBe(STARTER_CONCEPTS.length);
     expect(listConcepts(db)).toHaveLength(STARTER_CONCEPTS.length);
     expect(listCategories(db, 'concept').map((c) => c.name)).toContain('Checkmate patterns');
     const fork = listConcepts(db, { q: 'Fork' }).find((c) => c.title === 'Fork')!;
-    expect(fork).toMatchObject({ category: 'Tactical motifs', tags: ['basic'] });
+    expect(fork).toMatchObject({ category: 'Tactical motifs', level: 'basic', tags: [] });
     const page = getConcept(db, fork.id)!;
     expect(page.keySigns.length).toBeGreaterThan(0);
     expect(page.related.map((r) => r.title).sort()).toEqual(['Decoy', 'Double attack', 'Loose pieces']);

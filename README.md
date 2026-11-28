@@ -167,11 +167,15 @@ database path.
   random linked position and reveals the page once you have played your move.
 - It starts filled: 120 classic concepts from forks to the Lucena position (tactical motifs,
   checkmate patterns, practical play, opening ideas, pawn structures, strategic plans,
-  endgame technique), each with key signs, a write-up, related concepts and a level tag
-  (#basic, #intermediate, #advanced); famous lines show as boards. They are added once to
-  every library, never over a concept of the same name, and **Add missing starter concepts**
-  brings back any deleted. Categories are your own, as for positions: add, rename or remove
-  them on the Concepts screen, or pick "New category…" when editing a concept.
+  endgame technique), each with key signs, a write-up, related concepts and a level (basic,
+  intermediate, advanced); famous lines show as boards. They are added once to every library,
+  never over a concept of the same name, and **Add missing starter concepts** brings back any
+  deleted. Categories are your own, as for positions: add them with **+ New**, rename or remove
+  one from its row's ⋯ menu, or pick "New category…" when editing a concept.
+- The list at the side folds: each category (or, with **Levels**, each level) is a row with
+  its count, closed until opened, and the open concept's group opens by itself. It sorts A–Z,
+  easiest first or recently edited, and a search opens every group with a match. How it is
+  grouped and sorted, and which groups are open, are remembered.
 - **packages/chess-tools** holds the coach's tools, written once for both coaches:
   `evaluate`, `compare_moves`, `play_line`, `position_facts`, `find_threats`,
   `search_concepts`, `get_repertoire`, `search_games` and `opening_stats`.

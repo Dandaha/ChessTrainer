@@ -3,7 +3,7 @@ import type { GameDetail, GameFilters, GameSort, GameSummary, ImportEvent, Impor
 import type { Color, Priority, RepEdge, RepertoireCheck } from '@chess/chess-core';
 import type { RepertoireSummary } from '@chess/server/db/repertoire.ts';
 import type { CardDetail, QueueSummary, TrainingStats } from '@chess/server/db/training.ts';
-import type { ConceptCategory, ConceptInput, ConceptLinkTarget, ConceptPage, ConceptSummary } from '@chess/server/db/concepts.ts';
+import type { ConceptCategory, ConceptInput, ConceptLevel, ConceptLinkTarget, ConceptPage, ConceptSummary } from '@chess/server/db/concepts.ts';
 import type { CoachHistoryItem } from '@chess/server/db/coach.ts';
 import type { PositionCategory } from '@chess/server/db/categories.ts';
 import type { Backup } from '@chess/server/db/backup.ts';
@@ -40,6 +40,7 @@ export type {
   Suggestions,
   Usage,
   ConceptCategory,
+  ConceptLevel,
   ConceptLinkTarget,
   ConceptPage,
   ConceptSummary,

@@ -52,7 +52,7 @@ export function addStarterConcepts(db: Db): number {
         category: concept.category,
         bodyMd: concept.body,
         keySigns: concept.signs,
-        tags: [concept.level],
+        level: concept.level,
       });
       ids.set(concept.title, created.id);
       fresh.add(created.id);

@@ -1,7 +1,8 @@
 import { type MoveNode, createGame, playMove, lineLabel } from '@chess/chess-core';
-import { useCallback, useEffect, useState } from 'react';
-import { type ConceptPage, type ConceptSummary, type PositionCategory, api } from '../api.ts';
-import { CategoryList, CategorySelect } from '../components/CategorySelect.tsx';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { type ConceptLevel, type ConceptPage, type ConceptSummary, type PositionCategory, api } from '../api.ts';
+import { CategorySelect } from '../components/CategorySelect.tsx';
+import { LEVEL_NAMES, LevelMark, LevelPicker } from '../components/Level.tsx';
 import { Board } from '../Board.tsx';
 import { paletteSources } from '../components/CommandPalette.tsx';
 import { ConceptPicker } from '../components/ConceptPicker.tsx';
@@ -11,6 +12,7 @@ import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass }
 import { navigate, setLeaveGuard, useRoute } from '../router.ts';
 import { useAskText } from '../components/AskText.tsx';
 import { undoToast, useWorkspace } from '../workspace.tsx';
+import { ConceptsSidebar } from './ConceptsSidebar.tsx';
 
 // Concepts are found from Ctrl+K too.
 paletteSources.push(async (q) =>
@@ -32,26 +34,35 @@ export function ConceptsScreen() {
   const [refresh, setRefresh] = useState(0);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const askText = useAskText();
-  // The person's own categories, in their order; one chosen filters the list ('' shows them all).
+  // The person's own categories, in their order.
   const [categories, setCategories] = useState<PositionCategory[]>([]);
-  const [category, setCategory] = useState('');
   const [missingStarters, setMissingStarters] = useState(0);
   useEffect(() => {
-    api.conceptCategories().then(setCategories).catch(() => {});
     api
       .missingStarterConcepts()
       .then((r) => setMissingStarters(r.missing))
       .catch(() => {});
   }, [refresh]);
 
+  // The concepts and their categories, read together so they always agree (a renamed category never
+  // shows empty while the concepts catch up). Typing waits a moment; anything else reads at once.
+  const searched = useRef(q);
   useEffect(() => {
     let live = true;
-    const timer = setTimeout(() => {
-      api
-        .concepts({ q: q.trim() || undefined })
-        .then((l) => live && setList(l))
-        .catch((e: Error) => live && setError(e.message));
-    }, 120);
+    const typing = searched.current !== q;
+    searched.current = q;
+    const timer = setTimeout(
+      () => {
+        Promise.all([api.concepts({ q: q.trim() || undefined }), api.conceptCategories()])
+          .then(([l, c]) => {
+            if (!live) return;
+            setList(l);
+            setCategories(c);
+          })
+          .catch((e: Error) => live && setError(e.message));
+      },
+      typing ? 120 : 0,
+    );
     return () => {
       live = false;
       clearTimeout(timer);
@@ -78,17 +89,6 @@ export function ConceptsScreen() {
     }
   };
 
-  const named = categories.map((c) => c.name);
-  const groups = [
-    ...named.map((name) => ({ label: name, items: list?.filter((c) => c.category === name) ?? [] })),
-    // A name the list does not hold (a concept saved meanwhile), then the ones without a category.
-    ...[...new Set((list ?? []).map((c) => c.category).filter((n): n is string => !!n && !named.includes(n)))].map((name) => ({
-      label: name,
-      items: list?.filter((c) => c.category === name) ?? [],
-    })),
-    { label: 'Not categorised', items: list?.filter((c) => !c.category) ?? [] },
-  ].filter((g) => !category || g.label === category);
-
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Concepts">
@@ -109,37 +109,7 @@ export function ConceptsScreen() {
         </button>
       </PageHeader>
       <div className="flex min-h-0 flex-1">
-        <aside className="w-64 shrink-0 space-y-3 overflow-y-auto border-r border-line p-3">
-          <input aria-label="Search concepts" className={`${inputClass} w-full`} placeholder="Search, aliases too…" value={q} onChange={(e) => setQ(e.target.value)} />
-          {error && <p className="text-sm text-muted">{error}</p>}
-          {/* The categories first, as a filter: under 120 concepts they would be out of sight. */}
-          <CategoryList kind="concept" categories={categories} active={category} onSelect={setCategory} onChanged={reload} />
-          {list && list.length === 0 && (
-            <p className="px-1 text-sm text-muted">{q ? 'Nothing found.' : 'Your chess wiki is empty. “Add missing starter concepts” above brings back the classics.'}</p>
-          )}
-          {list && list.length > 0 && category && !groups.some((g) => g.items.length) && (
-            <p className="px-1 text-sm text-muted">{q ? `Nothing found in “${category}”.` : `No concept in “${category}” yet.`}</p>
-          )}
-          {groups
-            .filter((g) => g.items.length)
-            .map((g) => (
-              <div key={g.label}>
-                <div className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-muted">{g.label}</div>
-                <ul>
-                  {g.items.map((c) => (
-                    <li key={c.id}>
-                      <a
-                        href={`#/concepts/${c.id}`}
-                        className={`block truncate rounded-md px-2 py-1 text-sm ${c.id === id ? 'bg-accent-soft font-semibold' : 'hover:bg-surface-2'}`}
-                      >
-                        {c.title}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-        </aside>
+        <ConceptsSidebar list={list} categories={categories} q={q} onSearch={setQ} error={error} currentId={id} onChanged={reload} />
         <section className="min-w-0 flex-1 overflow-y-auto p-6">
           {id ? (
             <ConceptView key={id} id={id} startEditing={route.params.get('edit') === '1'} onChanged={reload} />
@@ -205,8 +175,14 @@ function ConceptView({ id, startEditing, onChanged }: { id: string; startEditing
             </button>
           </div>
         </div>
-        <p className="text-sm text-muted">
-          {[category, page.aliases.length ? `also: ${page.aliases.join(', ')}` : null, ...page.tags.map((t) => `#${t}`)].filter(Boolean).join(' · ')}
+        <p className="flex flex-wrap items-center gap-x-1.5 text-sm text-muted">
+          {page.level && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-text">
+              <LevelMark level={page.level} className="text-accent" />
+              {LEVEL_NAMES[page.level]}
+            </span>
+          )}
+          <span>{[category, page.aliases.length ? `also: ${page.aliases.join(', ')}` : null, ...page.tags.map((t) => `#${t}`)].filter(Boolean).join(' · ')}</span>
         </p>
       </header>
 
@@ -331,6 +307,7 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
   const [title, setTitle] = useState(page.title);
   const [aliases, setAliases] = useState(page.aliases.join(', '));
   const [category, setCategory] = useState(page.category ?? '');
+  const [level, setLevel] = useState<ConceptLevel | null>(page.level);
   const [tags, setTags] = useState(page.tags.join(', '));
   const [keySigns, setKeySigns] = useState(page.keySigns.join('\n'));
   const [body, setBody] = useState(page.bodyMd ?? '');
@@ -341,6 +318,7 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
     title !== page.title ||
     aliases !== page.aliases.join(', ') ||
     category !== (page.category ?? '') ||
+    level !== page.level ||
     tags !== page.tags.join(', ') ||
     keySigns !== page.keySigns.join('\n') ||
     body !== (page.bodyMd ?? '');
@@ -353,6 +331,7 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
         title: title.trim(),
         aliases: aliases.split(','),
         category: category || null,
+        level,
         tags: tags.split(','),
         keySigns: keySigns.split('\n'),
         bodyMd: body.trim() || null,
@@ -383,7 +362,11 @@ function ConceptEditor({ page, onDone }: { page: ConceptPage; onDone(next?: Conc
           <span className="text-muted">Category</span>
           <CategorySelect kind="concept" value={category} onChange={setCategory} noneLabel="Not categorised" allowNew className={field} />
         </label>
-        <label className="col-span-2 space-y-1">
+        <div className="space-y-1">
+          <span className="text-muted">Level</span>
+          <LevelPicker value={level} onChange={setLevel} />
+        </div>
+        <label className="space-y-1">
           <span className="text-muted">Tags (commas)</span>
           <input aria-label="Tags" className={field} value={tags} onChange={(e) => setTags(e.target.value)} />
         </label>

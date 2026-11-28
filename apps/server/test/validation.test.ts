@@ -42,6 +42,15 @@ describe('request bodies', () => {
     expect((await server.inject({ method: 'GET', url: `/api/concepts/${concept.id}` })).json().title).toBe('Minority attack');
   });
 
+  it('takes a concept level only from the three there are', async () => {
+    const server = app();
+    const concept = (await server.inject({ method: 'POST', url: '/api/concepts', payload: { title: 'Minority attack', level: 'intermediate' } })).json();
+    expect(concept.level).toBe('intermediate');
+    expect((await server.inject({ method: 'PUT', url: `/api/concepts/${concept.id}`, payload: { level: 'expert' } })).statusCode).toBe(400);
+    expect((await server.inject({ method: 'PUT', url: `/api/concepts/${concept.id}`, payload: { level: null } })).statusCode).toBe(200);
+    expect((await server.inject({ method: 'GET', url: `/api/concepts/${concept.id}` })).json().level).toBeNull();
+  });
+
   it('keeps concept titles apart, ignoring case and accents', async () => {
     const server = app();
     await server.inject({ method: 'POST', url: '/api/concepts', payload: { title: 'Réti manoeuvre' } });

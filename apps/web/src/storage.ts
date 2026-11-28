@@ -27,6 +27,24 @@ function write(key: string, value: string): void {
 }
 
 /**
+ * A small preference kept in this browser across restarts (how a list is grouped, which groups are
+ * open). What comes back is whatever was stored: the caller checks its shape.
+ */
+export function readPref(key: string): unknown {
+  const raw = read(key);
+  if (raw === null) return undefined;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writePref(key: string, value: unknown): void {
+  write(key, JSON.stringify(value));
+}
+
+/**
  * A screen's view kept while the app is open (sessionStorage: it lasts through a reload, and the
  * next start begins afresh), so leaving a screen and coming back finds it as it was. What comes
  * back is whatever was stored: the caller checks its shape.

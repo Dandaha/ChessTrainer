@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CONCEPT_LINK_TARGETS } from '../db/schema.ts';
+import { CONCEPT_LEVELS, CONCEPT_LINK_TARGETS } from '../db/schema.ts';
 
 /**
  * What each write route accepts. A body is read through its schema: fields the route does not know
@@ -85,6 +85,7 @@ const concept = z.object({
   title: z.string().trim().min(1, 'A concept needs a title.').max(200),
   aliases: z.array(z.string().max(200)).max(100).optional(),
   category: z.string().max(200).nullable().optional(),
+  level: z.enum(CONCEPT_LEVELS).nullable().optional(),
   bodyMd: longText.nullable().optional(),
   keySigns: z.array(z.string().max(1000)).max(100).optional(),
   tags: tags.optional(),

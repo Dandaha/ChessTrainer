@@ -189,7 +189,42 @@ export function InfoTip({ children, label = 'How this works' }: { children: Reac
 }
 
 /** "⋯": the actions a screen needs now and then, in a menu instead of a row of buttons. */
-export function MoreMenu({ label = 'More', items }: { label?: string; items: { label: string; onSelect(): void; danger?: boolean; disabled?: boolean }[] }) {
+export function MoreMenu({ label = 'More', items }: { label?: string; items: MenuItem[] }) {
+  return (
+    <Menu
+      label={label}
+      trigger={<Icon name="more" size={18} />}
+      triggerClassName="grid h-[34px] w-9 place-items-center rounded-md border border-line bg-surface hover:bg-surface-2"
+      items={items}
+    />
+  );
+}
+
+export interface MenuItem {
+  label: string;
+  onSelect(): void;
+  danger?: boolean;
+  disabled?: boolean;
+  /** A choice rather than an action: the chosen one is ticked. */
+  checked?: boolean;
+}
+
+/** A button opening a short list of actions, or of choices when the items say which is chosen. */
+export function Menu({
+  label,
+  trigger,
+  triggerClassName,
+  items,
+  heading,
+}: {
+  /** What the button does, for screen readers and its tooltip. */
+  label: string;
+  trigger: ReactNode;
+  triggerClassName: string;
+  items: MenuItem[];
+  /** A caption over the items, e.g. "Sort by". */
+  heading?: string;
+}) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -219,24 +254,33 @@ export function MoreMenu({ label = 'More', items }: { label?: string; items: { l
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="grid h-[34px] w-9 place-items-center rounded-md border border-line bg-surface hover:bg-surface-2"
+        className={triggerClassName}
       >
-        <Icon name="more" size={18} />
+        {trigger}
       </button>
       {open && (
-        <div role="menu" className="absolute top-full right-0 z-40 mt-1 min-w-44 rounded-lg border border-line bg-surface py-1 text-sm shadow-panel">
+        <div
+          role="menu"
+          aria-label={heading ?? label}
+          className="pop-in absolute top-full right-0 z-40 mt-1 min-w-44 origin-top-right rounded-xl border border-line bg-surface p-1 text-sm shadow-panel"
+        >
+          {heading && <p className="px-2.5 pt-1 pb-1.5 text-xs font-medium text-muted">{heading}</p>}
           {items.map((item) => (
             <button
               key={item.label}
               type="button"
-              role="menuitem"
+              role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+              aria-checked={item.checked}
               disabled={item.disabled}
-              className={`block w-full px-3 py-1.5 text-left hover:bg-surface-2 disabled:opacity-40 ${item.danger ? 'text-danger' : ''}`}
+              className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-surface-2 disabled:opacity-40 ${item.danger ? 'text-danger' : ''}`}
               onClick={() => {
                 setOpen(false);
                 item.onSelect();
               }}
             >
+              {item.checked !== undefined && (
+                <span className="grid w-3.5 place-items-center text-accent">{item.checked && <Icon name="check" size={14} />}</span>
+              )}
               {item.label}
             </button>
           ))}
