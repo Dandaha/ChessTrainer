@@ -26,15 +26,15 @@ describe('training', () => {
     expect(screen.getByText(/plus 2 new/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Train everything due' }));
 
-    // Card 1: after 1.e4, my move is c5.
-    await screen.findByText('Your move', {}, { timeout: 3000 });
+    // Card 1, new: after 1.e4 the board shows my move (learn mode) and I play it.
+    await screen.findByText('New move: play c5', {}, { timeout: 3000 });
     type('c5');
-    expect(await screen.findByText('Right: c5.')).toBeTruthy();
+    expect(await screen.findByText('Learned: c5. It comes back for review soon.')).toBeTruthy();
     fireEvent.keyDown(window, { key: 'Enter' });
 
     // Card 2: after 1.e4 c5 2.Nf3, my move is d6; e6 is not it.
     await screen.findByText('1.e4 1...c5 2.Nf3');
-    await screen.findByText('Your move', {}, { timeout: 3000 });
+    await screen.findByText('New move: play d6', {}, { timeout: 3000 });
     type('e6');
     expect(await screen.findByText('Your repertoire plays d6 here, not e6.')).toBeTruthy();
     fireEvent.keyDown(window, { key: '1' });
@@ -52,7 +52,7 @@ describe('training', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Train everything due' }));
 
-    await screen.findByText('Your move', {}, { timeout: 3000 });
+    await screen.findByText('New move: play c5', {}, { timeout: 3000 });
     type('e5');
     expect(await screen.findByText('Your repertoire plays c5 here, not e5.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Try again/ }));

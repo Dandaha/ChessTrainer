@@ -240,6 +240,9 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
 
   const color: Color = card ? (card.kind === 'repertoire_move' ? card.repertoire.color : card.saved.sideToSolve) : 'white';
   const ready = card && node && (card.kind === 'saved_position' || node.fen === card.fen);
+  // A repertoire move seen for the first time is learned before it is asked: the board shows it
+  // (arrow and comment) and I play it once, as in Chessable's learn mode. Reviews then ask without help.
+  const learning = card?.kind === 'repertoire_move' && card.card.state === 0;
 
   const grade = useCallback(
     async (g: Grade) => {
@@ -295,7 +298,11 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
         setOutcome({
           correct: true,
           suggested: failed ? 1 : 3,
-          message: failed ? `Right this time: ${card.answer.san}.` : `Right: ${card.answer.san}.`,
+          message: failed
+            ? `Right this time: ${card.answer.san}.`
+            : learning
+              ? `Learned: ${card.answer.san}. It comes back for review soon.`
+              : `Right: ${card.answer.san}.`,
           detail: card.answer.comment ?? undefined,
         });
       } else if (card.alternatives.some((a) => a.uci === played.uci)) {
@@ -362,7 +369,10 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
     );
   }
 
-  const shown = outcome?.arrow ?? (showSolution ? outcome?.solution?.uci : undefined);
+  const shown =
+    outcome?.arrow ??
+    (showSolution ? outcome?.solution?.uci : undefined) ??
+    (learning && ready && !outcome && card.kind === 'repertoire_move' ? card.answer.uci : undefined);
   const arrows: DrawShape[] = shown
     ? [{ orig: shown.slice(0, 2) as DrawShape['orig'], dest: shown.slice(2, 4) as DrawShape['orig'], brush: 'green' }]
     : [];
@@ -391,7 +401,10 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
                 {card.card.state === 0 && ' · new'}
               </p>
               <p className="text-sm">{card.line.map((san, i) => moveLabel(i + 1, san)).join(' ') || 'Starting position'}</p>
-              <h2 className="text-xl font-semibold">{ready ? 'Your move' : 'Watch the line…'}</h2>
+              <h2 className="text-xl font-semibold">
+                {!ready ? 'Watch the line…' : learning && !outcome ? `New move: play ${card.answer.san}` : 'Your move'}
+              </h2>
+              {learning && ready && !outcome && card.answer.comment && <p className="text-sm">{card.answer.comment}</p>}
             </>
           ) : (
             <>
