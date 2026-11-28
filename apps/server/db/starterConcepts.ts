@@ -45,6 +45,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
       'A fork of king and queen is a **royal fork**; king, queen and rook together is a **family fork**. A fork that comes with check is the strongest kind, because the reply is forced.',
       '**How to use it:** look for squares from which a piece would hit two targets, then ask how to get a piece there — often a sacrifice first drags a piece onto the right square (a decoy).',
       '**Defending:** keep pieces protected, and do not leave your king and queen a knight’s jump apart.',
+      'In the diagram, White to play: the knight jumps to c7 with check, hitting king and rook at once, and takes the rook next.',
+      'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1',
+      line('1. Nc7+ Kd7 2. Nxa8'),
     ),
     related: ['Double attack', 'Decoy', 'Loose pieces'],
   },
@@ -56,6 +59,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     body: md(
       'A single move that creates two threats at once, so the opponent can meet only one. A fork is one kind; others are a queen move that threatens mate and a loose piece, a discovered attack that uncovers one threat while the moving piece makes another, or a check that also attacks something.',
       'Most won material in practice comes from double attacks on undefended pieces. Before every move, check which of the opponent’s pieces are loose — and which of yours are.',
+      'In the diagram, White to play: the queen checks on the e-file and at the same time eyes the rook on a8 along the diagonal.',
+      'r3k3/8/8/8/7Q/8/8/4K3 w - - 0 1',
+      line('1. Qe4+ Kd8 2. Qxa8+'),
     ),
     related: ['Fork', 'Discovered attack', 'Loose pieces'],
   },
@@ -81,6 +87,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     body: md(
       'The reverse of a pin: a bishop, rook or queen attacks a valuable piece, which has to move, and the piece behind it falls. A check along a line that wins the rook or queen behind the king is the usual form.',
       'Skewers decide many endgames: a rook checking from the side or from behind wins a rook that stands on the same line as its king, and a pawn promoting on a square in line with the enemy king and queen can skewer them.',
+      'In the diagram, White to play: the bishop checks along the long diagonal; the king has to step aside, and the queen behind it falls.',
+      'q7/8/8/3k4/8/8/8/2K2B2 w - - 0 1',
+      line('1. Bg2+ Kc5 2. Bxa8'),
     ),
     related: ['Pin', 'X-ray attack'],
   },
@@ -116,6 +125,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     body: md(
       'Moving one piece uncovers an attack by a line piece behind it. Since the moving piece can make a threat of its own, one move creates two threats.',
       'Set them up by placing a piece in front of your bishop, rook or queen on a line that points at an enemy target. The strongest form is the discovered check, where the moving piece is free to go anywhere.',
+      'In the diagram, White to play: the knight jumps to c6 with check and uncovers the rook on the queen; after the king moves, the queen is lost.',
+      '1k1q4/8/8/8/3N4/8/8/3RK3 w - - 0 1',
+      line('1. Nc6+ Kc7 2. Nxd8'),
     ),
     related: ['Discovered check', 'Double check', 'Double attack'],
   },
@@ -127,6 +139,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     body: md(
       'A discovered attack in which the uncovered attack is check. The opponent has to answer the check, so the moving piece can do anything at all: take the queen, attack two pieces, even stand where it can be captured.',
       'When you see your piece standing between your bishop, rook or queen and the enemy king, look at every square that piece could go to.',
+      'In the diagram, White to play: the bishop takes the queen, and the rook behind it gives check, so Black has no time to take back.',
+      'q3k3/8/8/8/4B3/8/8/4RK2 w - - 0 1',
+      line('1. Bxa8+ Kd7'),
     ),
     related: ['Discovered attack', 'Double check', 'Windmill'],
   },
@@ -343,6 +358,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     body: md(
       'A rook or queen mates the king on its first rank, where it is hemmed in by its own pawns. Even strong players lose to it: the back rank is often defended by a single piece, which can be deflected or overloaded.',
       '**Prevention:** make luft — a pawn move such as h3 (…h6) that gives the king an escape square — or keep a rook or minor piece guarding the back rank.',
+      'In the diagram, White to play: the king is shut in by its own pawns, and the rook mates on the back rank.',
+      '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1',
+      line('1. Rd8#'),
     ),
     related: ['Luft', 'Deflection', 'Overloading'],
   },
@@ -367,6 +385,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     body: md(
       'A knight on e7 covers g8 and g6, the king’s own pawn on g7 blocks it, and a rook or queen mates along the h-file. Often the h-file is opened with a sacrifice on h7 or h5.',
       'Named after the 1803 novel *Anastasia und das Schachspiel*.',
+      'In the diagram, White to play: the knight on e7 covers g8 and g6, the pawn on g7 blocks the king, and the rook mates along the h-file.',
+      '8/4N1pk/8/8/8/1R6/8/6K1 w - - 0 1',
+      line('1. Rh3#'),
     ),
     related: ['Arabian mate', 'Attacking the castled king'],
   },
@@ -377,6 +398,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     signs: ['A king in the corner', 'A knight on f6 (f3) guarding h7 and g8', 'A rook that can reach the seventh rank or the h-file'],
     body: md(
       'One of the oldest mating patterns: a rook mates the king in the corner from the square next to it, protected by a knight that also covers the remaining flight square. With the king on h8, a knight on f6 guards h7 and g8, and the rook mates on h7.',
+      'In the diagram, White to play: the rook checks from h7, protected by the knight, which also covers g8.',
+      '7k/R7/5N2/8/8/8/8/6K1 w - - 0 1',
+      line('1. Rh7#'),
     ),
     related: ['Anastasia’s mate', 'Seventh rank'],
   },
@@ -388,6 +412,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     body: md(
       'Two bishops on crossing diagonals mate a king whose flight squares are blocked by its own pieces — typically a king castled queenside, with a sacrifice on c6 or c3 opening the way.',
       'Named after Samuel Boden, who mated this way against Schulder in London, 1853.',
+      'In the diagram, Black to play: the two bishops cross on b2 and c2, and the king\'s own rook and knight block its way out.',
+      '4kb2/8/8/5b2/8/8/P2N4/2KR4 b - - 0 1',
+      line('1... Ba3#'),
     ),
     related: ['Bishop pair', 'Attacking the castled king'],
   },
@@ -398,6 +425,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     signs: ['A king between two of its own pieces on the same rank', 'A queen that can check from two squares in front'],
     body: md(
       'A queen mates the king from two squares straight in front of it, while the king’s two side squares are blocked by its own pieces — like epaulettes on its shoulders. Typically rooks on d8 and f8 with the king on e8.',
+      'In the diagram, White to play: the rooks beside the king are its epaulettes, and the queen mates in front of it.',
+      '3rkr2/8/8/8/8/7Q/8/4K3 w - - 0 1',
+      line('1. Qe6#'),
     ),
     related: ['Dovetail mate', 'Back-rank mate'],
   },
@@ -419,6 +449,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     signs: ['A pawn on g6 (g3) next to the castled king', 'A queen that can reach h7 (h2)', 'The king’s own rook on f8 (f1)'],
     body: md(
       'A queen mates on h7, supported by a pawn on g6, against a king on g8 whose rook still stands on f8. Often the h-file is opened by a rook sacrifice first. Named after Pedro Damiano, who published it in 1512.',
+      'In the diagram, White to play: the pawn on g6 protects h7, and the queen mates there.',
+      '5rk1/8/6P1/8/8/8/8/6KQ w - - 0 1',
+      line('1. Qh7#'),
     ),
     related: ['Attacking the castled king', 'Greco’s mate'],
   },
@@ -429,6 +462,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     signs: ['A king on h8 behind its own g7 pawn', 'Your bishop on the a2–g8 diagonal', 'An h-file you can open'],
     body: md(
       'A bishop on the a2–g8 diagonal covers g8, the king’s own pawn on g7 blocks its last flight square, and a rook or queen mates on the h-file — often after a sacrifice on h7 opens it. Named after Gioachino Greco, the 17th-century master.',
+      'In the diagram, White to play: the bishop on c4 takes away g8, and the queen mates on the h-file.',
+      '7k/6p1/8/8/2B5/8/4Q3/6K1 w - - 0 1',
+      line('1. Qh5#'),
     ),
     related: ['Damiano’s mate', 'Anastasia’s mate'],
   },
@@ -452,6 +488,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     signs: ['Two rooks, or queen and rook, against a lone king', 'A king that can be pushed rank by rank to the edge'],
     body: md(
       'Two heavy pieces take turns checking, each cutting off one rank (or file), so the king is pushed step by step to the edge and mated there. If the king attacks the rook, move that rook to the far side of the board and carry on.',
+      'In the diagram, White to play: one rook holds the seventh rank, the other mates on the eighth.',
+      '7k/R7/8/8/8/8/1R6/6K1 w - - 0 1',
+      line('1. Rb8#'),
     ),
     related: ['Rook and king mate', 'Queen and king mate'],
   },
@@ -616,6 +655,8 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     body: md(
       'At the start the f7 square (f2 for White) is defended only by the king, so early attacks aim at it: Scholar’s mate, the Fried Liver attack, and many traps with a bishop on c4 and a knight on g5.',
       'Castling — which brings a rook to f8 — and keeping a knight on f6 are the usual cures.',
+      'Guarded only by the king, f7 is the first target of many attacks. In the Fried Liver below, White\'s knight takes there.',
+      line('1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Ng5 d5 5. exd5 Nxd5 6. Nxf7'),
     ),
     related: ['Scholar’s mate', 'Légal’s mate', 'King safety'],
   },
@@ -1154,6 +1195,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     signs: ['A passed pawn racing a king'],
     body: md(
       'Whether a king can catch a passed pawn: draw a square from the pawn to its promotion rank (as many files to the side as ranks to go). If the defending king can step into the square — counting whose move it is — it catches the pawn. From its starting rank, count the pawn as if it stood one square further on, because of the double step.',
+      'In the diagram, White to play: after the pawn steps to a6 the black king is outside its square, and the pawn queens.',
+      '8/8/8/P3k3/8/8/8/7K w - - 0 1',
+      line('1. a6 Kd6 2. a7 Kc7 3. a8=Q'),
     ),
     related: ['Passed pawn', 'Réti manoeuvre', 'Key squares'],
   },
@@ -1356,6 +1400,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     signs: ['King and queen against a lone king'],
     body: md(
       'Restrict the king with the queen — a knight’s move away from it works well — until it is on the edge, then bring your own king up and mate. The danger is stalemate: once the king is on the edge, stop moving the queen closer and use the king.',
+      'In the diagram, the final picture: the king has been driven to the corner, and the queen mates with the king\'s help.',
+      '7k/8/6K1/8/8/8/8/5Q2 w - - 0 1',
+      line('1. Qf8#'),
     ),
     related: ['Rook and king mate', 'Ladder mate', 'Stalemate trick'],
   },
@@ -1366,6 +1413,9 @@ export const STARTER_CONCEPTS: StarterConcept[] = [
     signs: ['King and rook against a lone king'],
     body: md(
       'The rook cuts the king off in a box, the box shrinks one line at a time, and your king supports it, taking the opposition so the rook can check. Mate comes on the edge, with your king facing the enemy king and the rook checking along the edge.',
+      'In the diagram, the final picture: the white king takes away the squares in front of the cornered king, and the rook mates along the edge.',
+      '7k/8/6K1/8/8/8/8/R7 w - - 0 1',
+      line('1. Ra8#'),
     ),
     related: ['Queen and king mate', 'Opposition', 'Ladder mate'],
   },
