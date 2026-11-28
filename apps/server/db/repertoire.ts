@@ -123,6 +123,7 @@ export function addEdges(db: Db, repertoireId: string, edges: NewEdge[]): { adde
           isMyMove: e.isMyMove,
           isMain: !hasMain,
           commentMd: e.comment,
+          priority: e.priority ?? 'must',
           nags: JSON.stringify(e.nags),
         })
         .run();
@@ -178,7 +179,7 @@ export function addLine(db: Db, repertoireId: string, startFen: string, sans: st
 export function updateMove(
   db: Db,
   id: string,
-  changes: { isMain?: boolean; priority?: Priority; comment?: string | null; nags?: number[]; isMyMove?: boolean },
+  changes: { isMain?: boolean; priority?: Priority; comment?: string | null; nags?: number[] },
 ): void {
   const move = db.select().from(repertoireMoves).where(eq(repertoireMoves.id, id)).get();
   if (!move) return;
@@ -196,7 +197,6 @@ export function updateMove(
         ...(changes.priority ? { priority: changes.priority } : {}),
         ...(changes.comment !== undefined ? { commentMd: changes.comment?.trim() || null } : {}),
         ...(changes.nags ? { nags: JSON.stringify(changes.nags) } : {}),
-        ...(changes.isMyMove !== undefined ? { isMyMove: changes.isMyMove } : {}),
         updatedAt: now(),
       })
       .where(eq(repertoireMoves.id, id))

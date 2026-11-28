@@ -104,7 +104,6 @@ export const bodies = {
     priority: z.enum(['must', 'nice']).optional(),
     comment: longText.nullable().optional(),
     nags: z.array(z.number().int().min(1).max(255)).max(20).optional(),
-    isMyMove: z.boolean().optional(),
   }),
   gameCheck: z.object({ pgn: z.string().min(1), color: color.optional() }),
 

@@ -315,7 +315,9 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
                 fen={current.fen}
                 game={game}
                 version={g.version + repertoireRefresh}
-                myColor={ws.linkedColor ?? undefined}
+                // Without a colour from the library, the side the board is turned to: White's repertoires
+                // say nothing about a game I study from Black's side.
+                myColor={ws.linkedColor ?? ws.orientation}
                 onPlay={(san) => g.play(san)}
                 onGoToPly={(ply) => {
                   const node = mainlineFrom(game.root).find((n) => n.ply === ply);

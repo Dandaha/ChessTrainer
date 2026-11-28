@@ -29,7 +29,7 @@ function store(pgn: string, color: 'white' | 'black'): RepEdge[] {
         uci: e.uci,
         isMyMove: e.isMyMove,
         isMain: first,
-        priority: 'must',
+        priority: e.priority ?? 'must',
         comment: e.comment,
         nags: e.nags,
       });
@@ -103,5 +103,25 @@ describe('the repertoire graph', () => {
     const nf6 = edges.find((e) => e.san === 'Nf6')!;
     const cut = unreachableEdges(edges.filter((e) => e !== nf6));
     expect(cut.map((e) => e.san)).toEqual(['c4', 'e6', 'Nc3', 'Nf3']);
+  });
+});
+
+describe('a repertoire through PGN and back', () => {
+  it('keeps "nice to know" and comments, without the transposition note piling up', () => {
+    const edges = store(`${WHITE}`, 'white').map((e) => (e.san === 'Nf3' ? { ...e, priority: 'nice' as const } : e));
+    // A transposition in the tree, so the export writes its note.
+    const both = [...edges, ...store(WHITE_TRANSPOSING, 'white').filter((t) => !edges.some((e) => e.id === t.id))];
+    let round = both;
+    for (let i = 0; i < 3; i += 1) round = store(writePgn(repertoireToGame(round)), 'white');
+    expect(round.find((e) => e.san === 'Nf3')?.priority).toBe('nice');
+    expect(round.find((e) => e.san === 'Nc3' && e.comment)?.comment).toBe('Nimzo allowed');
+    expect(round.some((e) => e.comment?.includes('Transposes'))).toBe(false);
+    expect(round).toHaveLength(both.length);
+  });
+
+  it('takes comments before a move, the opening comment and arrows into the move it belongs to', () => {
+    const edges = store('{ My Sicilian } 1. e4 c5 ({ Not this: } 1... e5 { [%cal Gg1f3] }) 2. Nf3 *', 'black');
+    expect(edges.find((e) => e.san === 'e4')?.comment).toBe('My Sicilian');
+    expect(edges.find((e) => e.san === 'e5')?.comment).toBe('Not this: [%cal Gg1f3]');
   });
 });

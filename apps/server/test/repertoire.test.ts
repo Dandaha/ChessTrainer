@@ -131,6 +131,18 @@ describe('the repertoire API', () => {
     expect(result.errors).toEqual([{ gameIndex: 2, line: 0, message: expect.stringContaining('Game 3 starts from a set-up position') }]);
   });
 
+  it('stores "nice to know" from an import, and will not let a move change sides', async () => {
+    const app = buildApp(freshDb());
+    const { id } = (await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'Main', color: 'white' } })).json();
+    await app.inject({ method: 'POST', url: `/api/repertoires/${id}/import`, payload: { pgn: '1. e4 e5 2. Nf3 (2. Bc4 { (nice to know) }) *' } });
+    const edges = (await app.inject({ method: 'GET', url: `/api/repertoires/${id}` })).json().edges as { id: string; san: string; priority: string; comment: string | null; isMyMove: boolean }[];
+    expect(edges.find((e) => e.san === 'Bc4')).toMatchObject({ priority: 'nice', comment: null });
+    const e4 = edges.find((e) => e.san === 'e4')!;
+    await app.inject({ method: 'PUT', url: `/api/repertoire-moves/${e4.id}`, payload: { isMyMove: false } });
+    const after = (await app.inject({ method: 'GET', url: `/api/repertoires/${id}` })).json().edges as { san: string; isMyMove: boolean }[];
+    expect(after.find((e) => e.san === 'e4')?.isMyMove).toBe(true);
+  });
+
   it('explains that the gap finder needs a Lichess token', async () => {
     const app = buildApp(freshDb());
     const { id } = (await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'W', color: 'white' } })).json();

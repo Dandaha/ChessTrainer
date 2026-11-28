@@ -5,6 +5,7 @@ import {
   type RepTreeNode,
   START_FEN,
   createGame,
+  displayComment,
   isMyTurn,
   moveLabel,
   playMove,
@@ -20,6 +21,7 @@ import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass }
 import { download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
 import { useWorkspace } from '../workspace.tsx';
+import { useAskText } from '../components/AskText.tsx';
 import { isTyping } from './BoardScreen.tsx';
 
 /**
@@ -69,6 +71,7 @@ function boardNode(fen: string, uci: string, ply: number): MoveNode {
 
 export function RepertoireScreen() {
   const ws = useWorkspace();
+  const askText = useAskText();
   const route = useRoute();
   const [list, setList] = useState<RepertoireSummary[] | null>(null);
   const [edges, setEdges] = useState<RepEdge[]>([]);
@@ -212,6 +215,35 @@ export function RepertoireScreen() {
         <button type="button" className={buttonClass} onClick={() => setDialog('new')}>
           New
         </button>
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={!repertoire}
+          onClick={async () => {
+            if (!repertoire) return;
+            const name = (await askText('Rename repertoire', repertoire.name))?.trim();
+            if (!name || name === repertoire.name) return;
+            await api.renameRepertoire(repertoire.id, name);
+            reload();
+          }}
+        >
+          Rename
+        </button>
+        <button
+          type="button"
+          className={dangerClass}
+          disabled={!repertoire}
+          onClick={async () => {
+            if (!repertoire) return;
+            await api.deleteRepertoire(repertoire.id);
+            select(null);
+            navigate('repertoire');
+            reload();
+            ws.toast(`Moved “${repertoire.name}” to the trash (Settings → Trash to restore).`);
+          }}
+        >
+          Delete
+        </button>
         <button type="button" className={buttonClass} onClick={() => setDialog('import')} disabled={!repertoire}>
           Import PGN
         </button>
@@ -283,7 +315,7 @@ export function RepertoireScreen() {
                         <span className={node.edge.isMyMove ? 'font-semibold' : isSel ? '' : 'text-muted'}>{inlineLabel(node, i === 0)}</span>
                         {!node.edge.isMain && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>side</span>}
                         {node.edge.priority === 'nice' && <span className={`text-[10px] ${isSel ? '' : 'text-muted'}`}>nice</span>}
-                        {node.edge.comment && <span title={node.edge.comment}>✎</span>}
+                        {node.edge.comment && <span title={displayComment(node.edge.comment)}>✎</span>}
                         {node.transposition && (
                           <span className={`rounded px-1 text-[10px] ${isSel ? 'bg-black/20' : 'bg-accent-soft'}`} title="Reached by another move order too">
                             ⇄ transposes
@@ -452,10 +484,8 @@ function MoveEditor({
     <div className="space-y-2 rounded-xl border border-line bg-surface p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{moveLabel(node.ply, e.san)}</span>
-        <select aria-label="Whose move" className={inputClass} value={e.isMyMove ? 'mine' : 'theirs'} onChange={(ev) => void update({ isMyMove: ev.target.value === 'mine' })}>
-          <option value="mine">My move</option>
-          <option value="theirs">Expected opponent move</option>
-        </select>
+        {/* Whose move it is follows from the repertoire's colour, so it is shown, not chosen. */}
+        <span className="text-xs text-muted">{e.isMyMove ? 'my move' : 'expected reply'}</span>
         <select aria-label="Priority" className={inputClass} value={e.priority} onChange={(ev) => void update({ priority: ev.target.value as 'must' | 'nice' })}>
           <option value="must">Must know</option>
           <option value="nice">Nice to know</option>

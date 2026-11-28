@@ -1,4 +1,4 @@
-import { type Color, type MoveNode, createGame, moveLabel, playMove } from '@chess/chess-core';
+import { type Color, type MoveNode, createGame, displayComment, moveLabel, playMove } from '@chess/chess-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type CardDetail, type QueueSummary, type TrainingStats, api } from '../api.ts';
 import { Board, type DrawShape } from '../Board.tsx';
@@ -308,14 +308,14 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
             : learning
               ? `Learned: ${card.answer.san}. It comes back for review soon.`
               : `Right: ${card.answer.san}.`,
-          detail: card.answer.comment ?? undefined,
+          detail: card.answer.comment ? displayComment(card.answer.comment) : undefined,
         });
       } else if (card.alternatives.some((a) => a.uci === played.uci)) {
         setOutcome({
           correct: true,
           suggested: 2,
           message: `${played.san} is in your repertoire too, but your main move is ${card.answer.san}.`,
-          detail: card.answer.comment ?? undefined,
+          detail: card.answer.comment ? displayComment(card.answer.comment) : undefined,
           arrow: card.answer.uci,
         });
       } else {
@@ -332,14 +332,14 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
                 correct: true,
                 suggested: failed ? 1 : 2,
                 message: `${played.san} transposes into your repertoire; here your move is ${card.answer.san}.`,
-                detail: card.answer.comment ?? undefined,
+                detail: card.answer.comment ? displayComment(card.answer.comment) : undefined,
                 arrow: card.answer.uci,
               }
             : {
                 correct: false,
                 suggested: 1,
                 message: `Your repertoire plays ${card.answer.san} here, not ${played.san}.`,
-                detail: card.answer.comment ?? undefined,
+                detail: card.answer.comment ? displayComment(card.answer.comment) : undefined,
                 arrow: card.answer.uci,
               },
         );
@@ -426,7 +426,7 @@ function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void
               <h2 className="text-xl font-semibold">
                 {!ready ? 'Watch the line…' : learning && !outcome ? `New move: play ${card.answer.san}` : 'Your move'}
               </h2>
-              {learning && ready && !outcome && card.answer.comment && <p className="text-sm">{card.answer.comment}</p>}
+              {learning && ready && !outcome && card.answer.comment && <p className="text-sm">{displayComment(card.answer.comment)}</p>}
             </>
           ) : (
             <>

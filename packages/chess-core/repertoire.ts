@@ -1,3 +1,4 @@
+import { collapseWhitespace, shapeCommands } from './annotations.ts';
 import type { Color } from './board.ts';
 import { START_FEN, positionKey } from './positionKey.ts';
 import { type Game, type MoveNode, addMove, createGame, isWhiteMove, moveNumber, playMove, setComment } from './tree.ts';
@@ -33,6 +34,25 @@ export interface NewEdge {
   isMain: boolean;
   comment: string | null;
   nags: number[];
+  /** "nice" for a move marked nice to know; must when not given. */
+  priority?: Priority;
+}
+
+/** The notes repertoireToGame writes into comments, read back on import rather than kept as text. */
+const NICE_NOTE = '(nice to know)';
+const TRANSPOSITION_NOTE = 'Transposes to a line given elsewhere.';
+
+/**
+ * A move's comment for the repertoire, from everything PGN may hold about it: comments before and
+ * after the move, and its arrows and circles (kept as their [%cal]/[%csl] commands). The notes an
+ * export writes for itself become the "nice to know" mark again, or are dropped.
+ */
+function importedComment(texts: string[], node: MoveNode): { comment: string | null; priority?: Priority } {
+  let text = texts.join(' ');
+  const nice = text.includes(NICE_NOTE);
+  text = text.split(NICE_NOTE).join(' ').split(TRANSPOSITION_NOTE).join(' ');
+  const comment = [collapseWhitespace(text), shapeCommands(node.arrows, node.highlights)].filter(Boolean).join(' ');
+  return { comment: comment || null, ...(nice ? { priority: 'nice' as const } : {}) };
 }
 
 /** Edges by the position they leave, main line first. */
@@ -57,6 +77,8 @@ export function edgesFromGame(game: Game, color: Color): NewEdge[] {
   const out: NewEdge[] = [];
   const visit = (parent: MoveNode) => {
     parent.children.forEach((child, i) => {
+      // The game's opening comment (before move 1) goes with the first move of the main line.
+      const intro = parent === game.root && i === 0 ? game.root.comments : [];
       out.push({
         fromFen: parent.fen,
         toFen: child.fen,
@@ -64,7 +86,7 @@ export function edgesFromGame(game: Game, color: Color): NewEdge[] {
         uci: child.uci,
         isMyMove: isWhiteMove(child) === (color === 'white'),
         isMain: i === 0,
-        comment: child.comments.join(' ').trim() || null,
+        ...importedComment([...intro, ...child.startingComments, ...child.comments], child),
         nags: child.nags,
       });
       visit(child);

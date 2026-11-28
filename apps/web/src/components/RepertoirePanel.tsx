@@ -1,4 +1,4 @@
-import { type Color, type Game, type RepertoireCheck, moveLabel, writePgn } from '@chess/chess-core';
+import { type Color, type Game, type RepertoireCheck, displayComment, moveLabel, writePgn } from '@chess/chess-core';
 import { useEffect, useRef, useState } from 'react';
 import { type RepertoireSummary, api } from '../api.ts';
 import { Modal } from '../Dialogs.tsx';
@@ -102,7 +102,7 @@ export function RepertoireTab({
                     {m.isMain ? '' : ' · side line'}
                     {m.priority === 'nice' ? ' · nice to know' : ''}
                   </span>
-                  {m.comment && <span className="block text-xs">{m.comment}</span>}
+                  {m.comment && <span className="block text-xs">{displayComment(m.comment)}</span>}
                 </li>
               ))}
             </ul>
