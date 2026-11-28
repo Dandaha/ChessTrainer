@@ -13,8 +13,9 @@ export interface EngineState {
  * the panel is turned off, the position changes or the screen goes away, and
  * the server then stops the search.
  */
-export function useEngine(fen: string, enabled: boolean, multipv = 3): EngineState {
+export function useEngine(fen: string, enabled: boolean, multipv = 3, history?: { startFen: string; moves: string[] }): EngineState {
   const [state, setState] = useState<EngineState>({ analysis: null, status: 'off', error: null });
+  const historyKey = history ? `${history.startFen}|${history.moves.join(',')}` : '';
 
   useEffect(() => {
     if (!enabled) {
@@ -26,7 +27,7 @@ export function useEngine(fen: string, enabled: boolean, multipv = 3): EngineSta
       return;
     }
     setState((s) => ({ analysis: s.analysis?.fen === fen ? s.analysis : null, status: 'starting', error: null }));
-    const source = new EventSource(api.engineStreamUrl(fen, multipv));
+    const source = new EventSource(api.engineStreamUrl(fen, multipv, history));
     source.addEventListener('update', (e) => {
       setState({ analysis: JSON.parse((e as MessageEvent).data) as Analysis, status: 'running', error: null });
     });
@@ -44,7 +45,7 @@ export function useEngine(fen: string, enabled: boolean, multipv = 3): EngineSta
       source.close();
     });
     return () => source.close();
-  }, [fen, enabled, multipv]);
+  }, [fen, enabled, multipv, historyKey]);
 
   return state;
 }

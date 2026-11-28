@@ -2,6 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { constants, cpus, setPriority } from 'node:os';
 import { createInterface } from 'node:readline';
 import { isValidFen } from '@chess/chess-core';
+import { Chess } from 'chess.js';
 import { type Analysis, type EngineLine, uciToSan } from './score.ts';
 
 export type { Analysis, EngineLine };
@@ -26,6 +27,11 @@ export interface AnalyseOptions {
   multipv?: number;
   /** Called with the lines as they deepen. */
   onUpdate?(analysis: Analysis): void;
+  /**
+   * The moves that led to the position, from an earlier one (UCI). With them the engine knows which
+   * positions have occurred, so it sees a repetition as the draw it is.
+   */
+  history?: { startFen: string; moves: string[] };
 }
 
 /**
@@ -64,6 +70,11 @@ export class Engine {
 
   private constructor(process: ChildProcessWithoutNullStreams) {
     this.process = process;
+    // Writing to a program that has just ended fails with EPIPE before "exit" is seen; unhandled, that
+    // error would take the whole server down. The exit itself is reported through "exit".
+    process.stdin.on('error', () => {
+      this.exited = true;
+    });
     createInterface({ input: process.stdout }).on('line', (line) => this.onLine(line));
     process.on('exit', () => {
       this.exited = true;
@@ -80,6 +91,8 @@ export class Engine {
     }
     const failed = new Promise<never>((_, reject) => {
       child.once('error', (error) => reject(new EngineError(`Could not start Stockfish at ${options.path}: ${error.message}`)));
+      // A program that is not an engine often just ends: say so at once rather than after the timeout.
+      child.once('exit', (code) => reject(new EngineError(`${options.path} stopped (exit code ${code ?? '?'}) before answering as a UCI engine. Is it Stockfish?`)));
     });
     const engine = new Engine(child);
     try {
@@ -152,7 +165,7 @@ export class Engine {
       san: uciToSan(search.fen, pv),
     };
     search.lines.set(multipv, entry);
-    // Report once a depth has all its lines.
+    // Report once a depth has all its lines (no more than there are legal moves).
     if (multipv === search.multipv || search.lines.size === 1) search.onUpdate?.(this.snapshot(search));
   }
 
@@ -182,10 +195,17 @@ export class Engine {
             resolve({ fen, engine: this.name, depth: 0, lines: [] }); // replaced before it started
             return;
           }
-          const multipv = options.multipv ?? 3;
+          // Never ask for more lines than there are moves: the engine would never send the missing ones.
+          const legal = new Chess(fen).moves().length;
+          if (legal === 0) {
+            resolve({ fen, engine: this.name, depth: 0, lines: [] }); // mate or stalemate: nothing to search
+            return;
+          }
+          const multipv = Math.min(options.multipv ?? 3, legal);
           this.search = { fen, multipv, lines: new Map(), onUpdate: options.onUpdate, resolve };
           this.send(`setoption name MultiPV value ${multipv}`);
-          this.send(`position fen ${fen}`);
+          const history = options.history;
+          this.send(history?.moves.length ? `position fen ${history.startFen} moves ${history.moves.join(' ')}` : `position fen ${fen}`);
           if (options.movetime) this.send(`go movetime ${options.movetime}`);
           else if (options.depth) this.send(`go depth ${options.depth}`);
           else this.send('go infinite');

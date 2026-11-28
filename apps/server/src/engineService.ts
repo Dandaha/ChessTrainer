@@ -102,6 +102,16 @@ export class EngineService {
 
   /** A fixed-depth analysis, from the cache when it is deep enough. */
   async evaluate(fen: string, options: { depth?: number; multipv?: number } = {}): Promise<Analysis> {
+    // One at a time: a second evaluation would stop the first mid-search, which would then come back
+    // shallow (and be cached as if it were deep).
+    const turn = this.toolsTurn.then(() => this.evaluateNow(fen, options));
+    this.toolsTurn = turn.catch(() => undefined);
+    return turn;
+  }
+
+  private toolsTurn: Promise<unknown> = Promise.resolve();
+
+  private async evaluateNow(fen: string, options: { depth?: number; multipv?: number }): Promise<Analysis> {
     const depth = options.depth ?? 18;
     const multipv = options.multipv ?? 3;
     const engine = await this.get('tools');
@@ -109,7 +119,8 @@ export class EngineService {
     if (cached) return cached;
     const analysis = await engine.analyse(fen, { depth, multipv });
     this.touch('tools');
-    storeAnalysis(this.db, analysis);
+    // Only a search that reached its depth is worth keeping.
+    if (analysis.depth >= depth) storeAnalysis(this.db, analysis);
     return analysis;
   }
 
@@ -122,20 +133,28 @@ export class EngineService {
     multipv: number,
     onUpdate: (analysis: Analysis) => void,
     onDone: (analysis: Analysis) => void,
+    /** The moves since the last capture or pawn move, when the position has occurred among them. */
+    history?: { startFen: string; moves: string[] },
   ): Promise<() => void> {
     const engine = await this.get('panel');
-    const cached = bestCachedAnalysis(this.db, fen, engine.name);
+    // A repeated position is judged with its history (a draw by repetition), so neither the cache's
+    // view of it nor this one belongs to the position alone.
+    const withHistory = Boolean(history?.moves.length);
+    const cached = withHistory ? undefined : bestCachedAnalysis(this.db, fen, engine.name);
     if (cached && cached.lines.length >= multipv) onUpdate({ ...cached, lines: cached.lines.slice(0, multipv) });
     let stopped = false;
     const run = engine.analyse(fen, {
       multipv,
       depth: 40,
+      history,
       onUpdate: (analysis) => {
+        // Still in use: keep the idle timer from stopping the engine under an open panel.
+        this.touch('panel');
         if (!stopped && (!cached || analysis.depth > cached.depth)) onUpdate(analysis);
       },
     });
     void run.then((analysis) => {
-      storeAnalysis(this.db, analysis);
+      if (!withHistory) storeAnalysis(this.db, analysis);
       this.touch('panel');
       if (!stopped) onDone(analysis);
     });

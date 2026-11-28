@@ -27,13 +27,22 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
 
   /** Server-sent events with the lines as they deepen. Closing the panel closes the stream and stops the search. */
   app.get('/api/engine/stream', async (req, reply) => {
-    const q = req.query as { fen: string; multipv?: string };
+    const q = req.query as { fen: string; multipv?: string; start?: string; moves?: string };
+    const moves = q.moves?.split(',').filter((m) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m)) ?? [];
+    const history = q.start && moves.length ? { startFen: q.start, moves } : undefined;
     reply.hijack();
     const res = reply.raw;
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    const send = (event: string, data: unknown) => {
+      if (!res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    // The response's "close" says the panel went away (the request's fires as soon as it is read).
+    let closed = false;
     let stop: (() => void) | null = null;
-    req.raw.on('close', () => stop?.());
+    res.on('close', () => {
+      closed = true;
+      stop?.();
+    });
     try {
       stop = await engines.stream(
         q.fen,
@@ -43,7 +52,10 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
           send('done', analysis);
           res.end();
         },
+        history,
       );
+      // Closed while the engine was starting: stop the search it has just begun.
+      if (closed) stop();
     } catch (error) {
       send('error', { error: error instanceof EngineError ? error.message : 'The engine could not start.' });
       res.end();

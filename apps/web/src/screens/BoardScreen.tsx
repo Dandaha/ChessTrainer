@@ -1,4 +1,4 @@
-import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
+import { type GameEnd, type MoveNode, describeGameEnd, gameEnd, positionKey, getHeader, isOnMainline, mainlineFrom, writePgn } from '@chess/chess-core';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AnnotationPanel } from '../AnnotationPanel.tsx';
 import { Board } from '../Board.tsx';
@@ -63,7 +63,8 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 
   const { game, current } = g;
   const end = useMemo(() => gameEnd(g.path), [g.path]);
-  const engine = useEngine(current.fen, engineOn);
+  const history = useMemo(() => (engineOn ? repetitionHistory(g.path) : undefined), [engineOn, g.path]);
+  const engine = useEngine(current.fen, engineOn, 3, history);
   const best = engine.analysis?.fen === current.fen ? engine.analysis.lines[0] : undefined;
   const engineShapes: DrawShape[] = best?.pv[0]
     ? [{ orig: best.pv[0].slice(0, 2) as DrawShape['orig'], dest: best.pv[0].slice(2, 4) as DrawShape['orig'], brush: 'paleBlue' }]
@@ -325,9 +326,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
                 <EnginePanel
                   state={engine}
                   onTurnOff={toggleEngine}
-                  onPlayLine={(sans) => {
-                    for (const san of sans) if (!g.play(san)) break;
-                  }}
+                  onPlayLine={(sans) => g.playLineFrom(current.id, sans)}
                 />
               ) : (
                 <div className="space-y-2 p-3 text-sm">
@@ -478,4 +477,20 @@ function Branches({ node, choice, onEnter }: { node: MoveNode; choice: number; o
       ))}
     </div>
   );
+}
+
+/**
+ * The moves the engine needs to see a repetition: those since the last capture or pawn move (only
+ * positions after it can repeat), sent only when the position on the board has occurred among them.
+ * Otherwise the engine gets the position alone, which its cache can answer.
+ */
+function repetitionHistory(path: MoveNode[]): { startFen: string; moves: string[] } | undefined {
+  const node = path.at(-1);
+  if (!node || path.length < 5) return undefined;
+  const clock = Number(node.fen.split(' ')[4] ?? 0);
+  if (clock < 4) return undefined;
+  const span = path.slice(-(clock + 1));
+  const key = positionKey(node.fen);
+  if (!span.slice(0, -1).some((n) => positionKey(n.fen) === key)) return undefined;
+  return { startFen: span[0]!.fen, moves: span.slice(1).map((n) => n.uci) };
 }

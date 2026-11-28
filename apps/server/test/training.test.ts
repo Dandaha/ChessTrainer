@@ -6,6 +6,7 @@ import { addLine, createRepertoire } from '../db/repertoire.ts';
 import { engineCache } from '../db/schema.ts';
 import { queue, review, stats, summary } from '../db/training.ts';
 import { buildApp } from '../src/app.ts';
+import { EngineService } from '../src/engineService.ts';
 import { firstAnswerMove } from '../src/routes/engine.ts';
 
 function freshDb() {
@@ -114,6 +115,19 @@ describe.skipIf(!existsSync(STOCKFISH))('the engine through the API', () => {
     expect(Date.now() - t).toBeLessThan(200);
     expect(again.lines).toHaveLength(1);
     await app.close();
+  });
+
+  it('lets two evaluations at once both reach their depth, and caches only full ones', async () => {
+    const db = freshDb();
+    updateSettings(db, { enginePath: STOCKFISH });
+    const engines = new EngineService(db);
+    const [a, b] = await Promise.all([
+      engines.evaluate('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1', { depth: 12, multipv: 1 }),
+      engines.evaluate('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2', { depth: 12, multipv: 1 }),
+    ]);
+    expect(a.depth).toBeGreaterThanOrEqual(12);
+    expect(b.depth).toBeGreaterThanOrEqual(12);
+    await engines.shutdown();
   });
 
   it('checks a solve-mode move against the answer and the engine', async () => {

@@ -44,6 +44,30 @@ describe.skipIf(!available)('Stockfish', () => {
     expect(result.lines).toHaveLength(2);
   });
 
+  it('reports positions with fewer legal moves than lines asked for', async () => {
+    // Two legal moves for Black; three lines asked.
+    const fen = '4kb1r/rp2pp1p/p5pn/2pp4/Q3PN1P/P1Pn1P2/RP1P2P1/1NB2K1R b k - 0 14';
+    const updates: number[] = [];
+    const result = await engine.analyse(fen, { depth: 8, multipv: 3, onUpdate: (a) => updates.push(a.depth) });
+    expect(result.lines).toHaveLength(2);
+    expect(result.depth).toBeGreaterThanOrEqual(8);
+    expect(updates.length).toBeGreaterThan(1);
+  });
+
+  it('searches the position reached by the moves it is given', async () => {
+    const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+    const result = await engine.analyse(fen, { depth: 6, multipv: 1, history: { startFen: start, moves: ['e2e4', 'e7e5'] } });
+    // The line is read from the position after 1.e4 e5: legal there, so it has SAN.
+    expect(result.lines[0]?.san.length).toBeGreaterThan(0);
+  });
+
+  it('says at once when the program ends instead of answering', async () => {
+    const started = Date.now();
+    await expect(Engine.start({ path: '/bin/false' })).rejects.toThrow(/stopped .* before answering as a UCI engine/);
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
   it('refuses a position no game can reach instead of choking on it mid-search', async () => {
     await expect(engine.analyse('4k3/8/8/8/8/8/3q4/4K3 b - - 0 1', { depth: 4 })).rejects.toThrow('not a legal chess position');
   });
