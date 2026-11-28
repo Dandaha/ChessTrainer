@@ -47,6 +47,40 @@ describe('training cards', () => {
     expect(summary(db, new Date(), 2)).toMatchObject({ repertoireDue: 0, newToday: 2, total: 4 });
   });
 
+  it('keeps to the day’s new cards even when one of them is reviewed again', () => {
+    const db = freshDb();
+    const id = createRepertoire(db, { name: 'Main', color: 'white' });
+    addLine(db, id, START, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4']);
+    const now = new Date('2026-11-26T10:00:00Z');
+    const [a, b] = queue(db, { now, newPerDay: 2 });
+    review(db, a!.card.id, 1, false, now);
+    review(db, b!.card.id, 3, true, now);
+    const later = new Date(now.getTime() + 20 * 60_000);
+    review(db, a!.card.id, 3, true, later);
+    expect(summary(db, later, 2).newToday).toBe(0);
+    expect(queue(db, { now: later, newPerDay: 2 }).filter((c) => c.card.reps === 0)).toHaveLength(0);
+  });
+
+  it('counts a review in the local day it happened, not the UTC one', () => {
+    const tz = process.env.TZ;
+    process.env.TZ = 'Asia/Jerusalem';
+    try {
+      const db = freshDb();
+      const id = createRepertoire(db, { name: 'Main', color: 'white' });
+      addLine(db, id, START, ['d4', 'd5', 'c4']);
+      // 01:30 on the 28th in Jerusalem is still the 27th in UTC.
+      const lateNight = new Date('2026-11-27T23:30:00Z');
+      const [card] = queue(db, { now: lateNight });
+      review(db, card!.card.id, 3, true, lateNight);
+      const days = stats(db, new Date('2026-11-28T10:00:00Z')).days;
+      expect(days.at(-1)).toEqual({ day: '2026-11-28', reviews: 1, correct: 1 });
+      expect(days.at(-2)).toMatchObject({ day: '2026-11-27', reviews: 0 });
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
+  });
+
   it('schedules the next review: a wrong answer comes back soon, a right one later', () => {
     const db = freshDb();
     const id = createRepertoire(db, { name: 'Main', color: 'white' });

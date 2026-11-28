@@ -114,16 +114,22 @@ function startOfDay(now: Date): string {
   return start.toISOString();
 }
 
-/** How many cards seen for the first time today. */
+/**
+ * How many cards were seen for the first time today: cards whose first review falls today, however
+ * often they were reviewed since (counting cards reviewed exactly once let a re-asked card free a slot).
+ */
 function newSeenToday(db: Db, now: Date): number {
   return (
-    db
-      .select({ n: sql<number>`count(distinct ${trainingReviews.cardId})` })
-      .from(trainingReviews)
-      .innerJoin(trainingCards, eq(trainingCards.id, trainingReviews.cardId))
-      .where(and(sql`${trainingReviews.reviewedAt} >= ${startOfDay(now)}`, eq(trainingCards.reps, 1)))
-      .get()?.n ?? 0
+    db.get<{ n: number }>(
+      sql`select count(*) as n from (select min(reviewed_at) as first from training_reviews group by card_id) where first >= ${startOfDay(now)}`,
+    )?.n ?? 0
   );
+}
+
+/** A local calendar day, "2026-11-28": the day the person lives in, not the UTC one. */
+function localDay(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 export interface RepertoireCardDetail {
@@ -287,10 +293,17 @@ export function stats(db: Db, now = new Date()): TrainingStats {
     .from(trainingReviews)
     .all();
   const recent = reviews.filter((r) => r.at >= since.toISOString());
+  // Days are cut at local midnight, so they are named and grouped by the local date too.
+  const byDay = new Map<string, typeof recent>();
+  for (const r of recent) {
+    const day = localDay(new Date(r.at));
+    byDay.set(day, [...(byDay.get(day) ?? []), r]);
+  }
   const days = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(since.getTime() + i * 86_400_000);
-    const day = d.toISOString().slice(0, 10);
-    const list = recent.filter((r) => r.at.slice(0, 10) === day);
+    const d = new Date(since);
+    d.setDate(since.getDate() + i);
+    const day = localDay(d);
+    const list = byDay.get(day) ?? [];
     return { day, reviews: list.length, correct: list.filter((r) => r.correct).length };
   });
 
