@@ -139,7 +139,7 @@ export function LineDrill({ repertoireId, guide = [], onEnd }: { repertoireId: s
       {error ? (
         <p className="p-6 text-danger">{error}</p>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col items-center-safe justify-center-safe gap-8 overflow-auto p-6 md:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col items-center-safe justify-center-safe gap-6 overflow-auto p-6 md:flex-row md:items-start">
           <Board
             node={node}
             orientation={color}
@@ -148,7 +148,7 @@ export function LineDrill({ repertoireId, guide = [], onEnd }: { repertoireId: s
             onMove={onMove}
             onShapes={() => {}}
           />
-          <div className="w-full max-w-sm space-y-4">
+          <div className="w-full max-w-sm space-y-4 md:rounded-xl md:border md:border-line md:bg-surface md:p-4">
             <p className="text-sm text-muted">
               Practice: the whole line from the first move. Your review schedule is not changed.
             </p>

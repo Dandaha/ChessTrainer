@@ -664,9 +664,10 @@ function Session({
           Stop <kbd>Esc</kbd>
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col items-center-safe justify-center-safe gap-8 overflow-auto p-6 md:flex-row">
+      {/* The board, and beside it the prompt in a card level with the board's top, as on puzzle sites. */}
+      <div className="flex min-h-0 flex-1 flex-col items-center-safe justify-center-safe gap-6 overflow-auto p-6 md:flex-row md:items-start">
         <Board node={node} orientation={color} autoShapes={arrows} viewOnly={!ready || !!outcome} onMove={(f, t, p) => void onMove(f, t, p)} onShapes={() => {}} />
-        <div className="w-full max-w-sm space-y-4">
+        <div className="w-full max-w-sm space-y-4 md:rounded-xl md:border md:border-line md:bg-surface md:p-4">
           {card.kind === 'repertoire_move' ? (
             <>
               <p className="text-sm text-muted">
