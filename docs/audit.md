@@ -51,14 +51,9 @@ All ten fixed on 28 November 2026 (coach stream, local-API lock-down, secrets ke
 - Markdown: a line block after a board reads from that board; a numbered list followed by bullets merges.
 
 ### Data and engineering
-- No input validation: a `PUT` writes any field it is given (a new FEN leaves `position_id` stale; `sideToSolve: "purple"` is stored); a malformed body is a 500, not a 400. zod is installed.
-- Updates that touch several tables are not one transaction (a bad set id half-applies an update).
-- The 30-day purge leaves orphan concept links and training cards.
-- Large imports freeze the server: one synchronous transaction, 3,000 games ≈ 30 s with every request waiting; parsing builds a new Chess object per move (`tree.ts:142`).
+- Imports are slow: about 5 ms a game (5,000 games ≈ 35 s), most of it chess.js building a full move object for every move; the app stays usable meanwhile, but the dialog shows no progress.
 - The database grows ≈ 40 KB per game, mostly the position index (≈ 3 GB at the spec's 100k games).
 - The training queue takes ≈ 2.7 s on a 5,000-move repertoire (details built for every new card before keeping 20).
-- No backup, and copying `chess.db` alone while the app runs misses the WAL.
-- Server errors leave no log in the installed app.
 - A FEN game without `SetUp "1"` is written without it; NAGs above 255 are accepted.
 - The installer's database driver is installed with `npm install --no-package-lock`, so its own dependencies float between builds.
 
