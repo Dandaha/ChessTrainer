@@ -100,10 +100,21 @@ function elo(game: Game, name: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** Where a game came from, so importing it again is recognised. */
+/**
+ * Addresses that name one game: a Lichess game or study chapter, a Chess.com game. Other Site values
+ * (a club's or a database's home page) are shared by many games and say nothing about which one.
+ */
+const SINGLE_GAME_URL = [
+  /^https?:\/\/(www\.)?lichess\.org\/[A-Za-z0-9]{8}([/?#]|$)/,
+  /^https?:\/\/(www\.)?lichess\.org\/study\/[A-Za-z0-9]{8}\/[A-Za-z0-9]{8}([/?#]|$)/,
+  /^https?:\/\/(www\.)?chess\.com\/(game\/(live|daily)|(live|daily)\/game)\/\d+([/?#]|$)/,
+];
+
+/** Where a game came from, so importing it again is recognised: its own address, else its text. */
 function sourceRefFor(game: Game, pgn: string): string {
-  const link = header(game, 'Link') ?? header(game, 'Site');
-  if (link && /^https?:\/\//.test(link)) return link.replace(/^http:/, 'https:');
+  for (const link of [header(game, 'Link'), header(game, 'Site')]) {
+    if (link && SINGLE_GAME_URL.some((pattern) => pattern.test(link))) return link.replace(/^http:/, 'https:');
+  }
   return `sha1:${createHash('sha1').update(pgn).digest('hex')}`;
 }
 

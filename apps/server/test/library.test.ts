@@ -75,6 +75,17 @@ describe('the game library', () => {
     expect(importGames(db, pgn, { source: 'file' }).duplicates).toBe(1);
   });
 
+  it('keeps different games that share a website address in their Site tag', () => {
+    const db = freshDb();
+    const game = (white: string, moves: string) => `[Site "https://www.chessgames.com"]\n[White "${white}"]\n[Black "X"]\n\n${moves} *\n`;
+    const pgn = [game('A', '1. e4 e5'), game('B', '1. d4 d5'), game('C', '1. c4 c5')].join('\n');
+    expect(importGames(db, pgn, { source: 'file' })).toMatchObject({ imported: 3, duplicates: 0 });
+    // A Chess.com game is still recognised by its Link the second time.
+    const chesscom = '[Site "Chess.com"]\n[Link "https://www.chess.com/game/live/123456789"]\n[White "A"]\n[Black "B"]\n\n1. e4 *\n';
+    importGames(db, chesscom, { source: 'chesscom' });
+    expect(importGames(db, chesscom.replace('1. e4 *', '1. e4 e5 *'), { source: 'chesscom' }).duplicates).toBe(1);
+  });
+
   it('reports a broken game and imports the rest', () => {
     const db = freshDb();
     const report = importGames(db, `${TWO_GAMES}\n[Event "Bad"]\n\n1. e4 e5 2. Ke3 *\n`, { source: 'file' });

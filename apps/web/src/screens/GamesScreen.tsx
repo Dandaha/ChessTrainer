@@ -62,6 +62,12 @@ export function GamesScreen() {
     };
   }, [filters, collectionId, offset, refresh]);
 
+  // A selection belongs to the rows on screen: a new filter, collection or page starts afresh, so a
+  // bulk action can never reach games that are no longer visible.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [filters, collectionId, offset]);
+
   const setFilter = (key: keyof Filters, value: string) => {
     setFilters((f) => ({ ...f, [key]: value }));
     setOffset(0);
