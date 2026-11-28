@@ -11,6 +11,26 @@ import { Toggle } from './ui.tsx';
 
 const iconButton = 'grid h-8 w-8 place-items-center rounded-md border border-line bg-surface text-muted hover:bg-surface-2 hover:text-text';
 
+/** A button of the board's toolbars: an icon, no border; a soft highlight on hover, green when on. */
+const toolButton =
+  'group/tool relative grid h-8 w-8 place-items-center rounded-lg text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text active:scale-95 motion-reduce:transition-none ' +
+  'aria-pressed:bg-accent-soft aria-pressed:text-accent aria-expanded:bg-accent-soft aria-expanded:text-accent';
+
+/** The name of a toolbar button, with its key, shown beside it on hover or keyboard focus. */
+function Tip({ label, shortcut, side }: { label: string; shortcut?: string; side: 'left' | 'above' }) {
+  return (
+    <span
+      role="tooltip"
+      className={`pointer-events-none absolute z-50 flex items-center gap-1.5 whitespace-nowrap rounded-md bg-text px-2 py-1 text-xs font-medium text-bg opacity-0 shadow-panel transition-opacity delay-300 duration-150 group-hover/tool:opacity-100 group-focus-visible/tool:opacity-100 motion-reduce:transition-none ${
+        side === 'left' ? 'top-1/2 right-full mr-2 -translate-y-1/2' : 'bottom-full left-1/2 mb-2 -translate-x-1/2'
+      }`}
+    >
+      {label}
+      {shortcut && <kbd className="!border-bg/30 !bg-transparent !text-bg">{shortcut}</kbd>}
+    </span>
+  );
+}
+
 /** Start, back, forward, end. */
 export function MoveNav({ onStart, onBack, onForward, onEnd }: { onStart(): void; onBack(): void; onForward(): void; onEnd(): void }) {
   const buttons: [IconName, string, () => void][] = [
@@ -20,12 +40,16 @@ export function MoveNav({ onStart, onBack, onForward, onEnd }: { onStart(): void
     ['last', 'End of the line (End)', onEnd],
   ];
   return (
-    <div className="flex shrink-0 gap-1" role="group" aria-label="Moves">
-      {buttons.map(([icon, label, action]) => (
-        <button key={icon} type="button" onClick={action} aria-label={label} title={label} className={`${iconButton} w-9`}>
-          <Icon name={icon} size={16} />
-        </button>
-      ))}
+    <div className="flex shrink-0 items-center gap-0.5 rounded-xl border border-line bg-surface p-0.5 shadow-sm" role="group" aria-label="Moves">
+      {buttons.map(([icon, label, action]) => {
+        const [name, key] = label.split(' (');
+        return (
+          <button key={icon} type="button" onClick={action} aria-label={label} className={`${toolButton} w-9`}>
+            <Icon name={icon} size={17} />
+            <Tip label={name!} shortcut={key?.replace(')', '')} side="above" />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -42,23 +66,31 @@ export function BoardTools({ onFlip, fullScreen }: { onFlip(): void; fullScreen:
     return () => document.removeEventListener('fullscreenchange', changed);
   }, []);
   return (
-    <div className="flex shrink-0 flex-col gap-1" role="toolbar" aria-label="Board tools" aria-orientation="vertical">
-      <button type="button" className={iconButton} onClick={onFlip} aria-label="Flip the board (F)" title="Flip the board (F)">
-        <Icon name="flip" size={16} />
+    <div
+      className="flex h-fit shrink-0 flex-col items-center gap-0.5 rounded-xl border border-line bg-surface p-0.5 shadow-sm"
+      role="toolbar"
+      aria-label="Board tools"
+      aria-orientation="vertical"
+    >
+      <button type="button" className={toolButton} onClick={onFlip} aria-label="Flip the board (F)">
+        <Icon name="flip" size={17} />
+        <Tip label="Flip the board" shortcut="F" side="left" />
       </button>
       <button
         type="button"
-        className={iconButton}
+        className={toolButton}
+        aria-pressed={isFull}
         aria-label={isFull ? 'Leave full screen (Esc)' : 'Full screen'}
-        title={isFull ? 'Leave full screen (Esc)' : 'Full screen'}
         onClick={() => {
           if (document.fullscreenElement) void document.exitFullscreen();
           else void fullScreen.current?.requestFullscreen?.().catch(() => {});
         }}
       >
-        <Icon name={isFull ? 'shrink' : 'expand'} size={16} />
+        <Icon name={isFull ? 'shrink' : 'expand'} size={17} />
+        <Tip label={isFull ? 'Leave full screen' : 'Full screen'} shortcut={isFull ? 'Esc' : undefined} side="left" />
       </button>
-      <Popover label="Board settings" icon="settings" side="left">
+      <span aria-hidden className="my-0.5 h-px w-5 bg-line" />
+      <Popover label="Board settings" icon="settings" side="left" className={toolButton} tip>
         <BoardSettings />
       </Popover>
     </div>
@@ -74,13 +106,14 @@ function BoardSettings() {
     ['coordinates', 'Coordinates'],
   ];
   return (
-    <div className="space-y-1">
-      <p className="px-1 text-xs font-semibold text-muted">Every board</p>
-      {rows.map(([key, label]) => (
-        <div key={key}>
-          <Toggle on={prefs[key]} onToggle={() => writeBoardPref(key, !prefs[key])} label={label} />
-        </div>
-      ))}
+    <div>
+      <p className="px-2 pt-1 pb-1.5 text-sm font-semibold">Board</p>
+      <div className="space-y-0.5">
+        {rows.map(([key, label]) => (
+          <Toggle key={key} row on={prefs[key]} onToggle={() => writeBoardPref(key, !prefs[key])} label={label} />
+        ))}
+      </div>
+      <p className="px-2 pt-1.5 text-xs text-muted">For every board in the app.</p>
     </div>
   );
 }
@@ -95,12 +128,15 @@ export function Popover({
   children,
   side = 'below',
   className = iconButton,
+  tip = false,
 }: {
   label: string;
   icon: IconName;
   children: ReactNode;
   side?: 'below' | 'left';
   className?: string;
+  /** A toolbar button: its name shows as the toolbar's tooltip, not the browser's. */
+  tip?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -124,15 +160,16 @@ export function Popover({
   }, [open]);
   return (
     <div ref={box} className="relative">
-      <button type="button" className={className} aria-label={label} title={label} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <Icon name={icon} size={16} />
+      <button type="button" className={className} aria-label={label} title={tip ? undefined : label} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name={icon} size={tip ? 17 : 16} />
+        {tip && !open && <Tip label={label} side="left" />}
       </button>
       {open && (
         <div
           role="dialog"
           aria-label={label}
-          className={`absolute z-40 w-64 rounded-lg border border-line bg-surface p-2 text-sm shadow-panel ${
-            side === 'left' ? 'top-0 right-full mr-2' : 'top-full right-0 mt-1'
+          className={`pop-in absolute z-40 w-64 rounded-xl border border-line bg-surface p-1.5 text-sm shadow-panel ${
+            side === 'left' ? 'top-0 right-full mr-2 origin-top-right' : 'top-full right-0 mt-1 origin-top-right'
           }`}
         >
           {children}
