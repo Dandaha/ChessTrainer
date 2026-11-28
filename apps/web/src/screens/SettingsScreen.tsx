@@ -140,6 +140,10 @@ export function SettingsScreen() {
       <div className="mx-auto w-full max-w-3xl space-y-8 p-6">
         <section className="space-y-3">
           <h2 className="font-semibold">You</h2>
+          <p className="text-sm text-muted">
+            Your usernames import your games and mark which side you played in them; your rating tells the coach
+            and the gap finder what level to aim at. All optional.
+          </p>
           <label className={row}>
             <span className="text-muted">Theme</span>
             <select
@@ -199,10 +203,11 @@ export function SettingsScreen() {
               what happened.
             </p>
             <code className="block rounded-md bg-surface-2 px-3 py-2 text-xs break-all">{system.dataDir}</code>
+            {system.canOpenFolders && <OpenFolder which="data" label="Open the folder" />}
           </section>
         )}
 
-        <BackupSettings />
+        <BackupSettings canOpen={!!system?.canOpenFolders} />
 
         {settingsSections.map((Section, i) => (
           <Section key={i} />
@@ -636,7 +641,27 @@ function UpdateSettings() {
   );
 }
 
-function BackupSettings() {
+/** Opens the data folder or the backups in Explorer (the installed app only). */
+function OpenFolder({ which, label }: { which: 'data' | 'backups'; label: string }) {
+  const ws = useWorkspace();
+  return (
+    <button
+      type="button"
+      className={buttonClass}
+      onClick={async () => {
+        try {
+          await api.openFolder(which);
+        } catch (error) {
+          ws.toast((error as Error).message, true);
+        }
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function BackupSettings({ canOpen }: { canOpen: boolean }) {
   const ws = useWorkspace();
   const [data, setData] = useState<{ folder: string; backups: Backup[] } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -675,6 +700,7 @@ function BackupSettings() {
         <code className="min-w-0 text-xs text-muted [overflow-wrap:anywhere]" title={data.folder}>
           {data.folder}
         </code>
+        {canOpen && <OpenFolder which="backups" label="Open the backups" />}
       </div>
       {data.backups.length === 0 ? (
         <Empty>No backups yet.</Empty>

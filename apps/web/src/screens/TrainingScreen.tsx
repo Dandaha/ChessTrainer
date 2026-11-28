@@ -153,10 +153,20 @@ export function TrainingScreen() {
             <h2 className="text-lg font-semibold">Today{scopeName ? ` in ${scopeName}` : ''}</h2>
             <QueueLine summary={summary} />
             {summary.total === 0 ? (
-              <p className="text-sm text-muted">
-                Nothing to train yet. Your main-line moves become cards as soon as a repertoire has them, and saved
-                positions join when you tick “In training”.
-              </p>
+              <div className="space-y-3">
+                <p className="text-sm text-muted">
+                  Nothing to train yet. Your main-line moves become cards as soon as a repertoire has them, and saved
+                  positions join when you tick “In training”.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={buttonClass} onClick={() => navigate('repertoire')}>
+                    Build a repertoire
+                  </button>
+                  <button type="button" className={buttonClass} onClick={() => navigate('positions')}>
+                    Save positions
+                  </button>
+                </div>
+              </div>
             ) : summary.repertoireDue + summary.positionsDue + summary.newToday === 0 ? (
               <div className="space-y-3">
                 <p className="text-sm text-muted">All done for today: each card comes back on the day it is due.{repertoireId ? ' Drilling lines is practice, any time.' : ''}</p>
@@ -256,7 +266,7 @@ function Stats({ stats }: { stats: TrainingStats }) {
       </table>
       {stats.weakest.length > 0 && (
         <div className="space-y-1">
-          <h3 className="text-sm font-semibold">Weakest lines</h3>
+          <h3 className="text-sm font-semibold">Missed most often</h3>
           <ul className="space-y-0.5 text-sm">
             {stats.weakest.map((w) => (
               <li key={w.cardId} className="flex justify-between gap-3">

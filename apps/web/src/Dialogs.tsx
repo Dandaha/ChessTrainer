@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { readTextFile } from './files.ts';
-import { buttonClass, primaryClass } from './components/ui.tsx';
+import { FileButton, buttonClass, primaryClass } from './components/ui.tsx';
 
 /** Open dialogs, newest last: only the top one answers Escape, so closing a question keeps its parent. */
 const openDialogs: symbol[] = [];
@@ -178,15 +178,9 @@ export function ImportDialog({
         </p>
       )}
       <div className="mt-3 flex items-center justify-between gap-2">
-        <label className={`${buttonClass} cursor-pointer`}>
+        <FileButton className={buttonClass} accept=".pgn,.txt,text/plain" onFile={(file) => void openFile(file)}>
           Open file…
-          <input
-            type="file"
-            accept=".pgn,.txt,text/plain"
-            className="hidden"
-            onChange={(e) => void openFile(e.target.files?.[0])}
-          />
-        </label>
+        </FileButton>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted">
             <kbd>Ctrl</kbd> <kbd>Enter</kbd>

@@ -275,7 +275,9 @@ export const api = {
   trash: () => call<TrashItem[]>('GET', '/api/trash'),
   /** Only the desktop app answers this; the browser version gets a 404. */
   systemInfo: () =>
-    call<{ desktop: boolean; dataDir: string; databasePath: string; envFile: string; mcpConfig: unknown }>('GET', '/api/system/info'),
+    call<{ desktop: boolean; canOpenFolders?: boolean; dataDir: string; databasePath: string; envFile: string; mcpConfig: unknown }>('GET', '/api/system/info'),
+  /** The installed app opens its data folder or the backups in Explorer. */
+  openFolder: (which: 'data' | 'backups') => call('POST', '/api/system/open-folder', { which }),
   /** The installed app's version and updates; also only the desktop app answers. */
   updates: () => call<UpdateInfo>('GET', '/api/system/updates'),
   checkForUpdates: () => call<UpdateInfo>('POST', '/api/system/updates/check'),

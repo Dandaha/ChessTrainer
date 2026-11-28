@@ -35,6 +35,33 @@ export function SideHeading({ label, addLabel, addTitle, onAdd }: { label: strin
   );
 }
 
+/**
+ * "Open file…": a real button (Tab reaches it, Enter and Space press it) that opens the file chooser;
+ * the file input itself stays hidden. Choosing the same file twice reads it twice.
+ */
+export function FileButton({ children, accept, onFile, className }: { children: ReactNode; accept: string; onFile(file: File): void; className: string }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <button type="button" className={className} onClick={() => input.current?.click()}>
+        {children}
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept={accept}
+        className="hidden"
+        tabIndex={-1}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) onFile(file);
+        }}
+      />
+    </>
+  );
+}
+
 /** A list in a side column: All, collections, sets... */
 export function SideList({
   items,

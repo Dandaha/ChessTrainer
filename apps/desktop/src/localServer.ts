@@ -29,6 +29,8 @@ export interface LocalServerOptions {
   mcp?: { command: string; script: string; env?: Record<string, string> };
   /** The app's updates, shown in Settings. */
   updates?: Updates;
+  /** Opens a folder in the system's file manager (Explorer); returns an error message, or "" when it opened. */
+  openFolder?: (path: string) => Promise<string>;
 }
 
 /** A fixed port, so the page keeps the same address (and its saved theme and draft) between starts. */
@@ -96,6 +98,7 @@ export async function startLocalServer(options: LocalServerOptions): Promise<{ u
     const engine = await stockfish;
     return {
       desktop: true,
+      canOpenFolders: !!options.openFolder,
       dataDir: options.dataDir,
       databasePath: databasePath(),
       envFile: envFilePath(),
@@ -115,6 +118,15 @@ export async function startLocalServer(options: LocalServerOptions): Promise<{ u
           }
         : null,
     };
+  });
+  // Settings' "Open folder": only the data folder or its backups, never a path the page names.
+  app.post('/api/system/open-folder', async (req, reply) => {
+    const which = (req.body as { which?: unknown } | undefined)?.which;
+    if (!options.openFolder || (which !== 'data' && which !== 'backups')) return reply.code(400).send({ error: 'No such folder to open.' });
+    const folder = which === 'data' ? options.dataDir : backupFolderFor(databasePath());
+    mkdirSync(folder, { recursive: true });
+    const problem = await options.openFolder(folder);
+    return problem ? reply.code(500).send({ error: `Could not open the folder: ${problem}` }) : { ok: true };
   });
   serveWeb(app, options.webDir);
 

@@ -2,7 +2,7 @@ import { formatTimeControl } from '@chess/chess-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type CollectionSummary, type GameSort, type GameSummary, type ImportProgress, type ImportReport, api } from '../api.ts';
 import { Modal } from '../Dialogs.tsx';
-import { Empty, PageHeader, Pager, SideHeading, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
+import { Empty, FileButton, PageHeader, Pager, SideHeading, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { undoToast, useWorkspace } from '../workspace.tsx';
 import { navigate, useRoute } from '../router.ts';
 import { useAskText } from '../components/AskText.tsx';
@@ -115,6 +115,8 @@ export function GamesScreen() {
 
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const [lastImportCount, setLastImportCount] = useState(0);
+  // The whole library's count, for "All games" whatever list is on screen.
+  const [libraryCount, setLibraryCount] = useState<number | null>(null);
   const scope = {
     collectionId: collectionId && collectionId !== LAST_IMPORT ? collectionId : undefined,
     lastImport: collectionId === LAST_IMPORT ? (1 as const) : undefined,
@@ -142,6 +144,10 @@ export function GamesScreen() {
     api
       .games({ lastImport: 1, limit: 1 })
       .then((d) => setLastImportCount(d.total))
+      .catch(() => {});
+    api
+      .games({ limit: 1 })
+      .then((d) => setLibraryCount(d.total))
       .catch(() => {});
   }, [refresh]);
 
@@ -339,14 +345,14 @@ export function GamesScreen() {
           title="All the games listed, on every page, as one PGN file"
           onClick={async () => {
             try {
-              const { pgn, count } = await api.exportGames({
+              const { pgn, count: n } = await api.exportGames({
                 ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
                 ...scope,
                 sort: sort?.key,
                 dir: sort?.dir,
               });
               download(new Blob([pgn], { type: 'application/x-chess-pgn' }), `${safeFileName(current?.name ?? 'games')}-${new Date().toISOString().slice(0, 10)}.pgn`);
-              ws.toast(`Exported ${count} game${count === 1 ? '' : 's'}.`);
+              ws.toast(`Exported ${count(n)} game${n === 1 ? '' : 's'}.`);
             } catch (error) {
               ws.toast((error as Error).message, true);
             }
@@ -365,8 +371,8 @@ export function GamesScreen() {
         <aside className="w-48 shrink-0 space-y-3 overflow-y-auto border-r border-line p-3 xl:w-56">
           <SideList
             items={[
-              // The library's count, not a filter's: none while a filter is on.
-              { id: '', label: 'All games', count: collectionId || fen || Object.values(filters).some(Boolean) ? undefined : data?.total },
+              // The whole library's count, whatever list or filter is on screen.
+              { id: '', label: 'All games', count: libraryCount ?? undefined },
               ...(lastImportCount ? [{ id: LAST_IMPORT, label: 'Last import', count: lastImportCount }] : []),
             ]}
             activeId={collectionId}
@@ -376,7 +382,11 @@ export function GamesScreen() {
             <SideHeading
               label="Collections"
               addLabel="New collection"
-              addTitle={selected.size ? `A new collection with the ${selected.size} selected game${selected.size === 1 ? '' : 's'}` : 'A new collection'}
+              addTitle={
+                selected.size
+                  ? `A new collection with the ${count(everyMatching && data ? data.total : selected.size)} selected game${selected.size === 1 && !everyMatching ? '' : 's'}`
+                  : 'A new collection'
+              }
               onAdd={() => void newCollection()}
             />
             {collections.length ? (
@@ -737,7 +747,7 @@ export function GamesScreen() {
         <DuplicatesDialog
           onClose={() => setFindingDuplicates(false)}
           onRemoved={(ids) => {
-            undoToast(ws, `Moved ${ids.length} extra cop${ids.length === 1 ? 'y' : 'ies'} to the trash.`, () => api.restore('game', ids), reload);
+            undoToast(ws, `Moved ${count(ids.length)} extra cop${ids.length === 1 ? 'y' : 'ies'} to the trash.`, () => api.restore('game', ids), reload);
             reload();
           }}
         />
@@ -778,8 +788,8 @@ export function GamesScreen() {
 }
 
 export function importSummary(report: ImportReport): string {
-  const parts = [`Imported ${report.imported} game${report.imported === 1 ? '' : 's'}`];
-  if (report.duplicates) parts.push(`${report.duplicates} already in the library`);
+  const parts = [`Imported ${count(report.imported)} game${report.imported === 1 ? '' : 's'}`];
+  if (report.duplicates) parts.push(`${count(report.duplicates)} already in the library`);
   if (report.variants) parts.push(`${report.variants} left out (not standard chess)`);
   if (report.errors.length) parts.push(`${report.errors.length} could not be read (first: line ${report.errors[0]!.line}, ${report.errors[0]!.message})`);
   return `${parts.join(', ')}.`;
@@ -916,18 +926,9 @@ function ImportGamesDialog({
             placeholder="Paste one or many games here, drop a .pgn file, or open one."
             className={`${inputClass} w-full font-mono`}
           />
-          <label className={`${buttonClass} inline-block cursor-pointer`}>
+          <FileButton className={buttonClass} accept=".pgn,.txt" onFile={async (file) => setText(await readTextFile(file))}>
             Open .pgn file…
-            <input
-              type="file"
-              accept=".pgn,.txt"
-              className="hidden"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (file) setText(await readTextFile(file));
-              }}
-            />
-          </label>
+          </FileButton>
         </div>
       ) : (
         <div className="flex flex-wrap items-end gap-3">

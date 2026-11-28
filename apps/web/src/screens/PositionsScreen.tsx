@@ -24,7 +24,7 @@ const LISTS = [
   { id: 'all', label: 'All positions' },
   { id: 'training', label: 'In training' },
   { id: 'recent', label: 'Saved in the last 30 days' },
-  { id: 'games', label: 'From my games' },
+  { id: 'games', label: 'Saved from games' },
 ];
 
 export function PositionsScreen() {
@@ -266,7 +266,8 @@ export function PositionsScreen() {
                     : 'No saved positions here yet. Set one up with New position, or press S on the board to save the position in front of you.'}
             </Empty>
           )}
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
+          {/* Cards between 11 and 16rem: a lone card does not stretch across a narrow column. */}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,16rem))] gap-3">
             {data?.positions.map((p, i) => (
               <div key={p.id} className={`group overflow-hidden rounded-xl border bg-surface ${p.id === openId ? 'border-accent' : 'border-line'}`}>
                 <button type="button" onClick={() => setOpenId(p.id)} className="block w-full text-left" aria-label={`Open ${p.title}`}>

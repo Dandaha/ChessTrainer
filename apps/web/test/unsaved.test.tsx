@@ -54,7 +54,7 @@ describe('unsaved work on the board', () => {
     expect(screen.getByText('Analysis')).toBeTruthy();
     fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
     await waitFor(() => expect(movesShown()).toBe(true));
-    expect(screen.getByText('Dave – Friend')).toBeTruthy();
+    expect(screen.getByText(/^Dave – Friend, \d{4}$/)).toBeTruthy();
 
     // Saving now updates that game rather than adding a second copy.
     fireEvent.keyDown(window, { key: 's', ctrlKey: true });

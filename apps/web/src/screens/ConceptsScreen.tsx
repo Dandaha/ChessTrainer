@@ -136,8 +136,9 @@ export function ConceptsScreen() {
             <ConceptView key={id} id={id} startEditing={route.params.get('edit') === '1'} onChanged={reload} />
           ) : (
             <Empty>
-              Pick a concept, or create one: a pawn structure, a plan, a motif, an endgame technique. Write it up in
-              markdown; a FEN on its own line becomes a board, and moves like 1. e4 e5 become links.
+              Pick a concept, or create one: a pawn structure, a plan, a motif, an endgame technique. In its text, a
+              FEN on a line of its own becomes a board, moves like 1. e4 e5 become links, and **bold**, *italics* and
+              - lists work as in a chat message.
             </Empty>
           )}
         </section>

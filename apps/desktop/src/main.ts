@@ -34,6 +34,7 @@ if (!app.requestSingleInstanceLock()) {
         stockfishDir: join(resources, 'stockfish'),
         mcp: { command: process.execPath, script: join(here, 'mcp.mjs'), env: { ELECTRON_RUN_AS_NODE: '1' } },
         updates,
+        openFolder: (path) => shell.openPath(path),
       });
       rmSync(join(app.getPath('userData'), 'startup-error.txt'), { force: true });
     } catch (error) {
@@ -81,6 +82,22 @@ if (!app.requestSingleInstanceLock()) {
       if ((input.control || input.meta) && input.key.toLowerCase() === 'r') {
         event.preventDefault();
         window?.webContents.reload();
+      }
+      // Ctrl+= / Ctrl+- / Ctrl+0 zoom, as in a browser (the app has no menu, which would give them).
+      if (input.control || input.meta) {
+        const contents = window?.webContents;
+        if (!contents) return;
+        const zoom = contents.getZoomLevel();
+        if (input.key === '=' || input.key === '+') {
+          event.preventDefault();
+          contents.setZoomLevel(Math.min(zoom + 0.5, 4));
+        } else if (input.key === '-') {
+          event.preventDefault();
+          contents.setZoomLevel(Math.max(zoom - 0.5, -3));
+        } else if (input.key === '0') {
+          event.preventDefault();
+          contents.setZoomLevel(0);
+        }
       }
     });
 

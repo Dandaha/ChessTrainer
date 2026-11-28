@@ -79,9 +79,12 @@ export function HomeScreen() {
             <h2 className="text-sm font-semibold">Training today</h2>
             <QueueLine summary={queue} />
           </div>
-          <button type="button" className={primaryClass} onClick={() => navigate('training')}>
-            Start training
-          </button>
+          {/* Offered only when something is up today; otherwise the line above says all is done. */}
+          {queue.repertoireDue + queue.positionsDue + queue.newToday > 0 && (
+            <button type="button" className={primaryClass} onClick={() => navigate('training')}>
+              Start training
+            </button>
+          )}
         </section>
       )}
 

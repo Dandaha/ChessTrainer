@@ -47,7 +47,7 @@ describe('training', () => {
     fireEvent.keyDown(window, { key: 'Enter' });
 
     // Back on the overview; the stats count the three answers, two right.
-    expect(await screen.findByText('Weakest lines')).toBeTruthy();
+    expect(await screen.findByText('Missed most often')).toBeTruthy();
     const stats = (await app.inject({ method: 'GET', url: '/api/training/stats' })).json();
     expect(stats.byRepertoire[0]).toMatchObject({ cards: 2, reviews: 3 });
     expect(stats.byRepertoire[0].accuracy).toBeCloseTo(2 / 3);
@@ -74,7 +74,7 @@ describe('training', () => {
     type('c5');
     expect(await screen.findByText('Right: c5.')).toBeTruthy();
     fireEvent.keyDown(window, { key: 'Enter' });
-    expect(await screen.findByText('Weakest lines')).toBeTruthy();
+    expect(await screen.findByText('Missed most often')).toBeTruthy();
     const stats = (await app.inject({ method: 'GET', url: '/api/training/stats' })).json();
     expect(stats.byRepertoire[0]).toMatchObject({ reviews: 2, accuracy: 0.5 });
   });

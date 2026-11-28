@@ -261,6 +261,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     },
     saveToLibrary: async () => {
       try {
+        // A game first saved from the board gets today's date (and the event "Analysis") when it has
+        // none, so the library lists it by when it was made, not as an undated "? – ?".
+        if (!linked) {
+          const today = new Date();
+          const date = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
+          const unknown = (name: string) => /^[?.\s]*$/.test(getHeader(g.game, name) ?? '');
+          const fill: Record<string, string> = {};
+          if (unknown('Event')) fill.Event = 'Analysis';
+          if (unknown('Date')) fill.Date = date;
+          if (Object.keys(fill).length) {
+            // In place, keeping the tags' order; added at the end if the game has no such tag at all.
+            const headers = g.game.headers.map((h) => (fill[h.name] ? { ...h, value: fill[h.name]! } : h));
+            for (const [name, value] of Object.entries(fill)) if (!headers.some((h) => h.name === name)) headers.push({ name, value });
+            // Part of the save, not an edit of its own: no step in the undo history, nothing unsaved.
+            g.game.headers = headers;
+          }
+        }
         const pgn = writePgn(g.game);
         if (linked) {
           try {
