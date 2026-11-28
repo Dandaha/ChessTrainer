@@ -43,6 +43,7 @@ Still open (not chosen for now):
 - Chess960 and null moves.
 - Positions inside variations indexed (only the main line is).
 - Training streaks and a summary at the end of a training session. (Solving a set on demand was built on 28 November 2026.)
+- Sub-concepts: a concept that belongs under another (absolute and relative pin under Pin, the kinds of opposition under Opposition). For now they are aliases or related concepts; to decide: a parent concept, shown as a tree, or the flat list with better related links.
 
 ## Final check, 28 November 2026
 
