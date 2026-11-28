@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { readTextFile } from './files.ts';
 
 /** A modal panel. Escape or a click outside closes it. */
 export function Modal({ title, onClose, children }: { title: string; onClose(): void; children: ReactNode }) {
@@ -60,7 +61,7 @@ export function ImportDialog({
 
   const openFile = async (file: File | undefined) => {
     if (!file) return;
-    const content = await file.text();
+    const content = await readTextFile(file);
     setText(content);
     load(content);
   };

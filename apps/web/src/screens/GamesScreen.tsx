@@ -4,6 +4,7 @@ import { Modal } from '../Dialogs.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { useWorkspace } from '../workspace.tsx';
 import { useAskText } from '../components/AskText.tsx';
+import { readTextFile } from '../files.ts';
 import { download, safeFileName } from '../pieces.ts';
 
 const LIMIT = 50;
@@ -463,7 +464,7 @@ function ImportGamesDialog({
               className="hidden"
               onChange={async (e) => {
                 const file = e.target.files?.[0];
-                if (file) setText(await file.text());
+                if (file) setText(await readTextFile(file));
               }}
             />
           </label>

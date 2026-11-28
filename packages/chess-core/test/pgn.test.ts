@@ -228,3 +228,15 @@ describe('writePgn', () => {
     expect(shape(reimported.root)).toEqual(shape(game.root));
   });
 });
+
+describe('a broken game in a file', () => {
+  it('costs only that game: a broken tag does not leave the rest of its header behind as a game', () => {
+    const text = [
+      '[Event "One"]\n[White "Broken tag White]\n[Black "B"]\n\n1. e4 e5 *',
+      '[Event "Two"]\n[White "C"]\n[Black "D"]\n\n1. d4 d5 *',
+    ].join('\n\n');
+    const { games, errors } = parsePgn(text);
+    expect(errors).toHaveLength(1);
+    expect(games.map((g) => g.headers.find((h) => h.name === 'Event')?.value)).toEqual(['Two']);
+  });
+});

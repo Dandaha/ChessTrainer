@@ -18,6 +18,7 @@ import { Board, type DrawShape } from '../Board.tsx';
 import { Modal } from '../Dialogs.tsx';
 import { LinkedConcepts } from '../components/ConceptPicker.tsx';
 import { Empty, PageHeader, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
+import { readTextFile } from '../files.ts';
 import { download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
 import { useWorkspace } from '../workspace.tsx';
@@ -542,7 +543,7 @@ function ImportRepertoire({ repertoire, onClose, onDone }: { repertoire: Reperto
       <div className="mt-3 flex justify-between">
         <label className={`${buttonClass} cursor-pointer`}>
           Open file…
-          <input type="file" accept=".pgn,.txt" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setText(await f.text()); }} />
+          <input type="file" accept=".pgn,.txt" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setText(await readTextFile(f)); }} />
         </label>
         <button
           type="button"

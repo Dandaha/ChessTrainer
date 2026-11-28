@@ -129,15 +129,23 @@ class Lexer {
   }
 
   /** After an error, moves on to the next line that starts a tag section. */
+  /**
+   * After a broken game, moves on to the next one: the first tag that follows a blank line. (The
+   * next line starting with "[" may be the broken game's own next tag, which would make a game of
+   * the rest of its header.)
+   */
   skipToNextGame(): void {
-    const next = this.text.indexOf('\n[', this.pos);
     this.pending = [];
-    if (next === -1) {
+    const boundary = /\n[ \t]*\n\s*\[/g;
+    boundary.lastIndex = this.pos;
+    const found = boundary.exec(this.text);
+    if (!found) {
       this.pos = this.text.length;
       return;
     }
-    for (let i = this.pos; i <= next; i += 1) if (this.text[i] === '\n') this.line += 1;
-    this.pos = next + 1;
+    const next = found.index + found[0].length - 1;
+    for (let i = this.pos; i < next; i += 1) if (this.text[i] === '\n') this.line += 1;
+    this.pos = next;
   }
 
   private skipLine(): void {
