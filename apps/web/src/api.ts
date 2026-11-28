@@ -203,7 +203,7 @@ export const api = {
   exportGames: (filters: GameFilters) => call<{ pgn: string; count: number }>('GET', `/api/games/export${query(filters)}`),
   exportGameIds: (ids: string[]) => call<{ pgn: string; count: number }>('POST', '/api/games/export', { ids }),
   createGame: (pgn: string) => call<{ id: string }>('POST', '/api/games', { pgn }),
-  updateGame: (id: string, changes: { pgn?: string; notes?: string | null; tags?: string[] }) =>
+  updateGame: (id: string, changes: { pgn?: string; notes?: string | null; tags?: string[]; myColor?: 'white' | 'black' | null }) =>
     call<GameDetail>('PUT', `/api/games/${id}`, changes),
   deleteGames: (ids: string[]) => call('POST', '/api/games/delete', { ids }),
   importPgn: (pgn: string, collectionId?: string, onProgress?: (p: ImportProgress) => void) =>

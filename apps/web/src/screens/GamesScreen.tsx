@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { type CollectionSummary, type GameSort, type GameSummary, type ImportProgress, type ImportReport, api } from '../api.ts';
 import { Modal } from '../Dialogs.tsx';
 import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
@@ -35,6 +35,10 @@ export function GamesScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [editing, setEditing] = useState<GameSummary | null>(null);
+  // The row the keyboard is on: arrows move it, Enter opens, Space selects, E edits, Delete deletes.
+  const [focusRow, setFocusRow] = useState(0);
+  const rows = useRef<(HTMLTableRowElement | null)[]>([]);
 
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const askText = useAskText();
@@ -97,6 +101,38 @@ export function GamesScreen() {
   };
 
   const current = collections.find((c) => c.id === collectionId);
+
+  const deleteOne = async (game: GameSummary) => {
+    await api.deleteGames([game.id]);
+    ws.toast(`Moved the game to the trash (Settings → Trash to restore).`);
+    reload();
+  };
+
+  const onRowKey = (event: React.KeyboardEvent, index: number, game: GameSummary) => {
+    const count = data?.games.length ?? 0;
+    const go = (next: number) => {
+      const row = Math.min(Math.max(next, 0), count - 1);
+      setFocusRow(row);
+      rows.current[row]?.focus();
+    };
+    const actions: Record<string, () => void> = {
+      ArrowDown: () => go(index + 1),
+      ArrowUp: () => go(index - 1),
+      Home: () => go(0),
+      End: () => go(count - 1),
+      PageDown: () => data && offset + LIMIT < data.total && setOffset(offset + LIMIT),
+      PageUp: () => offset > 0 && setOffset(Math.max(0, offset - LIMIT)),
+      Enter: () => void ws.openGameById(game.id),
+      ' ': () => toggle(game.id),
+      e: () => setEditing(game),
+      Delete: () => void deleteOne(game),
+    };
+    const action = actions[event.key];
+    if (action && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      action();
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -299,11 +335,25 @@ export function GamesScreen() {
                         }}
                       />
                     ))}
+                    <th className="w-12 px-2 py-2">
+                      <span className="sr-only">Edit</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {data.games.map((g) => (
-                    <tr key={g.id} className="cursor-pointer hover:bg-surface-2" onClick={() => void ws.openGameById(g.id)}>
+                  {data.games.map((g, i) => (
+                    <tr
+                      key={g.id}
+                      ref={(el) => {
+                        rows.current[i] = el;
+                      }}
+                      tabIndex={i === Math.min(focusRow, data.games.length - 1) ? 0 : -1}
+                      aria-label={`${g.white ?? '?'} – ${g.black ?? '?'}, ${g.result}`}
+                      className="cursor-pointer outline-none hover:bg-surface-2 focus-visible:bg-accent-soft"
+                      onClick={() => void ws.openGameById(g.id)}
+                      onFocus={() => setFocusRow(i)}
+                      onKeyDown={(e) => onRowKey(e, i, g)}
+                    >
                       <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" aria-label="Select game" checked={selected.has(g.id)} onChange={() => toggle(g.id)} />
                       </td>
@@ -327,16 +377,49 @@ export function GamesScreen() {
                           </span>
                         ))}
                       </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          className="text-xs text-muted hover:text-accent"
+                          title="Notes, tags and my colour (E)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditing(g);
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+          {data && data.total > 0 && (
+            <p className="text-xs text-muted">
+              <kbd>↑</kbd> <kbd>↓</kbd> move through the list, <kbd>Enter</kbd> opens, <kbd>Space</kbd> selects, <kbd>E</kbd> edits,{' '}
+              <kbd>Delete</kbd> moves to the trash, <kbd>PgUp</kbd> <kbd>PgDn</kbd> turn the page.
+            </p>
+          )}
           {data && <Pager offset={offset} limit={LIMIT} total={data.total} onChange={setOffset} />}
         </section>
       </div>
 
+      {editing && (
+        <GameDetailsDialog
+          game={editing}
+          onClose={() => {
+            setEditing(null);
+            rows.current[focusRow]?.focus();
+          }}
+          onSaved={() => {
+            ws.toast('Saved.');
+            reload();
+          }}
+        />
+      )}
       {importing && (
         <ImportGamesDialog
           collections={collections}
@@ -576,5 +659,90 @@ function ImportProgressLine({ progress }: { progress: ImportProgress | null }) {
       ) : null}
       <p>{label}</p>
     </div>
+  );
+}
+
+/** A game's notes, tags and which side I played, edited from the library. */
+function GameDetailsDialog({ game, onClose, onSaved }: { game: GameSummary; onClose(): void; onSaved(): void }) {
+  const ws = useWorkspace();
+  const [notes, setNotes] = useState<string | null>(null);
+  const [tags, setTags] = useState(game.tags.join(', '));
+  const [myColor, setMyColor] = useState<string>(game.myColor ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .game(game.id)
+      .then((detail) => setNotes(detail.notes ?? ''))
+      .catch((e: Error) => setError(e.message));
+  }, [game.id]);
+
+  const save = async () => {
+    try {
+      await api.updateGame(game.id, {
+        notes: notes?.trim() ? notes.trim() : null,
+        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+        myColor: myColor === 'white' || myColor === 'black' ? myColor : null,
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <Modal title={`${game.white ?? '?'} – ${game.black ?? '?'}`} onClose={onClose}>
+      <form
+        className="space-y-3 text-sm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <label className="block space-y-1">
+          <span className="text-xs text-muted">Notes</span>
+          <textarea
+            aria-label="Notes"
+            rows={5}
+            className={`${inputClass} w-full`}
+            value={notes ?? ''}
+            disabled={notes === null}
+            placeholder={notes === null ? 'Loading…' : 'What this game taught me…'}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-muted">Tags (commas)</span>
+          <input aria-label="Tags" className={`${inputClass} w-full`} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="e.g. endgame, blunder" />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-muted">I played</span>
+          <select aria-label="I played" className={inputClass} value={myColor} onChange={(e) => setMyColor(e.target.value)}>
+            <option value="">Neither (not my game)</option>
+            <option value="white">White</option>
+            <option value="black">Black</option>
+          </select>
+        </label>
+        {error && (
+          <p role="alert" className="text-xs text-danger">
+            {error}
+          </p>
+        )}
+        <div className="flex justify-between gap-2">
+          <button type="button" className={buttonClass} onClick={() => void ws.openGameById(game.id)}>
+            Open on the board
+          </button>
+          <div className="flex gap-2">
+            <button type="button" className={buttonClass} onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className={primaryClass} disabled={notes === null}>
+              Save
+            </button>
+          </div>
+        </div>
+      </form>
+    </Modal>
   );
 }
