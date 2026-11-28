@@ -23,6 +23,27 @@ interface Outcome {
   detail?: string;
   /** The right move, drawn on the board. */
   arrow?: string;
+  /** What "Show solution" reveals for a saved position: the answer line, and its first move to draw. */
+  solution?: { text: string; uci?: string };
+}
+
+/** The first move of a written answer ("2. ... Qh4#" → "Qh4#"); move numbers and dots are not moves. */
+function firstAnswerMove(answer: string): string | undefined {
+  return answer
+    .trim()
+    .split(/\s+/)
+    .map((token) => token.replace(/^\d+\.+/, ''))
+    .find((token) => token && !/^\.+$/.test(token));
+}
+
+/** A move in SAN from a position as UCI, or undefined when it is not legal there. */
+function uciOf(fen: string, san: string | undefined): string | undefined {
+  if (!san) return undefined;
+  try {
+    return playMove(createGame(fen).root, san).uci;
+  } catch {
+    return undefined;
+  }
 }
 
 export function TrainingScreen() {
@@ -185,6 +206,9 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
   const [checking, setChecking] = useState(false);
   const [right, setRight] = useState(0);
   const [typed, setTyped] = useState('');
+  // A card answered wrong stays wrong for scheduling, even when "Try again" then finds the move.
+  const [failed, setFailed] = useState(false);
+  const [showSolution, setShowSolution] = useState(false);
   const timers = useRef<number[]>([]);
   const card = cards[index];
 
@@ -193,6 +217,8 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
     timers.current.forEach(clearTimeout);
     timers.current = [];
     setOutcome(null);
+    setFailed(false);
+    setShowSolution(false);
     if (!card) return;
     if (card.kind === 'saved_position') {
       setNode(at(card.saved.fen));
@@ -218,18 +244,30 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
   const grade = useCallback(
     async (g: Grade) => {
       if (!card || !outcome) return;
-      await api.review(card.card.id, g, outcome.correct).catch((e: Error) => ws.toast(e.message, true));
-      if (outcome.correct) setRight((r) => r + 1);
+      const correct = outcome.correct && !failed;
+      await api.review(card.card.id, g, correct).catch((e: Error) => ws.toast(e.message, true));
+      if (correct) setRight((r) => r + 1);
       if (index + 1 >= cards.length) onEnd();
       else setIndex(index + 1);
     },
-    [card, outcome, index, cards.length, onEnd, ws],
+    [card, outcome, failed, index, cards.length, onEnd, ws],
   );
+
+  /** Back to the position for another go; the card is already counted as missed. */
+  const tryAgain = useCallback(() => {
+    if (!card) return;
+    setFailed(true);
+    setShowSolution(false);
+    setOutcome(null);
+    setNode(at(card.kind === 'saved_position' ? card.saved.fen : card.fen));
+  }, [card]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onEnd();
       if (!outcome) return;
+      if (!outcome.correct && event.key.toLowerCase() === 't') tryAgain();
+      if (!outcome.correct && event.key.toLowerCase() === 's' && outcome.solution) setShowSolution(true);
       const g = Number(event.key);
       if (g >= 1 && g <= 4) void grade(g as Grade);
       if (event.key === 'Enter' || event.key === ' ') {
@@ -239,7 +277,7 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [outcome, grade, onEnd]);
+  }, [outcome, grade, onEnd, tryAgain]);
 
   const onMove = async (from: string, to: string, promotion?: string) => {
     // While Stockfish checks the answer, the board waits: a second move would land on the card.
@@ -254,7 +292,12 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
     setNode(played);
     if (card.kind === 'repertoire_move') {
       if (played.uci === card.answer.uci) {
-        setOutcome({ correct: true, suggested: 3, message: `Right: ${card.answer.san}.`, detail: card.answer.comment ?? undefined });
+        setOutcome({
+          correct: true,
+          suggested: failed ? 1 : 3,
+          message: failed ? `Right this time: ${card.answer.san}.` : `Right: ${card.answer.san}.`,
+          detail: card.answer.comment ?? undefined,
+        });
       } else if (card.alternatives.some((a) => a.uci === played.uci)) {
         setOutcome({
           correct: true,
@@ -281,10 +324,17 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
       // another move that wins as much, counts, as on Lichess and ChessTempo.
       const engineGood = result.engine?.good === true;
       const correct = result.answerMatch === true || engineGood;
+      const answer = card.saved.answer?.trim();
+      const best = result.engine?.best;
       setOutcome({
         correct,
-        suggested: correct ? 3 : 1,
-        message:
+        suggested: correct && !failed ? 3 : 1,
+        solution: answer
+          ? { text: `Answer: ${answer}`, uci: uciOf(card.saved.fen, firstAnswerMove(answer)) }
+          : best
+            ? { text: `Stockfish plays ${best}.`, uci: uciOf(card.saved.fen, best) }
+            : undefined,
+        message: correct && failed ? `Right this time: ${result.san}.` :
           result.answerMatch === true
             ? `Right: ${result.san} is your answer.`
             : result.answerMatch === false
@@ -312,8 +362,9 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
     );
   }
 
-  const arrows: DrawShape[] = outcome?.arrow
-    ? [{ orig: outcome.arrow.slice(0, 2) as DrawShape['orig'], dest: outcome.arrow.slice(2, 4) as DrawShape['orig'], brush: 'green' }]
+  const shown = outcome?.arrow ?? (showSolution ? outcome?.solution?.uci : undefined);
+  const arrows: DrawShape[] = shown
+    ? [{ orig: shown.slice(0, 2) as DrawShape['orig'], dest: shown.slice(2, 4) as DrawShape['orig'], brush: 'green' }]
     : [];
 
   return (
@@ -352,6 +403,7 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
           {ready && !outcome && (
             <input
               aria-label="Type your move"
+              autoFocus
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
               onKeyDown={(e) => {
@@ -380,6 +432,19 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
             <div className={`space-y-2 rounded-xl border p-4 ${outcome.correct ? 'border-accent' : 'border-danger'}`}>
               <p className={`font-semibold ${outcome.correct ? 'text-accent' : 'text-danger'}`}>{outcome.message}</p>
               {outcome.detail && <p className="text-sm">{outcome.detail}</p>}
+              {showSolution && outcome.solution && <p className="text-sm font-medium">{outcome.solution.text}</p>}
+              {!outcome.correct && (
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={buttonClass} onClick={tryAgain}>
+                    Try again <kbd>T</kbd>
+                  </button>
+                  {outcome.solution && !showSolution && (
+                    <button type="button" className={buttonClass} onClick={() => setShowSolution(true)}>
+                      Show solution <kbd>S</kbd>
+                    </button>
+                  )}
+                </div>
+              )}
               {card.kind === 'saved_position' && (card.saved.keyIdea || card.saved.notesMd) && (
                 <div className="space-y-1 border-t border-line pt-2 text-sm">
                   {card.saved.keyIdea && <p>{card.saved.keyIdea}</p>}

@@ -44,4 +44,42 @@ describe('training', () => {
     const stats = (await app.inject({ method: 'GET', url: '/api/training/stats' })).json();
     expect(stats.byRepertoire[0]).toMatchObject({ cards: 2, reviews: 2, accuracy: 0.5 });
   });
+
+  it('lets me try again after a miss, which still counts as missed', async () => {
+    const { app } = startServer();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/repertoires', payload: { name: 'Sicilian', color: 'black' } })).json();
+    await app.inject({ method: 'POST', url: `/api/repertoires/${id}/line`, payload: { sans: ['e4', 'c5'] } });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Train everything due' }));
+
+    await screen.findByText('Your move', {}, { timeout: 3000 });
+    type('e5');
+    expect(await screen.findByText('Your repertoire plays c5 here, not e5.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Try again/ }));
+    type('c5');
+    expect(await screen.findByText('Right this time: c5.')).toBeTruthy();
+    // The highlighted grade is Again, and the review is stored as a miss.
+    expect(screen.getByRole('button', { name: /Again/ }).className).toContain('bg-accent');
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(await screen.findByText('Weakest lines')).toBeTruthy();
+    const stats = (await app.inject({ method: 'GET', url: '/api/training/stats' })).json();
+    expect(stats.byRepertoire[0]).toMatchObject({ reviews: 1, accuracy: 0 });
+  });
+
+  it('shows the solution of a saved position after a miss', async () => {
+    const { app } = startServer();
+    await app.inject({
+      method: 'POST',
+      url: '/api/saved-positions',
+      payload: { fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1', title: 'Back rank', answer: '1. Rd8#', inTraining: true },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Train everything due' }));
+    await screen.findByText('Back rank');
+    type('g3');
+    expect(await screen.findByText('Your answer was 1. Rd8#; you played g3.')).toBeTruthy();
+    expect(screen.queryByText('Answer: 1. Rd8#')).toBeNull();
+    fireEvent.keyDown(window, { key: 's' });
+    expect(await screen.findByText('Answer: 1. Rd8#')).toBeTruthy();
+  });
 });
