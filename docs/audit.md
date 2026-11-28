@@ -44,6 +44,15 @@ Still open (not chosen for now):
 - Positions inside variations indexed (only the main line is).
 - Training streaks, a session summary, and solving a set of positions on demand.
 
+## Final check, 28 November 2026
+
+Four testers used the built app (as the installer runs it) area by area, and an old library (version 0.1.6) was opened with the new version: 402 games, a repertoire, training history and concepts all came through, the position index went from 27,702 rows to 15 and the file from 14.7 MB to 4.3 MB. What they found was fixed the same day. Left open, all small:
+- Undoing "Remove from collection" puts the games back at the end of the collection, not where they were.
+- A set shown through a filter numbers its cards within the filter.
+- Two sets can have the same name.
+- Leaving the games screen and coming back resets its filters.
+- At a threefold repetition the engine shows the lines for playing on (with a note that the game is drawn), not a flat 0.00: Stockfish does not score its starting position as a draw.
+
 ## What works well
 
 - The PGN round trip on the board is exact, including comments, NAGs, nested variations, arrows, clocks and escaped tags.
