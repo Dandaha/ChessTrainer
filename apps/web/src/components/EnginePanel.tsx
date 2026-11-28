@@ -32,7 +32,7 @@ export function EvalBar({ line, flipped, decided }: { line?: EngineLine; flipped
   const score = barScore(line, decided);
   return (
     <div
-      className="relative w-5 shrink-0 self-stretch overflow-hidden bg-[#3a3935]"
+      className="relative w-5 shrink-0 self-stretch overflow-hidden border border-[#7a776f] bg-[#3a3935]"
       aria-label={label ? `Evaluation ${label}` : 'Evaluation'}
       title={label}
     >
