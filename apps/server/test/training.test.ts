@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { openDatabase, runMigrations } from '../db/client.ts';
 import { createSavedPosition, updateSavedPosition, updateSettings } from '../db/library.ts';
-import { addLine, createRepertoire } from '../db/repertoire.ts';
+import { addLine, createRepertoire, reachesByMyMove } from '../db/repertoire.ts';
 import { engineCache } from '../db/schema.ts';
 import { queue, review, stats, summary } from '../db/training.ts';
 import { buildApp } from '../src/app.ts';
@@ -46,6 +46,32 @@ describe('training cards', () => {
     addLine(db, id, START, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4']);
     expect(queue(db, { newPerDay: 2 })).toHaveLength(2);
     expect(summary(db, new Date(), 2)).toMatchObject({ repertoireDue: 0, newToday: 2, total: 4 });
+  });
+
+  it('counts as due today exactly what a session then shows, and gives positions a share of the new slots', () => {
+    const db = freshDb();
+    const id = createRepertoire(db, { name: 'Main', color: 'white' });
+    addLine(db, id, START, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O']);
+    createSavedPosition(db, { fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1', title: 'Back rank', inTraining: true });
+    const morning = new Date(2026, 10, 26, 9, 0);
+    // New cards: repertoire moves and the position take turns.
+    const fresh = queue(db, { now: morning, newPerDay: 3 });
+    expect(fresh.map((c) => c.kind)).toEqual(['repertoire_move', 'saved_position', 'repertoire_move']);
+    // A card in review due this evening is up today, in the summary and in the queue alike.
+    const card = fresh[0]!.card;
+    db.$client.prepare('update training_cards set state = 2, due = ? where id = ?').run(new Date(2026, 10, 26, 20, 0).toISOString(), card.id);
+    expect(summary(db, morning, 0).repertoireDue).toBe(1);
+    expect(queue(db, { now: morning, newPerDay: 0 }).map((c) => c.card.id)).toEqual([card.id]);
+  });
+
+  it('knows a position the repertoire reaches through my own moves', () => {
+    const db = freshDb();
+    const id = createRepertoire(db, { name: 'QGD', color: 'white' });
+    addLine(db, id, START, ['d4', 'd5', 'c4', 'e6', 'Nf3', 'Nf6', 'Nc3']);
+    // 1.d4 d5 2.c4 e6 3.Nc3 Nf6 4.Nf3 reaches the same position as the line's 3.Nf3 Nf6 4.Nc3.
+    const transposed = 'rnbqkb1r/ppp2ppp/4pn2/3p4/2PP4/2N2N2/PP2PPPP/R1BQKB1R b KQkq - 3 4';
+    expect(reachesByMyMove(db, id, transposed)).toBe(true);
+    expect(reachesByMyMove(db, id, 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1')).toBe(false);
   });
 
   it('keeps to the day’s new cards even when one of them is reviewed again', () => {

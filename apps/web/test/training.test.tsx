@@ -39,10 +39,18 @@ describe('training', () => {
     expect(await screen.findByText('Your repertoire plays d6 here, not e6.')).toBeTruthy();
     fireEvent.keyDown(window, { key: '1' });
 
-    // Back on the overview; the stats count both answers, one right.
+    // Graded Again, the card comes back at the end of the session, now without help.
+    expect(await screen.findByText('3 / 3 · 1 right')).toBeTruthy();
+    await screen.findByText('Your move', {}, { timeout: 3000 });
+    type('d6');
+    expect(await screen.findByText('Right: d6.')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    // Back on the overview; the stats count the three answers, two right.
     expect(await screen.findByText('Weakest lines')).toBeTruthy();
     const stats = (await app.inject({ method: 'GET', url: '/api/training/stats' })).json();
-    expect(stats.byRepertoire[0]).toMatchObject({ cards: 2, reviews: 2, accuracy: 0.5 });
+    expect(stats.byRepertoire[0]).toMatchObject({ cards: 2, reviews: 3 });
+    expect(stats.byRepertoire[0].accuracy).toBeCloseTo(2 / 3);
   });
 
   it('lets me try again after a miss, which still counts as missed', async () => {
@@ -61,9 +69,14 @@ describe('training', () => {
     // The highlighted grade is Again, and the review is stored as a miss.
     expect(screen.getByRole('button', { name: /Again/ }).className).toContain('bg-accent');
     fireEvent.keyDown(window, { key: 'Enter' });
+    // Asked again at the end of the session.
+    await screen.findByText('Your move', {}, { timeout: 3000 });
+    type('c5');
+    expect(await screen.findByText('Right: c5.')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Enter' });
     expect(await screen.findByText('Weakest lines')).toBeTruthy();
     const stats = (await app.inject({ method: 'GET', url: '/api/training/stats' })).json();
-    expect(stats.byRepertoire[0]).toMatchObject({ reviews: 1, accuracy: 0 });
+    expect(stats.byRepertoire[0]).toMatchObject({ reviews: 2, accuracy: 0.5 });
   });
 
   it('shows the solution of a saved position after a miss', async () => {

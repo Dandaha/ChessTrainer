@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { type Color, type RepEdge, START_FEN, createGame, playMove, positionKey, repertoireTree } from '@chess/chess-core';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { type Card, type Grade, Rating, type State, createEmptyCard, fsrs } from 'ts-fsrs';
+import { type Card, type Grade, Rating, State, createEmptyCard, fsrs } from 'ts-fsrs';
 import type { Db } from './client.ts';
 import { type SavedPosition, getSavedPosition } from './library.ts';
 import { getEdges, listRepertoires } from './repertoire.ts';
@@ -228,11 +228,20 @@ export interface QueueSummary {
   total: number;
 }
 
+/**
+ * Whether a card is up today. A card in review is due on a day, so any time today counts; a card in a
+ * learning step (minutes after a miss) waits for its minutes. The summary and the queue both use this,
+ * so the count on the overview is what a session then shows.
+ */
+function isDue(card: CardRow, now: Date): boolean {
+  if (card.state === 0) return false;
+  return card.state === State.Review ? card.due <= endOfDay(now) : card.due <= now.toISOString();
+}
+
 export function summary(db: Db, now = new Date(), newPerDay = 20): QueueSummary {
   syncCards(db, now);
   const cards = activeCards(db);
-  const end = endOfDay(now);
-  const seen = cards.filter((c) => c.state !== 0 && c.due <= end);
+  const seen = cards.filter((c) => isDue(c, now));
   const fresh = cards.filter((c) => c.state === 0).length;
   return {
     repertoireDue: seen.filter((c) => c.targetType === 'repertoire_move').length,
@@ -253,11 +262,17 @@ export function queue(
   const now = options.now ?? new Date();
   syncCards(db, now);
   const cards = activeCards(db, options);
-  const due = cards.filter((c) => c.state !== 0 && c.due <= now.toISOString()).sort((a, b) => a.due.localeCompare(b.due));
+  const due = cards.filter((c) => isDue(c, now)).sort((a, b) => a.due.localeCompare(b.due));
   const newLeft = Math.max(0, (options.newPerDay ?? 20) - newSeenToday(db, now));
-  const fresh = details(db, cards.filter((c) => c.state === 0))
-    .sort((a, b) => (a.kind === 'repertoire_move' ? a.line.length : 99) - (b.kind === 'repertoire_move' ? b.line.length : 99))
-    .slice(0, newLeft);
+  // New repertoire moves (shallowest lines first) and new positions take turns for the day's slots.
+  const freshCards = details(db, cards.filter((c) => c.state === 0));
+  const moves = freshCards.filter((c) => c.kind === 'repertoire_move').sort((a, b) => (a as RepertoireCardDetail).line.length - (b as RepertoireCardDetail).line.length);
+  const positions = freshCards.filter((c) => c.kind === 'saved_position');
+  const fresh: CardDetail[] = [];
+  for (let i = 0; fresh.length < newLeft && (i < moves.length || i < positions.length); i += 1) {
+    if (i < moves.length) fresh.push(moves[i]!);
+    if (i < positions.length && fresh.length < newLeft) fresh.push(positions[i]!);
+  }
   return [...details(db, due), ...fresh].slice(0, options.limit ?? 200);
 }
 

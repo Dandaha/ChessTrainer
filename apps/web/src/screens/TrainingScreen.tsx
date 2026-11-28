@@ -198,8 +198,10 @@ function at(fen: string, uci = '', ply = 0): MoveNode {
   return { ...createGame(fen).root, id: `${fen}|${uci}`, uci, ply };
 }
 
-function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
+function Session({ cards: initial, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
   const ws = useWorkspace();
+  // The session's cards; one graded Again joins the end to be asked again, as in Anki and Chessable.
+  const [cards, setCards] = useState(initial);
   const [index, setIndex] = useState(0);
   const [node, setNode] = useState<MoveNode | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -236,7 +238,7 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
       );
     });
     return () => timers.current.forEach(clearTimeout);
-  }, [card]);
+  }, [card, index]);
 
   const color: Color = card ? (card.kind === 'repertoire_move' ? card.repertoire.color : card.saved.sideToSolve) : 'white';
   const ready = card && node && (card.kind === 'saved_position' || node.fen === card.fen);
@@ -250,10 +252,13 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
       const correct = outcome.correct && !failed;
       await api.review(card.card.id, g, correct).catch((e: Error) => ws.toast(e.message, true));
       if (correct) setRight((r) => r + 1);
-      if (index + 1 >= cards.length) onEnd();
+      const again = g === 1 && cards.filter((c) => c.card.id === card.card.id).length < 3;
+      // Reviewed now, so no longer new: it comes back to be answered, not shown (learn mode is once).
+      if (again) setCards((list) => [...list, { ...card, card: { ...card.card, state: card.card.state === 0 ? 1 : card.card.state } }]);
+      if (index + 1 >= cards.length + (again ? 1 : 0)) onEnd();
       else setIndex(index + 1);
     },
-    [card, outcome, failed, index, cards.length, onEnd, ws],
+    [card, outcome, failed, index, cards, onEnd, ws],
   );
 
   /** Back to the position for another go; the card is already counted as missed. */
@@ -314,13 +319,30 @@ function Session({ cards, onEnd }: { cards: CardDetail[]; onEnd(): void }) {
           arrow: card.answer.uci,
         });
       } else {
-        setOutcome({
-          correct: false,
-          suggested: 1,
-          message: `Your repertoire plays ${card.answer.san} here, not ${played.san}.`,
-          detail: card.answer.comment ?? undefined,
-          arrow: card.answer.uci,
-        });
+        // A move that reaches a position my repertoire reaches through my own moves is a transposition.
+        setChecking(true);
+        const reaches = await api
+          .repertoireReaches(card.repertoire.id, played.fen)
+          .then((r) => r.reaches)
+          .catch(() => false);
+        setChecking(false);
+        setOutcome(
+          reaches
+            ? {
+                correct: true,
+                suggested: failed ? 1 : 2,
+                message: `${played.san} transposes into your repertoire; here your move is ${card.answer.san}.`,
+                detail: card.answer.comment ?? undefined,
+                arrow: card.answer.uci,
+              }
+            : {
+                correct: false,
+                suggested: 1,
+                message: `Your repertoire plays ${card.answer.san} here, not ${played.san}.`,
+                detail: card.answer.comment ?? undefined,
+                arrow: card.answer.uci,
+              },
+        );
       }
       return;
     }

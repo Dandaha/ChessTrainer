@@ -24,6 +24,7 @@ import {
   getRepertoire,
   listRepertoires,
   reachedPositions,
+  reachesByMyMove,
   renameRepertoire,
   repertoiresAt,
   updateMove,
@@ -97,6 +98,9 @@ export function repertoireRoutes(app: FastifyInstance, db: Db): void {
   app.delete('/api/repertoire-moves/:id', async (req) => ({ deleted: deleteMove(db, (req.params as { id: string }).id) }));
 
   app.get('/api/repertoires/at', async (req) => repertoiresAt(db, (req.query as { fen: string }).fen));
+  app.get('/api/repertoires/:id/reaches', async (req) => ({
+    reaches: reachesByMyMove(db, (req.params as { id: string }).id, (req.query as { fen?: string }).fen ?? ''),
+  }));
 
   /** Where a game (as PGN) left each repertoire of the right colour. */
   app.post('/api/repertoires/check', async (req) => {

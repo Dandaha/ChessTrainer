@@ -244,3 +244,12 @@ export function repertoiresAt(db: Db, fen: string): { repertoire: RepertoireSumm
     })
     .filter((r) => r.reached || r.moves.length > 0);
 }
+
+/**
+ * Whether a repertoire reaches a position through one of my own moves: a move played in training
+ * that lands there transposes into the repertoire rather than leaving it.
+ */
+export function reachesByMyMove(db: Db, repertoireId: string, fen: string): boolean {
+  const key = positionKey(fen);
+  return getEdges(db, repertoireId).some((e) => e.isMyMove && e.toKey === key);
+}
