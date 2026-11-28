@@ -9,12 +9,28 @@ export const primaryClass =
   'rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:opacity-90 disabled:opacity-40';
 export const dangerClass = 'rounded-md border border-line px-3 py-1.5 text-sm text-danger hover:bg-surface-2';
 
-export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
+/** A screen's header: its title (the open set or collection, named whole), small actions on it beside
+ * the title, and the screen's buttons on the right. */
+export function PageHeader({ title, titleActions, children }: { title: string; titleActions?: ReactNode; children?: ReactNode }) {
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-5 py-3">
-      <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+      <h1 className="min-w-0 text-lg font-semibold tracking-tight [overflow-wrap:anywhere]">{title}</h1>
+      {titleActions && <div className="flex gap-3 text-xs">{titleActions}</div>}
       <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>
     </header>
+  );
+}
+
+/** The heading of a group in a side column ("Sets", "Collections"), with its add button beside it, so
+ * the button stays in sight however long the list grows. */
+export function SideHeading({ label, addLabel, addTitle, onAdd }: { label: string; addLabel: string; addTitle?: string; onAdd(): void }) {
+  return (
+    <div className="mb-1 flex items-center justify-between gap-2 px-2.5">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</span>
+      <button type="button" className="shrink-0 text-xs font-medium text-accent hover:underline" aria-label={addLabel} title={addTitle ?? addLabel} onClick={onAdd}>
+        + New
+      </button>
+    </div>
   );
 }
 
@@ -39,8 +55,10 @@ export function SideList({
               item.id === activeId ? 'bg-accent-soft font-semibold' : 'hover:bg-surface-2'
             }`}
           >
-            <span className="truncate">{item.label}</span>
-            {item.count !== undefined && <span className="text-xs text-muted tabular-nums">{item.count}</span>}
+            <span className="truncate" title={item.label}>
+              {item.label}
+            </span>
+            {item.count !== undefined && <span className="shrink-0 text-xs text-muted tabular-nums">{item.count.toLocaleString('en')}</span>}
           </button>
         </li>
       ))}
@@ -67,7 +85,7 @@ export function Pager({
   return (
     <div className="flex items-center justify-end gap-2 text-sm text-muted">
       <span className="tabular-nums">
-        {offset + 1}–{Math.min(offset + limit, total)} of {total}
+        {(offset + 1).toLocaleString('en')}–{Math.min(offset + limit, total).toLocaleString('en')} of {total.toLocaleString('en')}
       </span>
       <button type="button" className={buttonClass} disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - limit))}>
         Previous

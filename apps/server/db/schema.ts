@@ -59,11 +59,13 @@ export const games = sqliteTable('games', {
   /** Identifies the game at its source (the Lichess or Chess.com URL, or a hash of the PGN) so a re-import skips it. */
   sourceRef: text('source_ref'),
   notes: text('notes'),
+  /** The import that brought the game in (or back from the trash), for "Last import"; null for a game saved from the board. */
+  importId: text('import_id'),
   createdAt: text('created_at').notNull().$defaultFn(now),
   updatedAt: text('updated_at').notNull().$defaultFn(now),
   /** Set when deleted; the row stays in the trash for 30 days. */
   deletedAt: text('deleted_at'),
-}, (t) => [index('games_source_ref_idx').on(t.sourceRef), index('games_date_idx').on(t.date), index('games_speed_idx').on(t.speed), index('games_content_key_idx').on(t.contentKey)]);
+}, (t) => [index('games_source_ref_idx').on(t.sourceRef), index('games_date_idx').on(t.date), index('games_speed_idx').on(t.speed), index('games_content_key_idx').on(t.contentKey), index('games_import_idx').on(t.importId)]);
 
 // ---------------------------------------------------------------------------
 // Phase 2: the game library, saved positions, sets, tags, settings.

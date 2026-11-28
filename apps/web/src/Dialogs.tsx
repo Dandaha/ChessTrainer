@@ -54,26 +54,44 @@ export function useDialog(ref: React.RefObject<HTMLElement | null>, onClose: () 
   }, [ref]);
 }
 
-/** A modal panel. Escape or a click outside closes it. */
+/**
+ * A modal panel. Escape, ✕ or a click outside closes it; but a click outside only when it also
+ * started outside (not a text selection let go past the edge), and not once anything has been typed
+ * or changed in it, so a stray click never throws away what was written.
+ */
 export function Modal({ title, onClose, children }: { title: string; onClose(): void; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   useDialog(box, onClose);
+  const pressedOutside = useRef(false);
+  const changed = useRef(false);
 
   return (
     // The overlay scrolls: a dialog taller than the window (a form with every field open) can still be
     // read to its end and its buttons reached.
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 py-[10vh]" onClick={onClose} data-overlay>
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 py-[10vh]"
+      onPointerDown={(e) => {
+        pressedOutside.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && pressedOutside.current && !changed.current) onClose();
+      }}
+      data-overlay
+    >
       <div
         ref={box}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-2xl rounded-xl border border-line bg-surface p-4 shadow-panel"
+        className="w-full max-w-2xl min-w-0 rounded-xl border border-line bg-surface p-4 shadow-panel"
         onClick={(e) => e.stopPropagation()}
+        onInput={() => {
+          changed.current = true;
+        }}
       >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <button type="button" onClick={onClose} className="text-muted hover:text-text" aria-label="Close">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <h2 className="min-w-0 text-base font-semibold [overflow-wrap:anywhere]">{title}</h2>
+          <button type="button" onClick={onClose} className="shrink-0 text-muted hover:text-text" aria-label="Close">
             ✕
           </button>
         </div>

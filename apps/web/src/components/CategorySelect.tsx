@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { type PositionCategory, api } from '../api.ts';
 import { useWorkspace } from '../workspace.tsx';
 import { useAskText, useConfirm } from './AskText.tsx';
-import { SideList } from './ui.tsx';
+import { SideHeading, SideList } from './ui.tsx';
 
 /**
  * The person's own categories, one list for saved positions and one for concepts: a picker for an
@@ -146,25 +146,23 @@ export function CategoryList({
 
   return (
     <div>
-      <div className="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-muted">Categories</div>
+      <SideHeading
+        label="Categories"
+        addLabel="New category"
+        addTitle="A new category"
+        onAdd={() =>
+          void run(async () => {
+            const created = await askNewCategory(ask, kind);
+            if (created) onChanged();
+          })
+        }
+      />
       <SideList
         items={categories.map((c) => ({ id: c.name, label: c.name, count: c.count }))}
         activeId={active}
         // A second click on the active category clears the filter.
         onSelect={(name) => onSelect(name === active ? '' : name)}
       />
-      <button
-        type="button"
-        className="mt-1 px-2.5 text-sm text-accent"
-        onClick={() =>
-          void run(async () => {
-            const created = await askNewCategory(ask, kind);
-            if (created) onChanged();
-          })
-        }
-      >
-        + New category
-      </button>
       {current && (
         <div className="mt-2 flex gap-3 px-2.5 text-xs">
           <button
@@ -172,10 +170,14 @@ export function CategoryList({
             className="text-muted hover:text-text"
             onClick={() =>
               void run(async () => {
-                const name = (await ask('Rename category', current.name))?.trim();
-                if (!name || name === current.name) return;
-                const renamed = await calls.rename(current.id, name);
-                onSelect(renamed.name);
+                // A name already taken is refused in the box itself, which stays open to change it.
+                const done: { renamed?: PositionCategory } = {};
+                await ask('Rename category', current.name, '', async (text) => {
+                  const name = text.trim();
+                  if (name && name !== current.name) done.renamed = await calls.rename(current.id, name);
+                });
+                if (!done.renamed) return;
+                onSelect(done.renamed.name);
                 onChanged();
               })
             }

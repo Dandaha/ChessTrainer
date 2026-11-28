@@ -2,7 +2,7 @@ import { formatTimeControl } from '@chess/chess-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type CollectionSummary, type GameSort, type GameSummary, type ImportProgress, type ImportReport, api } from '../api.ts';
 import { Modal } from '../Dialogs.tsx';
-import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
+import { Empty, PageHeader, Pager, SideHeading, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { undoToast, useWorkspace } from '../workspace.tsx';
 import { navigate, useRoute } from '../router.ts';
 import { useAskText } from '../components/AskText.tsx';
@@ -12,6 +12,8 @@ import { readSessionView, writeSessionView } from '../storage.ts';
 import { OUTCOME_CLASS, formatPgnDate, myOutcome } from '../gameText.ts';
 
 const LIMIT = 50;
+/** Numbers as the import progress writes them: 13,041. */
+const count = (n: number) => n.toLocaleString('en');
 /** The sidebar entry for the games of the last import, beside the collections. */
 const LAST_IMPORT = 'last-import';
 
@@ -166,11 +168,20 @@ export function GamesScreen() {
     if (data && offset > 0 && offset >= data.total) setOffset(Math.max(0, Math.ceil(data.total / LIMIT) - 1) * LIMIT);
   }, [data]);
 
-  // A selection belongs to the rows on screen: a new filter, collection or page starts afresh, so a
-  // bulk action can never reach games that are no longer visible.
+  // A selection belongs to the rows on screen: a new filter, collection, sort or page starts afresh,
+  // so a bulk action can never reach games that are no longer visible.
   useEffect(() => {
     setSelected(new Set());
-  }, [filters, collectionId, offset, fen]);
+  }, [filters, collectionId, offset, fen, sort]);
+
+  // Games that left the list (deleted one at a time, or gone after a reload) leave the selection too.
+  useEffect(() => {
+    if (!data) return;
+    setSelected((s) => {
+      const visible = new Set(data.games.map((g) => g.id));
+      return [...s].every((id) => visible.has(id)) ? s : new Set([...s].filter((id) => visible.has(id)));
+    });
+  }, [data]);
 
   const setFilter = (key: keyof Filters, value: string) => {
     setFilters((f) => ({ ...f, [key]: value }));
@@ -195,10 +206,20 @@ export function GamesScreen() {
   };
 
   const current = collections.find((c) => c.id === collectionId);
+  const pickCollection = (id: string) => {
+    setCollectionId(id);
+    setOffset(0);
+    setSelected(new Set());
+  };
 
   const deleteOne = async (game: GameSummary) => {
     refocus.current = true;
     await api.deleteGames([game.id]);
+    setSelected((s) => {
+      const next = new Set(s);
+      next.delete(game.id);
+      return next;
+    });
     undoToast(ws, 'Moved the game to the trash.', () => api.restore('game', game.id), reload);
     reload();
   };
@@ -247,7 +268,40 @@ export function GamesScreen() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Games">
+      <PageHeader
+        title={current ? current.name : 'Games'}
+        titleActions={
+          current && (
+            <>
+              <button
+                type="button"
+                className="text-muted hover:text-text"
+                onClick={async () => {
+                  const name = await askText('Rename collection', current.name, '', (text) => api.renameCollection(current.id, text));
+                  if (name) reload();
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                className="text-danger hover:underline"
+                onClick={async () => {
+                  await api.deleteCollection(current.id);
+                  setCollectionId('');
+                  reload();
+                  undoToast(ws, `Moved “${current.name}” to the trash. Its games stay in the library.`, () => api.restore('collection', current.id), () => {
+                    setCollectionId(current.id);
+                    reload();
+                  });
+                }}
+              >
+                Delete collection
+              </button>
+            </>
+          )
+        }
+      >
         <button
           type="button"
           className={buttonClass}
@@ -268,7 +322,7 @@ export function GamesScreen() {
             }
           }}
         >
-          Export PGN{data?.total ? ` (${data.total})` : ''}
+          Export PGN{data?.total ? ` (${count(data.total)})` : ''}
         </button>
         <button type="button" className={buttonClass} disabled={!data?.total} onClick={() => setFindingDuplicates(true)} title="Games that are in the library more than once">
           Find duplicates
@@ -284,50 +338,26 @@ export function GamesScreen() {
               // The library's count, not a filter's: none while a filter is on.
               { id: '', label: 'All games', count: collectionId || fen || Object.values(filters).some(Boolean) ? undefined : data?.total },
               ...(lastImportCount ? [{ id: LAST_IMPORT, label: 'Last import', count: lastImportCount }] : []),
-              ...collections.map((c) => ({ id: c.id, label: c.name, count: c.games })),
             ]}
             activeId={collectionId}
-            onSelect={(id) => {
-              setCollectionId(id);
-              setOffset(0);
-              setSelected(new Set());
-            }}
+            onSelect={pickCollection}
           />
-          <button type="button" className="px-2.5 text-sm text-accent" onClick={() => void newCollection()}>
-            + New collection{selected.size ? ` with ${selected.size} selected` : ''}
-          </button>
-          {current && (
-            <div className="flex gap-2 px-2.5 text-xs">
-              <button
-                type="button"
-                className="text-muted hover:text-text"
-                onClick={async () => {
-                  const name = await askText('Rename collection', current.name, '', (text) => api.renameCollection(current.id, text));
-                  if (name) reload();
-                }}
-              >
-                Rename
-              </button>
-              <button
-                type="button"
-                className="text-danger"
-                onClick={async () => {
-                  await api.deleteCollection(current.id);
-                  setCollectionId('');
-                  reload();
-                  undoToast(ws, `Moved “${current.name}” to the trash. Its games stay in the library.`, () => api.restore('collection', current.id), () => {
-                    setCollectionId(current.id);
-                    reload();
-                  });
-                }}
-              >
-                Delete collection
-              </button>
-            </div>
-          )}
+          <div>
+            <SideHeading
+              label="Collections"
+              addLabel="New collection"
+              addTitle={selected.size ? `A new collection with the ${selected.size} selected game${selected.size === 1 ? '' : 's'}` : 'A new collection'}
+              onAdd={() => void newCollection()}
+            />
+            {collections.length ? (
+              <SideList items={collections.map((c) => ({ id: c.id, label: c.name, count: c.games }))} activeId={collectionId} onSelect={pickCollection} />
+            ) : (
+              <p className="px-2.5 text-xs text-muted">Group games: a tournament, an opening, games to show a student.</p>
+            )}
+          </div>
         </aside>
 
-        <section className="min-w-0 flex-1 space-y-3 overflow-y-auto p-4">
+        <section className="@container min-w-0 flex-1 space-y-3 overflow-y-auto p-4">
           <div className="flex flex-wrap gap-2">
             <input
               aria-label="Search games"
@@ -358,7 +388,18 @@ export function GamesScreen() {
               <option value="white">I had White</option>
               <option value="black">I had Black</option>
             </select>
-            <select aria-label="Speed" className={inputClass} value={filters.speed} onChange={(e) => setFilter('speed', e.target.value)}>
+            <select
+              aria-label="Speed"
+              className={inputClass}
+              value={filters.speed}
+              onChange={(e) => {
+                const speed = e.target.value;
+                // A time control of another speed is no longer offered, so it no longer filters either.
+                const control = controls.find((c) => c.timeControl === filters.timeControl);
+                setFilters((f) => ({ ...f, speed, timeControl: speed && control && control.speed !== speed ? '' : f.timeControl }));
+                setOffset(0);
+              }}
+            >
               <option value="">Any speed</option>
               {Object.entries(SPEED_LABELS).map(([id, label]) => (
                 <option key={id} value={id}>
@@ -373,7 +414,7 @@ export function GamesScreen() {
                   .filter((c) => !filters.speed || c.speed === filters.speed)
                   .map((c) => (
                     <option key={c.timeControl} value={c.timeControl}>
-                      {formatTimeControl(c.timeControl)} ({c.games})
+                      {formatTimeControl(c.timeControl) ?? (c.timeControl === '-' ? 'No clock' : c.timeControl)} ({c.games})
                     </option>
                   ))}
               </select>
@@ -382,7 +423,14 @@ export function GamesScreen() {
             <input aria-label="To date" type="date" className={inputClass} value={filters.dateTo} onChange={(e) => setFilter('dateTo', e.target.value)} />
             <input aria-label="Tag" className={`${inputClass} w-28`} placeholder="Tag" value={filters.tag} onChange={(e) => setFilter('tag', e.target.value)} />
             {Object.values(filters).some(Boolean) && (
-              <button type="button" className="text-sm text-muted hover:text-text" onClick={() => setFilters(EMPTY)}>
+              <button
+                type="button"
+                className="text-sm text-muted hover:text-text"
+                onClick={() => {
+                  setFilters(EMPTY);
+                  setOffset(0);
+                }}
+              >
                 Clear
               </button>
             )}
@@ -402,7 +450,7 @@ export function GamesScreen() {
               <span>{selected.size} selected</span>
               <select
                 aria-label="Add to collection"
-                className={inputClass}
+                className={`${inputClass} max-w-56`}
                 value=""
                 onChange={async (e) => {
                   if (!e.target.value) return;
@@ -421,7 +469,8 @@ export function GamesScreen() {
               {current && (
                 <button
                   type="button"
-                  className={buttonClass}
+                  className={`${buttonClass} max-w-64 truncate`}
+                  title={`Remove from “${current.name}”`}
                   onClick={async () => {
                     const ids = [...selected];
                     const { removed } = await api.removeFromCollection(current.id, ids);
@@ -473,10 +522,12 @@ export function GamesScreen() {
           )}
           {data && data.total > 0 && (
             <div className="relative overflow-x-auto rounded-xl border border-line bg-surface">
-              <table className="w-full text-sm">
+              {/* Fixed columns: the table is as wide as its pane whatever the names, each cell cut short
+                  (whole on hover). The Event column comes in where there is room for it. */}
+              <table className="w-full table-fixed text-sm">
                 <thead className="border-b border-line text-left text-xs text-muted">
                   <tr>
-                    <th className="w-8 px-3 py-2">
+                    <th className="w-9 px-3 py-2">
                       <input
                         type="checkbox"
                         aria-label="Select all"
@@ -512,7 +563,8 @@ export function GamesScreen() {
                       }}
                       tabIndex={i === Math.min(focusRow, data.games.length - 1) ? 0 : -1}
                       aria-label={`${g.white ?? '?'} – ${g.black ?? '?'}, ${g.result}`}
-                      className="cursor-pointer outline-none hover:bg-surface-2 focus-visible:bg-accent-soft"
+                      aria-selected={selected.has(g.id)}
+                      className={`cursor-pointer outline-none hover:bg-surface-2 focus-visible:bg-accent-soft ${selected.has(g.id) ? 'bg-accent-soft/50' : ''}`}
                       onClick={() => void ws.openGameById(g.id)}
                       onFocus={() => setFocusRow(i)}
                       onKeyDown={(e) => onRowKey(e, i, g)}
@@ -520,44 +572,48 @@ export function GamesScreen() {
                       <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" aria-label="Select game" checked={selected.has(g.id)} onChange={() => toggle(g.id)} />
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-muted" title={g.date ?? undefined}>
+                      <td className="truncate px-2 py-1.5 tabular-nums text-muted" title={g.date ?? undefined}>
                         {formatPgnDate(g.date)}
                       </td>
                       {/* One line per row: a long name is cut short (whole on hover), the rating kept. */}
-                      <td className={`max-w-48 whitespace-nowrap px-2 py-1.5 ${g.myColor === 'white' ? 'font-semibold' : ''}`} title={g.white ?? undefined}>
+                      <td className={`px-2 py-1.5 ${g.myColor === 'white' ? 'font-semibold' : ''}`} title={g.white ?? undefined}>
                         <span className="flex items-baseline gap-1">
-                          <span className="truncate">{g.white ?? '?'}</span>
+                          <bdi className="truncate">{g.white ?? '?'}</bdi>
                           {g.whiteElo && <span className="shrink-0 text-xs font-normal text-muted">{g.whiteElo}</span>}
                         </span>
                       </td>
-                      <td className={`max-w-48 whitespace-nowrap px-2 py-1.5 ${g.myColor === 'black' ? 'font-semibold' : ''}`} title={g.black ?? undefined}>
+                      <td className={`px-2 py-1.5 ${g.myColor === 'black' ? 'font-semibold' : ''}`} title={g.black ?? undefined}>
                         <span className="flex items-baseline gap-1">
-                          <span className="truncate">{g.black ?? '?'}</span>
+                          <bdi className="truncate">{g.black ?? '?'}</bdi>
                           {g.blackElo && <span className="shrink-0 text-xs font-normal text-muted">{g.blackElo}</span>}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">
+                      <td className="truncate px-2 py-1.5 tabular-nums">
                         {g.result === '1/2-1/2' ? '½-½' : g.result}
                         {myOutcome(g) && (
                           <span className={`ml-1.5 rounded px-1 py-px text-[11px] font-medium ${OUTCOME_CLASS[myOutcome(g)!]}`}>{myOutcome(g)}</span>
                         )}
                       </td>
-                      <td className="max-w-64 truncate px-2 py-1.5">
+                      <td className="truncate px-2 py-1.5" title={[g.eco, g.openingName].filter(Boolean).join(' ') || undefined}>
                         {g.eco && <span className="mr-1 text-xs text-muted">{g.eco}</span>}
                         {g.openingName}
                       </td>
-                      <td className="max-w-48 truncate px-2 py-1.5 text-muted">
+                      <td
+                        className="hidden truncate px-2 py-1.5 text-muted @min-[50rem]:table-cell"
+                        title={[g.event, ...g.tags.map((t) => `#${t}`)].filter(Boolean).join(' ') || undefined}
+                      >
+                        {/* Tags first, so a long event name never hides them. */}
+                        {g.tags.map((t) => (
+                          <span key={t} className="mr-1 rounded bg-surface-2 px-1 text-xs text-text">
+                            {t.startsWith('#') ? t : `#${t}`}
+                          </span>
+                        ))}
                         {g.timeControl && formatTimeControl(g.timeControl) && (
                           <span className="mr-1.5 tabular-nums" title={g.speed ? SPEED_LABELS[g.speed] : undefined}>
                             {formatTimeControl(g.timeControl)}
                           </span>
                         )}
                         {g.event}
-                        {g.tags.map((t) => (
-                          <span key={t} className="ml-1 rounded bg-surface-2 px-1 text-xs">
-                            #{t}
-                          </span>
-                        ))}
                       </td>
                       <td className="px-2 py-1.5 text-right">
                         <button
@@ -775,7 +831,7 @@ function ImportGamesDialog({
       )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <select aria-label="Into collection" className={inputClass} value={collectionId} onChange={(e) => setCollectionId(e.target.value)}>
+        <select aria-label="Into collection" className={`${inputClass} min-w-0 max-w-full sm:max-w-80`} value={collectionId} onChange={(e) => setCollectionId(e.target.value)}>
           <option value="">No collection</option>
           {collections.map((c) => (
             <option key={c.id} value={c.id}>
@@ -803,13 +859,13 @@ function ImportGamesDialog({
 }
 
 /** The list's columns; a click sorts by one, a second click turns the order round. */
-const COLUMNS: { key: GameSort; label: string; first: 'asc' | 'desc' }[] = [
-  { key: 'date', label: 'Date', first: 'desc' },
+const COLUMNS: { key: GameSort; label: string; first: 'asc' | 'desc'; className?: string }[] = [
+  { key: 'date', label: 'Date', first: 'desc', className: 'w-[7.25rem]' },
   { key: 'white', label: 'White', first: 'asc' },
   { key: 'black', label: 'Black', first: 'asc' },
-  { key: 'result', label: 'Result', first: 'asc' },
+  { key: 'result', label: 'Result', first: 'asc', className: 'w-[6.5rem]' },
   { key: 'eco', label: 'Opening', first: 'asc' },
-  { key: 'event', label: 'Event', first: 'asc' },
+  { key: 'event', label: 'Event', first: 'asc', className: 'hidden @min-[50rem]:table-cell' },
 ];
 
 function SortHeader({
@@ -828,7 +884,7 @@ function SortHeader({
   const active = sort?.key === column.key || newestFirst;
   const dir = sort?.key === column.key ? sort.dir : newestFirst ? 'desc' : null;
   return (
-    <th className="px-2 py-2" aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'}>
+    <th className={`px-2 py-2 ${column.className ?? ''}`} aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'}>
       <button
         type="button"
         className={`inline-flex items-center gap-1 hover:text-text ${active ? 'text-text' : ''}`}
@@ -948,7 +1004,7 @@ function GameDetailsDialog({ game, onClose, onSaved }: { game: GameSummary; onCl
   );
 }
 
-/** Games in the library more than once: each kept once, the copy with the most notes and comments. */
+/** Games in the library more than once: each kept once, the copy I worked on most. */
 function DuplicatesDialog({ onClose, onRemoved }: { onClose(): void; onRemoved(ids: string[]): void }) {
   const [found, setFound] = useState<Awaited<ReturnType<typeof api.duplicates>> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -965,7 +1021,7 @@ function DuplicatesDialog({ onClose, onRemoved }: { onClose(): void; onRemoved(i
     if (!found) return;
     setBusy(true);
     try {
-      const ids = found.groups.flatMap((g) => g.copies.map((c) => c.id));
+      const ids = found.extraIds;
       await api.deleteGames(ids);
       onRemoved(ids);
       onClose();
@@ -988,19 +1044,27 @@ function DuplicatesDialog({ onClose, onRemoved }: { onClose(): void; onRemoved(i
         {found && found.groups.length > 0 && (
           <>
             <p>
-              {found.groups.length} game{found.groups.length === 1 ? ' is' : 's are'} in the library more than once ({found.extraCopies} extra cop
-              {found.extraCopies === 1 ? 'y' : 'ies'}): same players, year, result and moves. Each keeps the copy with the most notes and comments.
+              {count(found.totalGroups)} game{found.totalGroups === 1 ? ' is' : 's are'} in the library more than once ({count(found.extraCopies)} extra cop
+              {found.extraCopies === 1 ? 'y' : 'ies'}): same players, year, result and moves. Each keeps the copy you put the most into (notes,
+              tags, your colour, collections), then the one with the most comments, then the oldest.
             </p>
             <ul className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
               {found.groups.map((g) => (
                 <li key={g.keep.id} className="flex justify-between gap-3">
-                  <span className="truncate">{label(g.keep)}</span>
-                  <span className="shrink-0 text-xs text-muted">
+                  <span className="min-w-0 truncate" title={label(g.keep)}>
+                    {label(g.keep)}
+                  </span>
+                  <span className="max-w-[45%] shrink-0 truncate text-xs text-muted" title={g.keep.event ?? undefined}>
                     {g.copies.length + 1} copies{g.keep.event ? ` · keeps “${g.keep.event}”` : ''}
                   </span>
                 </li>
               ))}
             </ul>
+            {found.totalGroups > found.groups.length && (
+              <p className="text-xs text-muted">
+                The first {count(found.groups.length)} are listed; the button below takes every extra copy, all {count(found.extraCopies)}.
+              </p>
+            )}
           </>
         )}
         <div className="flex justify-end gap-2">
@@ -1009,7 +1073,7 @@ function DuplicatesDialog({ onClose, onRemoved }: { onClose(): void; onRemoved(i
           </button>
           {found && found.extraCopies > 0 && (
             <button type="button" className={dangerClass} disabled={busy} onClick={() => void remove()}>
-              Move {found.extraCopies} extra cop{found.extraCopies === 1 ? 'y' : 'ies'} to the trash
+              Move {count(found.extraCopies)} extra cop{found.extraCopies === 1 ? 'y' : 'ies'} to the trash
             </button>
           )}
         </div>

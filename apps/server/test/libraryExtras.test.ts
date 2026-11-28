@@ -26,6 +26,20 @@ describe('the last import', () => {
     await app.close();
   });
 
+  it('holds exactly the games the import brought in or back, not games saved later from the board', async () => {
+    const app = buildApp(freshDb());
+    const post = (pgn: string) => app.inject({ method: 'POST', url: '/api/games/import', payload: { pgn } });
+    const { gameIds } = (await post(game('Trashed'))).json();
+    await app.inject({ method: 'POST', url: '/api/games/delete', payload: { ids: gameIds } });
+    await post(game('Other'));
+    // Back from the trash by importing it again: that is the last import now, though the game is old.
+    expect((await post(game('Trashed'))).json().imported).toBe(1);
+    await app.inject({ method: 'POST', url: '/api/games', payload: { pgn: game('From the board') } });
+    const last = (await app.inject({ method: 'GET', url: '/api/games?lastImport=1' })).json();
+    expect(last.games.map((g: { white: string }) => g.white)).toEqual(['Trashed']);
+    await app.close();
+  });
+
   it('shows nothing before any import', async () => {
     const app = buildApp(freshDb());
     expect((await app.inject({ method: 'GET', url: '/api/games?lastImport=1' })).json().total).toBe(0);

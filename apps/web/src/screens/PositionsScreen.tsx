@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { type PositionCategory, type PositionSetSummary, type SavedPosition, api } from '../api.ts';
 import { MiniBoard } from '../components/MiniBoard.tsx';
 import { CategoryList, CategorySelect } from '../components/CategorySelect.tsx';
-import { Empty, PageHeader, Pager, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
+import { Empty, PageHeader, Pager, SideHeading, SideList, buttonClass, dangerClass, inputClass, primaryClass } from '../components/ui.tsx';
 import { savedToPgn } from '../exporters.ts';
 import { Markdown } from '../components/Markdown.tsx';
 import { LinkedConcepts } from '../components/ConceptPicker.tsx';
@@ -114,7 +114,37 @@ export function PositionsScreen() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title={currentSet ? currentSet.name : 'Positions'}>
+      <PageHeader
+        title={currentSet ? currentSet.name : 'Positions'}
+        titleActions={
+          currentSet && (
+            <>
+              <button
+                type="button"
+                className="text-muted hover:text-text"
+                onClick={async () => {
+                  const name = await askText('Rename set', currentSet.name, '', (text) => api.updateSet(currentSet.id, { name: text }));
+                  if (name) reload();
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                className="text-danger hover:underline"
+                onClick={async () => {
+                  await api.deleteSet(currentSet.id);
+                  setList('all');
+                  reload();
+                  undoToast(ws, `Moved the set “${currentSet.name}” to the trash. Its positions stay saved.`, () => api.restore('position_set', currentSet.id), reload);
+                }}
+              >
+                Delete set
+              </button>
+            </>
+          )
+        }
+      >
         <button
           type="button"
           className={currentSet && data && data.total > 0 ? buttonClass : primaryClass}
@@ -155,40 +185,11 @@ export function PositionsScreen() {
         <aside className="w-56 shrink-0 space-y-4 overflow-y-auto border-r border-line p-3">
           <SideList items={LISTS} activeId={list} onSelect={(id) => { setList(id); setOffset(0); }} />
           <div>
-            <div className="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-muted">Sets</div>
-            <SideList
-              items={sets.map((s) => ({ id: `set:${s.id}`, label: s.name, count: s.positions }))}
-              activeId={list}
-              onSelect={(id) => setList(id)}
-            />
-            <button type="button" className="mt-1 px-2.5 text-sm text-accent" onClick={() => void newSet()}>
-              + New set
-            </button>
-            {currentSet && (
-              <div className="mt-2 flex gap-3 px-2.5 text-xs">
-                <button
-                  type="button"
-                  className="text-muted hover:text-text"
-                  onClick={async () => {
-                    const name = await askText('Rename set', currentSet.name, '', (text) => api.updateSet(currentSet.id, { name: text }));
-                    if (name) reload();
-                  }}
-                >
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  className="text-danger"
-                  onClick={async () => {
-                    await api.deleteSet(currentSet.id);
-                    setList('all');
-                    reload();
-                    undoToast(ws, `Moved the set “${currentSet.name}” to the trash. Its positions stay saved.`, () => api.restore('position_set', currentSet.id), reload);
-                  }}
-                >
-                  Delete set
-                </button>
-              </div>
+            <SideHeading label="Sets" addLabel="New set" addTitle="A new set: a lesson, a theme, positions to show someone" onAdd={() => void newSet()} />
+            {sets.length ? (
+              <SideList items={sets.map((s) => ({ id: `set:${s.id}`, label: s.name, count: s.positions }))} activeId={list} onSelect={(id) => setList(id)} />
+            ) : (
+              <p className="px-2.5 text-xs text-muted">Group positions in order: a lesson, a theme, a worksheet.</p>
             )}
           </div>
           <CategoryList

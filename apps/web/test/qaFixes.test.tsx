@@ -122,3 +122,49 @@ describe('unsaved concept edits', () => {
     expect(await screen.findByRole('heading', { name: 'Beta' })).toBeTruthy();
   });
 });
+
+describe('the games list', () => {
+  const games = ['Anna', 'Bea', 'Cleo', 'Dora'].map((white, i) => `[White "${white}"]\n[Black "Z${i}"]\n[Result "1-0"]\n\n1. e4 e5 1-0\n`).join('\n');
+
+  it('starts a new selection when the order changes, and drops a game deleted on its own', async () => {
+    const { app } = startServer();
+    await app.inject({ method: 'POST', url: '/api/games/import', payload: { pgn: games } });
+    render(<App />);
+    go('#/games');
+    const boxes = await screen.findAllByRole('checkbox', { name: 'Select game' });
+    for (const box of boxes.slice(0, 3)) fireEvent.click(box);
+    expect(screen.getByText('3 selected')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^White/ }));
+    await waitFor(() => expect(screen.queryByText(/\d selected$/)).toBeNull());
+
+    for (const box of screen.getAllByRole('checkbox', { name: 'Select game' }).slice(0, 2)) fireEvent.click(box);
+    fireEvent.keyDown(screen.getAllByRole('row')[1]!, { key: 'Delete' });
+    await waitFor(() => expect(screen.getByText('1 selected')).toBeTruthy());
+  });
+
+  it('keeps a dialog with typed text open on a click outside, and closes an untouched one', async () => {
+    const { app } = startServer();
+    await app.inject({ method: 'POST', url: '/api/games/import', payload: { pgn: games } });
+    render(<App />);
+    go('#/games');
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]!);
+    const notes = await screen.findByRole('textbox', { name: 'Notes' });
+    await waitFor(() => expect((notes as HTMLTextAreaElement).disabled).toBe(false));
+    const overlay = document.querySelector('[data-overlay]')!;
+    fireEvent.input(notes, { target: { value: 'What I learnt' } });
+    fireEvent.pointerDown(overlay);
+    fireEvent.click(overlay);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]!);
+    await screen.findByRole('dialog');
+    // A press inside let go outside (a text selection) does not close it either.
+    fireEvent.pointerDown(screen.getByRole('textbox', { name: 'Notes' }));
+    fireEvent.click(document.querySelector('[data-overlay]')!);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.pointerDown(document.querySelector('[data-overlay]')!);
+    fireEvent.click(document.querySelector('[data-overlay]')!);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+});

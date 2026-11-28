@@ -26,11 +26,11 @@ describe('names already in use', () => {
     startServer();
     render(<App />);
     go('#/positions');
-    fireEvent.click(await screen.findByRole('button', { name: '+ New set' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'New set' }));
     await answer('New set', 'Lesson');
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Lesson' })).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('button', { name: '+ New set' }));
+    fireEvent.click(screen.getByRole('button', { name: 'New set' }));
     await answer('New set', 'lesson');
     const dialog = await screen.findByRole('dialog', { name: 'New set' });
     expect((await within(dialog).findByRole('alert')).textContent).toBe('There is already a set called “Lesson”.');
@@ -48,7 +48,7 @@ describe('the games screen', () => {
     fireEvent.change(await screen.findByLabelText('Player'), { target: { value: 'Carlsen' } });
     fireEvent.change(screen.getByLabelText('Result'), { target: { value: '1-0' } });
     go('#/positions');
-    await screen.findByRole('button', { name: '+ New set' });
+    await screen.findByRole('button', { name: 'New set' });
     go('#/games');
     await waitFor(() => expect((screen.getByLabelText('Player') as HTMLInputElement).value).toBe('Carlsen'));
     expect((screen.getByLabelText('Result') as HTMLSelectElement).value).toBe('1-0');

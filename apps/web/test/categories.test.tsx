@@ -41,16 +41,15 @@ describe('position categories', () => {
 
     // The Positions screen lists it with one position; clicking it filters.
     go('#/positions');
-    const categories = () => screen.getByText('Categories').parentElement!;
+    const categories = () => screen.getByText('Categories').parentElement!.parentElement!;
     const principles = await waitFor(() => within(categories()).getByRole('button', { name: /Principles\s*1/ }));
     fireEvent.click(principles);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open Opening principles' })).toBeTruthy());
 
-    // Renaming carries over to the save; a name already taken is refused.
+    // Renaming carries over to the save; a name already taken is refused in the box, which stays open.
     fireEvent.click(within(categories()).getByRole('button', { name: 'Rename' }));
     await answer('Rename category', 'tactic');
-    expect(await screen.findByText('There is already a category called “Tactic”.')).toBeTruthy();
-    fireEvent.click(within(categories()).getByRole('button', { name: 'Rename' }));
+    expect(await within(screen.getByRole('dialog', { name: 'Rename category' })).findByText('There is already a category called “Tactic”.')).toBeTruthy();
     await answer('Rename category', 'First principles');
     await waitFor(() => within(categories()).getByRole('button', { name: /First principles\s*1/ }));
 

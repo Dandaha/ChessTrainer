@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createPositionCategory, deletePositionCategory, listPositionCategories, renamePositionCategory } from '../../db/categories.ts';
 import type { Db } from '../../db/client.ts';
@@ -61,9 +62,12 @@ const bool = (v?: string) => (v === 'true' ? true : v === 'false' ? false : unde
 /** Phase 2: the game library, saved positions, sets, tags, settings and trash. */
 export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFolder: string }): void {
   // Games ---------------------------------------------------------------------
-  const lastImportAt = () => {
-    const at = getSettings(db).lastImportAt;
-    return typeof at === 'string' ? at : undefined;
+  // The last import: the games it brought in, by its id. A library whose last import came before
+  // imports had ids goes by when it started; none yet, nothing matches.
+  const lastImport = (): Pick<GameFilters, 'importId' | 'since'> => {
+    const settings = getSettings(db);
+    if (typeof settings.lastImportId === 'string') return { importId: settings.lastImportId };
+    return { since: typeof settings.lastImportAt === 'string' ? settings.lastImportAt : '9999' };
   };
   const gameFilters = (q: Query): GameFilters => ({
       q: q.q,
@@ -79,8 +83,7 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
       source: q.source as GameFilters['source'],
       speed: (SPEEDS as readonly string[]).includes(q.speed ?? '') ? (q.speed as GameFilters['speed']) : undefined,
       timeControl: q.timeControl || undefined,
-      // The last import: from when it started (none yet: nothing matches).
-      since: q.lastImport ? (lastImportAt() ?? '9999') : undefined,
+      ...(q.lastImport ? lastImport() : {}),
       sort: (GAME_SORTS as readonly string[]).includes(q.sort ?? '') ? (q.sort as GameFilters['sort']) : undefined,
       dir: q.dir === 'asc' || q.dir === 'desc' ? q.dir : undefined,
       limit: num(q.limit),
@@ -128,17 +131,17 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
   const importing = async (
     req: FastifyRequest,
     reply: FastifyReply,
-    work: (onProgress: (progress: ImportProgress) => void) => Promise<ImportReport>,
+    work: (importId: string, onProgress: (progress: ImportProgress) => void) => Promise<ImportReport>,
   ) => {
-    // An import that adds games becomes "the last import" in the library, from when it started.
-    const started = new Date().toISOString();
+    // An import that adds games becomes "the last import" in the library: the games marked with its id.
+    const importId = randomUUID();
     const remember = (report: ImportReport) => {
-      if (report.imported > 0) updateSettings(db, { lastImportAt: started });
+      if (report.imported > 0) updateSettings(db, { lastImportId: importId });
       return report;
     };
-    if (!wantsEvents(req)) return remember(await work(() => {}));
+    if (!wantsEvents(req)) return remember(await work(importId, () => {}));
     await streamEvents<ImportEvent>(reply, async (emit) => {
-      const report = remember(await work((progress) => emit({ type: 'progress', ...progress })));
+      const report = remember(await work(importId, (progress) => emit({ type: 'progress', ...progress })));
       emit({ type: 'done', report });
     });
     return reply;
@@ -146,30 +149,30 @@ export function libraryRoutes(app: FastifyInstance, db: Db, options: { backupFol
 
   app.post('/api/games/import', async (req, reply) => {
     const body = parseBody(bodies.pgnImport, req.body);
-    return importing(req, reply, (onProgress) =>
-      importGamesInBatches(db, body.pgn, { source: 'file', myNames: myNames(), collectionId: body.collectionId }, onProgress),
+    return importing(req, reply, (importId, onProgress) =>
+      importGamesInBatches(db, body.pgn, { source: 'file', myNames: myNames(), collectionId: body.collectionId, importId }, onProgress),
     );
   });
 
   app.post('/api/games/import/lichess', async (req, reply) => {
     const body = parseBody(bodies.accountImport, req.body);
-    return importing(req, reply, async (onProgress) => {
+    return importing(req, reply, async (importId, onProgress) => {
       const pgn = await fetchLichessGames(body.username, body.max ?? 500, process.env.LICHESS_TOKEN || undefined, (games) =>
         onProgress({ phase: 'downloading', games, expected: body.max ?? 500 }),
       );
       if (body.mine) updateSettings(db, { lichessUsername: body.username.trim() });
-      return importGamesInBatches(db, pgn, { source: 'lichess', myNames: myNames(), collectionId: body.collectionId }, onProgress);
+      return importGamesInBatches(db, pgn, { source: 'lichess', myNames: myNames(), collectionId: body.collectionId, importId }, onProgress);
     });
   });
 
   app.post('/api/games/import/chesscom', async (req, reply) => {
     const body = parseBody(bodies.accountImport, req.body);
-    return importing(req, reply, async (onProgress) => {
+    return importing(req, reply, async (importId, onProgress) => {
       const pgn = await fetchChesscomGames(body.username, body.max ?? 500, (games) =>
         onProgress({ phase: 'downloading', games, expected: body.max ?? 500 }),
       );
       if (body.mine) updateSettings(db, { chesscomUsername: body.username.trim() });
-      return importGamesInBatches(db, pgn, { source: 'chesscom', myNames: myNames(), collectionId: body.collectionId }, onProgress);
+      return importGamesInBatches(db, pgn, { source: 'chesscom', myNames: myNames(), collectionId: body.collectionId, importId }, onProgress);
     });
   });
 

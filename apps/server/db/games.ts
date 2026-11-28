@@ -64,7 +64,9 @@ export interface GameFilters {
   myColor?: 'white' | 'black';
   source?: GameSource;
   speed?: Speed;
-  /** Only games added since this time (ISO): the last import. */
+  /** Only the games one import brought in: the last import. */
+  importId?: string;
+  /** Only games added since this time (ISO): the last import of a library from before imports had ids. */
   since?: string;
   /** The TimeControl tag exactly, such as "180+2". */
   timeControl?: string;
@@ -80,6 +82,8 @@ export interface ImportOptions {
   /** My own names on the sites (from Settings): a game one of them played gets "my colour". */
   myNames?: string[];
   collectionId?: string;
+  /** Marks every game the import brings in or back, so "Last import" lists exactly those. */
+  importId?: string;
 }
 
 export interface ImportReport {
@@ -238,7 +242,10 @@ function writeGames(db: Db, parsed: Game[], options: ImportOptions, report: Impo
         id = existing.id;
       } else if (existing) {
         // Imported before and then deleted: importing it again brings it back.
-        tx.update(games).set({ deletedAt: null, updatedAt: new Date().toISOString() }).where(eq(games.id, existing.id)).run();
+        tx.update(games)
+          .set({ deletedAt: null, updatedAt: new Date().toISOString(), importId: options.importId ?? null })
+          .where(eq(games.id, existing.id))
+          .run();
         report.imported += 1;
         id = existing.id;
       } else {
@@ -251,6 +258,7 @@ function writeGames(db: Db, parsed: Game[], options: ImportOptions, report: Impo
             myColor: myColorFor(game, options.myNames),
             source: options.source,
             sourceRef,
+            importId: options.importId ?? null,
           })
           .run();
         writer.write(id, game);
@@ -411,6 +419,7 @@ function conditions(db: Db, f: GameFilters): SQL[] | null {
   if (f.dateTo) where.push(sql`${games.date} <= ${`${f.dateTo.replace(/-/g, '.')}~`}`);
   if (f.myColor) where.push(eq(games.myColor, f.myColor));
   if (f.speed) where.push(eq(games.speed, f.speed));
+  if (f.importId) where.push(eq(games.importId, f.importId));
   if (f.since) where.push(sql`${games.createdAt} >= ${f.since}`);
   if (f.timeControl) where.push(eq(games.timeControl, f.timeControl));
   if (f.source) where.push(eq(games.source, f.source));
@@ -649,35 +658,60 @@ export async function deriveMissingInBackground(db: Db): Promise<void> {
   }
 }
 
-/** A game found more than once: the copy with the most in it (notes, comments), and the others. */
+/** A game found more than once: the copy kept (the one with the most of my own work in it), and the others. */
 export interface DuplicateGroup {
   keep: GameSummary;
   copies: GameSummary[];
 }
 
-/** Games that are in the library more than once, whatever their notes or tags. */
-export function findDuplicates(db: Db, limit = 200): { groups: DuplicateGroup[]; extraCopies: number } {
+/**
+ * Which copy of a game to keep, best first: the one I put the most into (notes, tags, my colour,
+ * collections), then the one with the most comments in its moves, then the oldest (the original
+ * over a later copy). Longer headers alone never win: they are what a re-import adds.
+ */
+const keepOrder = [
+  sql`(case when coalesce(trim(${games.notes}), '') <> '' then 1 else 0 end
+    + case when ${games.myColor} is not null then 1 else 0 end
+    + (select count(*) from ${taggings} where ${taggings.targetType} = 'game' and ${taggings.targetId} = ${games.id})
+    + (select count(*) from ${collectionGames} where ${collectionGames.gameId} = ${games.id})) desc`,
+  sql`length(${games.pgn}) - length(replace(${games.pgn}, '{', '')) desc`,
+  asc(games.createdAt),
+  // Imported in the same millisecond: the one written first.
+  sql`"games"."rowid" asc`,
+];
+
+/**
+ * Games that are in the library more than once, whatever their notes or tags: every extra copy (to
+ * move to the trash in one go), and the first `limit` groups to show.
+ */
+export function findDuplicates(db: Db, limit = 200): { groups: DuplicateGroup[]; totalGroups: number; extraCopies: number; extraIds: string[] } {
   while (deriveMissing(db, 500) > 0);
-  const keys = db
+  const duplicated = db
     .select({ key: games.contentKey })
     .from(games)
     .where(and(isNull(games.deletedAt), isNotNull(games.contentKey), sql`${games.contentKey} not like 'unreadable:%'`))
     .groupBy(games.contentKey)
-    .having(sql`count(*) > 1`)
-    .limit(limit)
-    .all()
-    .map((r) => r.key!);
-  const groups = keys.map((key) => {
-    const rows = withTags(
-      db,
-      db
-        .select(summaryColumns)
-        .from(games)
-        .where(and(eq(games.contentKey, key), isNull(games.deletedAt)))
-        .orderBy(sql`length(${games.pgn}) + coalesce(length(${games.notes}), 0) desc`, asc(games.createdAt))
-        .all(),
-    );
-    return { keep: rows[0]!, copies: rows.slice(1) };
+    .having(sql`count(*) > 1`);
+  const ranked = db
+    .select({ id: games.id, key: games.contentKey, rank: sql<number>`row_number() over (partition by ${games.contentKey} order by ${sql.join(keepOrder, sql`, `)})` })
+    .from(games)
+    .where(and(isNull(games.deletedAt), inArray(games.contentKey, duplicated)))
+    .all();
+  const byKey = new Map<string, string[]>();
+  for (const row of ranked) {
+    const list = byKey.get(row.key!) ?? [];
+    list[row.rank - 1] = row.id;
+    byKey.set(row.key!, list);
+  }
+  const keys = [...byKey.keys()];
+  const shown = keys.slice(0, limit);
+  const summaries = new Map(
+    withTags(db, shown.length ? db.select(summaryColumns).from(games).where(inArray(games.id, shown.flatMap((k) => byKey.get(k)!))).all() : []).map((g) => [g.id, g]),
+  );
+  const groups = shown.map((key) => {
+    const [keep, ...copies] = byKey.get(key)!.map((id) => summaries.get(id)!);
+    return { keep: keep!, copies };
   });
-  return { groups, extraCopies: groups.reduce((n, g) => n + g.copies.length, 0) };
+  const extraIds = keys.flatMap((key) => byKey.get(key)!.slice(1));
+  return { groups, totalGroups: keys.length, extraCopies: extraIds.length, extraIds };
 }
