@@ -69,6 +69,13 @@ function Shell() {
         setPalette((open) => !open);
       }
     };
+    // A button clicked with the mouse lets go of the keyboard focus, so Space or Enter afterwards
+    // does not press it again ("Delete from here" twice). Keyboard presses (detail 0) keep focus.
+    const onClick = (event: MouseEvent) => {
+      if (event.detail > 0) (event.target as Element | null)?.closest?.('button')?.blur();
+    };
+    document.addEventListener('click', onClick);
+
     // Paste a PGN or FEN anywhere (outside a text field) to open it on the board.
     const onPaste = (event: ClipboardEvent) => {
       if (isTyping(event.target) || document.querySelector('[role="dialog"]')) return;
@@ -80,6 +87,7 @@ function Shell() {
     window.addEventListener('keydown', onKey);
     document.addEventListener('paste', onPaste);
     return () => {
+      document.removeEventListener('click', onClick);
       window.removeEventListener('keydown', onKey);
       document.removeEventListener('paste', onPaste);
     };

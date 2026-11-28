@@ -92,16 +92,18 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
 
   const keys = useRef<(event: KeyboardEvent) => void>(() => {});
   keys.current = (event) => {
-    if (dialog || isTyping(event.target) || document.querySelector('[data-overlay]')) return;
     const mod = event.ctrlKey || event.metaKey;
+    // Ctrl+S saves the game from anywhere on the board, the comment box included (the browser would
+    // otherwise offer to save the page).
+    if (mod && event.key.toLowerCase() === 's' && !dialog && !document.querySelector('[data-overlay]')) {
+      event.preventDefault();
+      void ws.saveToLibrary();
+      return;
+    }
+    if (dialog || isTyping(event.target) || document.querySelector('[data-overlay]')) return;
     if (mod && event.key.toLowerCase() === 'z') {
       event.preventDefault();
       g.undo();
-      return;
-    }
-    if (mod && event.key.toLowerCase() === 's') {
-      event.preventDefault();
-      void ws.saveToLibrary();
       return;
     }
     if (mod || event.altKey) return;

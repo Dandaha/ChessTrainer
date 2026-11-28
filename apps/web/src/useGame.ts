@@ -121,21 +121,27 @@ export function useGame(
     playLineFrom: (id, sans) => {
       let node = findNode(game.root, id);
       if (!node) return;
+      let added = false;
       for (const san of sans) {
         try {
-          node = addMove(node, san);
+          const parent = node;
+          const before = parent.children.length;
+          node = addMove(parent, san);
+          if (parent.children.length !== before) added = true;
         } catch {
           break;
         }
       }
       setCurrentId(node.id);
-      bump();
+      if (added) bump();
     },
     play: (move) => {
       try {
+        const before = current.children.length;
         const node = addMove(current, move);
         setCurrentId(node.id);
-        bump();
+        // Stepping into a move that is already there is navigation, not an edit.
+        if (current.children.length !== before) bump();
         return true;
       } catch {
         return false;

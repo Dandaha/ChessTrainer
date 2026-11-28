@@ -62,4 +62,23 @@ describe('unsaved work on the board', () => {
     const games = (await app.inject({ method: 'GET', url: '/api/games' })).json();
     expect(games.total).toBe(1);
   });
+
+  it('counts stepping into a move already there as navigation, and saves with Ctrl+S from the comment box', async () => {
+    const { app } = startServer();
+    render(<App />);
+    await openPgn('[White "Dave"]\n[Black "Friend"]\n\n1. e4 e5 2. Nf3 *');
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    await screen.findByText('· in library');
+    fireEvent.keyDown(window, { key: 'Home' });
+    play('e4');
+    play('e5');
+    expect(screen.getByText('· in library')).toBeTruthy();
+
+    play('Bc4');
+    await screen.findByText('· unsaved changes');
+    const comment = screen.getByLabelText(/Comment/);
+    fireEvent.keyDown(comment, { key: 's', ctrlKey: true });
+    await screen.findByText('Saved to the library.');
+    expect((await app.inject({ method: 'GET', url: '/api/games' })).json().total).toBe(1);
+  });
 });
