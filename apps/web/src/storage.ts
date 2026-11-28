@@ -48,6 +48,16 @@ export function writeSessionView(key: string, value: unknown): void {
   }
 }
 
+/** A per-browser on/off choice, such as the repertoire board's switches. */
+export function readFlag(key: string, fallback = false): boolean {
+  const value = read(key);
+  return value === null ? fallback : value === '1';
+}
+
+export function writeFlag(key: string, on: boolean): void {
+  write(key, on ? '1' : '0');
+}
+
 export function currentTheme(): Theme {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 }

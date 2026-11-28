@@ -41,6 +41,7 @@ export function EnginePanel({
   gameOver = null,
   onPlayLine,
   onTurnOff,
+  playHint = "plays the top line's first move.",
 }: {
   state: EngineState;
   /**
@@ -54,6 +55,8 @@ export function EnginePanel({
   threat: { on: boolean; side: 'White' | 'Black' | null; onToggle(): void };
   onPlayLine(sans: string[]): void;
   onTurnOff(): void;
+  /** What Space and a click on a line's move do here (the board plays them; the repertoire adds them). */
+  playHint?: string;
 }) {
   const { analysis, status, error } = state;
   const showingThreat = threat.on && threat.side !== null;
@@ -165,7 +168,7 @@ export function EnginePanel({
       </ol>
       {!showingThreat && analysis?.lines.length ? (
         <p className="text-xs text-muted">
-          <kbd>Space</kbd> plays the top line's first move.
+          <kbd>Space</kbd> {playHint}
         </p>
       ) : null}
     </div>

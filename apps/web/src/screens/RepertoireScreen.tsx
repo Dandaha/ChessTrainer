@@ -7,9 +7,11 @@ import {
   createGame,
   displayComment,
   isMyTurn,
+  lineLabel,
   moveLabel,
   moveSpellings,
   nagGlyph,
+  passTurn,
   playMove,
   positionKey,
   repertoireTree,
@@ -28,6 +30,9 @@ import { navigate, useRoute } from '../router.ts';
 import { undoToast, useWorkspace } from '../workspace.tsx';
 import { useAskText, useConfirm } from '../components/AskText.tsx';
 import { NagButtons } from '../AnnotationPanel.tsx';
+import { EnginePanel, EvalBar } from '../components/EnginePanel.tsx';
+import { useEngine } from '../useEngine.ts';
+import { type EngineSettings, readEngineSettings, readFlag, writeEngineSettings, writeFlag } from '../storage.ts';
 import { isTyping } from './BoardScreen.tsx';
 
 /**
@@ -147,6 +152,43 @@ export function RepertoireScreen() {
     [edges, fen],
   );
 
+  // The board's switches, kept per browser: the engine's lines, its best-move arrow, and the arrows of
+  // the moves prepared here. The engine runs while its lines or its arrow are shown.
+  const [showLines, setShowLines] = useState(() => readFlag('repertoire-engine-lines'));
+  const [showBest, setShowBest] = useState(() => readFlag('repertoire-engine-arrow'));
+  const [showMoves, setShowMoves] = useState(() => readFlag('repertoire-move-arrows', true));
+  const [engineSettings, setEngineSettings] = useState<EngineSettings>(readEngineSettings);
+  const [threat, setThreat] = useState(false);
+  const engineOn = showLines || showBest;
+  // Threat mode analyses the position with the other side to move (not possible in check).
+  const threatFen = useMemo(() => (showLines && threat ? passTurn(fen) : null), [showLines, threat, fen]);
+  const engine = useEngine(threatFen ?? fen, engineOn, engineSettings);
+  const best = engine.analysis?.fen === fen ? engine.analysis.lines[0] : undefined;
+  const threatLine = threatFen && engine.analysis?.fen === threatFen ? engine.analysis.lines[0] : undefined;
+  const switchLines = () => {
+    writeFlag('repertoire-engine-lines', !showLines);
+    if (showLines) setThreat(false);
+    setShowLines(!showLines);
+  };
+  const switchBest = () => {
+    writeFlag('repertoire-engine-arrow', !showBest);
+    setShowBest(!showBest);
+  };
+  const switchMoves = () => {
+    writeFlag('repertoire-move-arrows', !showMoves);
+    setShowMoves(!showMoves);
+  };
+  const toggleThreat = () => {
+    if (!showLines) {
+      switchLines();
+      setThreat(true);
+    } else setThreat((on) => !on);
+  };
+  const changeEngineSettings = (next: EngineSettings) => {
+    setEngineSettings(next);
+    writeEngineSettings(next);
+  };
+
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
 
   const select = (edgeId: string | null) => {
@@ -188,27 +230,43 @@ export function RepertoireScreen() {
     ws.toast(`${text} is not a legal move here.`, true);
   };
 
-  const addSan = async (san: string) => {
-    if (!repertoire) return;
-    await api.addLine(repertoire.id, fen, [san]);
+  const addSan = (san: string) => addLine([san]);
+
+  /** Adds moves from the position shown (one, or an engine line up to a move) and goes to the last. */
+  const addLine = async (sans: string[]) => {
+    if (!repertoire || !sans.length) return;
+    const played: MoveNode[] = [];
+    let at = boardNode(fen, '', ply);
+    try {
+      for (const san of sans) played.push((at = playMove(at, san)));
+    } catch {
+      return;
+    }
+    const lastFrom = positionKey((played.at(-2) ?? boardNode(fen, '', ply)).fen);
+    await api.addLine(repertoire.id, fen, sans);
     const { edges: next } = await api.repertoire(repertoire.id);
     setEdges(next);
-    const added = next.find((e) => e.fromKey === positionKey(fen) && e.san === san);
+    const added = next.find((e) => e.fromKey === lastFrom && e.san === sans.at(-1));
     if (added) select(added.id);
+    if (sans.length > 1) ws.toast(`Added ${lineLabel(played)}.`);
+  };
+
+  // The move before and after along the line shown (the arrow keys and the wheel over the board).
+  const place = selected ? placed.get(selected) : undefined;
+  const stepBack = () => select(place?.parent?.edge.id ?? null);
+  const stepForward = () => {
+    const next = current && place ? current.children[0] : selected ? undefined : tree[0];
+    if (next && placed.has(next.edge.id)) select(next.edge.id);
   };
 
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   keys.current = (event) => {
     if (dialog || isTyping(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
-    const place = selected ? placed.get(selected) : undefined;
     const lineIndex = place?.line ?? -1;
     const moves: Record<string, () => void> = {
       // Left and right: the move before and after. Up and down: the line above and below.
-      ArrowLeft: () => select(place?.parent?.edge.id ?? null),
-      ArrowRight: () => {
-        const next = current && place ? current.children[0] : selected ? undefined : tree[0];
-        if (next && placed.has(next.edge.id)) select(next.edge.id);
-      },
+      ArrowLeft: stepBack,
+      ArrowRight: stepForward,
       ArrowDown: () => {
         const line = lines[Math.min(lineIndex + 1, lines.length - 1)];
         if (line) select(line.nodes[0]!.edge.id);
@@ -219,6 +277,12 @@ export function RepertoireScreen() {
         if (line) select(line.nodes[line.nodes.length - 1]!.edge.id);
       },
       Home: () => select(null),
+      e: switchLines,
+      a: switchBest,
+      v: switchMoves,
+      t: toggleThreat,
+      // Space adds the engine's best move here (as on the analysis board, where it plays it).
+      ...(engineOn && !threatFen && best?.san[0] ? { ' ': () => void addSan(best.san[0]!) } : {}),
     };
     const action = moves[event.key];
     if (action) {
@@ -248,12 +312,19 @@ export function RepertoireScreen() {
   }
 
   const drawn = current?.edge.comment ? splitComment(current.edge.comment) : null;
+  const engineArrow = (line: typeof best, brush: string): DrawShape[] =>
+    line?.pv[0] ? [{ orig: line.pv[0].slice(0, 2) as DrawShape['orig'], dest: line.pv[0].slice(2, 4) as DrawShape['orig'], brush }] : [];
   const shapes: DrawShape[] = [
-    ...movesHere.map((e) => ({
-      orig: e.uci.slice(0, 2) as DrawShape['orig'],
-      dest: e.uci.slice(2, 4) as DrawShape['orig'],
-      brush: e.isMyMove ? (e.isMain ? 'green' : 'blue') : 'yellow',
-    })),
+    ...(showMoves
+      ? movesHere.map((e) => ({
+          orig: e.uci.slice(0, 2) as DrawShape['orig'],
+          dest: e.uci.slice(2, 4) as DrawShape['orig'],
+          brush: e.isMyMove ? (e.isMain ? 'green' : 'blue') : 'yellow',
+        }))
+      : []),
+    // The engine's best move in purple: blue is a side move of mine here.
+    ...(showBest ? engineArrow(best, 'purple') : []),
+    ...engineArrow(threatLine, 'red'),
     // Arrows and circles the move's comment carries ([%cal] [%csl], from a PGN).
     ...(drawn?.arrows ?? []).map((a) => ({ orig: a.from as DrawShape['orig'], dest: a.to as DrawShape['orig'], brush: a.color })),
     ...(drawn?.highlights ?? []).map((h) => ({ orig: h.square as DrawShape['orig'], brush: h.color })),
@@ -351,6 +422,19 @@ export function RepertoireScreen() {
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:overflow-hidden">
         {/* The tree, and under it the selected move's editor, beside the board: annotating needs no scrolling. */}
         <div className="flex min-h-0 flex-col gap-3 md:h-full md:w-[20rem] md:shrink-0 md:overflow-y-auto xl:w-[26rem]">
+        {showLines && (
+          <div className="shrink-0 rounded-xl border border-line bg-surface" aria-label="Engine lines">
+            <EnginePanel
+              state={engine}
+              settings={engineSettings}
+              onSettings={changeEngineSettings}
+              threat={{ on: threat, side: threatFen ? (fen.split(' ')[1] === 'w' ? 'Black' : 'White') : null, onToggle: toggleThreat }}
+              onPlayLine={(sans) => void addLine(sans)}
+              onTurnOff={switchLines}
+              playHint="adds the top line's first move; a click on a move in a line adds the line up to it."
+            />
+          </div>
+        )}
         <div ref={treeRef} className="min-h-[16rem] flex-1 overflow-y-auto rounded-xl border border-line bg-surface p-2 text-sm" aria-label="Repertoire tree">
           {branches.size > 0 && (
             <div className="mb-1 flex justify-end gap-3 px-1 text-xs">
@@ -457,15 +541,25 @@ export function RepertoireScreen() {
             )}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-3 md:h-full md:overflow-y-auto">
-          <Board
-            node={boardNode(fen, current?.edge.uci ?? '', ply)}
-            orientation={color}
-            autoShapes={shapes}
-            onMove={(from, to, promotion) => void addMove(from, to, promotion)}
-            onShapes={() => {}}
-          />
-          <div className="w-full max-w-[calc(100dvh-10.5rem)] space-y-3 text-sm">
+        <div className="repertoire-board flex min-w-0 flex-1 flex-col items-center gap-3 md:h-full md:overflow-y-auto">
+          <div role="group" aria-label="Board display" className="flex w-full max-w-[calc(100dvh-13.5rem)] flex-wrap items-center gap-2 text-sm">
+            <Switch on={showLines} onToggle={switchLines} label="Engine lines" shortcut="E" />
+            <Switch on={showBest} onToggle={switchBest} label="Best-move arrow" shortcut="A" swatch="#68217a" />
+            <Switch on={showMoves} onToggle={switchMoves} label="Variation arrows" shortcut="V" swatch="#15781B" />
+            {engineOn && !showLines && engine.error && <span className="text-xs text-danger">{engine.error}</span>}
+          </div>
+          <div className="flex w-full justify-center gap-2">
+            {engineOn && <EvalBar line={best} flipped={color === 'black'} />}
+            <Board
+              node={boardNode(fen, current?.edge.uci ?? '', ply)}
+              orientation={color}
+              autoShapes={shapes}
+              onMove={(from, to, promotion) => void addMove(from, to, promotion)}
+              onShapes={() => {}}
+              onWheelStep={(direction) => (direction < 0 ? stepBack() : stepForward())}
+            />
+          </div>
+          <div className="w-full max-w-[calc(100dvh-13.5rem)] space-y-3 text-sm">
             <input
               aria-label="Type a move to add"
               value={typed}
@@ -556,6 +650,24 @@ export function RepertoireScreen() {
         />
       )}
     </div>
+  );
+}
+
+/** An on/off switch above the board, with its key and, for an arrow, the arrow's colour. */
+function Switch({ on, onToggle, label, shortcut, swatch }: { on: boolean; onToggle(): void; label: string; shortcut: string; swatch?: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onToggle}
+      title={`${label}: ${on ? 'on' : 'off'} (${shortcut})`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 ${on ? 'border-accent bg-accent-soft font-medium' : 'border-line text-muted hover:bg-surface-2'}`}
+    >
+      <span aria-hidden className={`h-2 w-2 rounded-full ${on ? 'bg-accent' : 'border border-field'}`} />
+      {swatch && <span aria-hidden className="h-0.5 w-3 rounded" style={{ backgroundColor: swatch }} />}
+      {label}
+      <kbd>{shortcut}</kbd>
+    </button>
   );
 }
 

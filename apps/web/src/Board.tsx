@@ -32,7 +32,12 @@ interface BoardProps {
   viewOnly?: boolean;
   onMove(from: string, to: string, promotion?: string): void;
   onShapes(arrows: Arrow[], highlights: Highlight[]): void;
+  /** The mouse wheel over the board: -1 a move back (wheel up), 1 a move on (wheel down), as on Lichess. */
+  onWheelStep?(direction: -1 | 1): void;
 }
+
+/** How far the wheel turns for one move: about one notch of a mouse wheel, many small trackpad scrolls. */
+const WHEEL_NOTCH = 50;
 
 const COLORS: ShapeColor[] = ['green', 'red', 'blue', 'yellow'];
 
@@ -59,8 +64,11 @@ function fromShapes(shapes: DrawShape[]): { arrows: Arrow[]; highlights: Highlig
 
 export type { DrawShape };
 
-export function Board({ node, orientation, autoShapes = [], viewOnly = false, onMove, onShapes }: BoardProps) {
+export function Board({ node, orientation, autoShapes = [], viewOnly = false, onMove, onShapes, onWheelStep }: BoardProps) {
   const element = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const wheelStep = useRef(onWheelStep);
+  wheelStep.current = onWheelStep;
   const api = useRef<Api | null>(null);
   const [promotion, setPromotion] = useState<{ from: string; to: string } | null>(null);
   // The latest callbacks, for chessground's events, which are bound once.
@@ -120,6 +128,26 @@ export function Board({ node, orientation, autoShapes = [], viewOnly = false, on
     });
   });
 
+  // The wheel steps through the moves; the page does not scroll under it. Not passive, so that it can
+  // stop the scroll. A line or page of scrolling (Firefox's wheel) is a notch; pixels add up to one.
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    let pending = 0;
+    const onWheel = (event: WheelEvent) => {
+      if (!wheelStep.current || !event.deltaY) return;
+      event.preventDefault();
+      const delta = event.deltaMode === 0 ? event.deltaY : Math.sign(event.deltaY) * WHEEL_NOTCH;
+      if (Math.sign(delta) !== Math.sign(pending)) pending = 0;
+      pending += delta;
+      if (Math.abs(pending) < WHEEL_NOTCH) return;
+      wheelStep.current(pending > 0 ? 1 : -1);
+      pending = 0;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   const choosePromotion = (piece: string | null) => {
     const pending = promotion;
     setPromotion(null);
@@ -128,7 +156,7 @@ export function Board({ node, orientation, autoShapes = [], viewOnly = false, on
   };
 
   return (
-    <div className="board-frame relative select-none">
+    <div ref={frame} className="board-frame relative select-none">
       <div ref={element} className="h-full w-full" data-testid="board" />
       {promotion && (
         <PromotionPicker color={boardState(node.fen).turn} square={promotion.to} orientation={orientation} onChoose={choosePromotion} />

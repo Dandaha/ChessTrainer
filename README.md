@@ -96,6 +96,12 @@ database path.
   board (adds the line from the start to the current move), or by importing a PGN with
   variations. Each move has my-move / expected-reply, main line / sideline, must-know /
   nice-to-know and a comment. Export writes one PGN with variations.
+- Switches above the repertoire's board: **Engine lines** (**E**: Stockfish's lines, with
+  the eval bar, depth, strength and threat mode **T**), **Best-move arrow** (**A**, purple)
+  and **Variation arrows** (**V**, the prepared moves). **Space** adds the engine's best
+  move to the repertoire, and a click on a move in an engine line adds the line up to it.
+- The mouse wheel over a board steps through the moves, on the analysis board and the
+  repertoire's.
 - The analysis board's **Repertoire** tab shows your prepared moves for the position and,
   for the game on the board, where it left your preparation ("You left your preparation on
   move 9 with ...Nd7; your line is ...Bd6").

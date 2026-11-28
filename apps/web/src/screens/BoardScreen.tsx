@@ -273,6 +273,7 @@ export function BoardScreen({ extraTabs = [] }: { extraTabs?: ExtraTab[] }) {
                 if (!g.play(promotion ? { from, to, promotion } : { from, to })) g.goTo(current.id);
               }}
               onShapes={g.setShapes}
+              onWheelStep={(direction) => (direction < 0 ? g.back() : g.forward())}
             />
           </div>
           <div className="flex w-full max-w-[calc(100dvh-13rem)] items-center gap-2">

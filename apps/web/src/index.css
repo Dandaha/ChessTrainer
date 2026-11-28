@@ -99,6 +99,11 @@ kbd {
   width: min(100%, calc(100dvh - 13rem));
 }
 
+/* The repertoire board leaves room for its switches above it. */
+.repertoire-board .board-frame {
+  width: min(100%, calc(100dvh - 13.5rem));
+}
+
 .board-frame .cg-wrap {
   width: 100%;
   height: 100%;
