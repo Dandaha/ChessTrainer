@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from '../../db/client.ts';
 import {
   type ConceptCategory,
-  type ConceptInput,
   type ConceptLinkTarget,
   conceptsAtPosition,
   conceptsFor,
@@ -15,6 +14,7 @@ import {
   updateConcept,
 } from '../../db/concepts.ts';
 import { softDelete } from '../../db/library.ts';
+import { bodies, parseBody } from '../validate.ts';
 
 /** Phase 5: the concepts library and its links both ways. */
 export function conceptRoutes(app: FastifyInstance, db: Db): void {
@@ -31,10 +31,10 @@ export function conceptRoutes(app: FastifyInstance, db: Db): void {
     const page = getConcept(db, (req.params as { id: string }).id);
     return page ?? reply.code(404).send({ error: 'No such concept.' });
   });
-  app.post('/api/concepts', async (req) => createConcept(db, req.body as ConceptInput));
+  app.post('/api/concepts', async (req) => createConcept(db, parseBody(bodies.concept, req.body)));
   app.put('/api/concepts/:id', async (req) => {
     const { id } = req.params as { id: string };
-    updateConcept(db, id, req.body as Partial<ConceptInput>);
+    updateConcept(db, id, parseBody(bodies.conceptUpdate, req.body));
     return getConcept(db, id);
   });
   app.delete('/api/concepts/:id', async (req) => {
@@ -42,12 +42,12 @@ export function conceptRoutes(app: FastifyInstance, db: Db): void {
     return { ok: true };
   });
   app.post('/api/concepts/:id/links', async (req) => {
-    const body = req.body as { targetType: ConceptLinkTarget; targetId?: string; fen?: string };
+    const body = parseBody(bodies.conceptLink, req.body);
     linkConcept(db, (req.params as { id: string }).id, body.targetType, { id: body.targetId, fen: body.fen });
     return { ok: true };
   });
   app.post('/api/concepts/:id/links/remove', async (req) => {
-    const body = req.body as { targetType: ConceptLinkTarget; targetId: string };
+    const body = parseBody(bodies.conceptUnlink, req.body);
     unlinkConcept(db, (req.params as { id: string }).id, body.targetType, body.targetId);
     return { ok: true };
   });

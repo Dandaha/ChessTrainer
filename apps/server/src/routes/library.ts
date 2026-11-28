@@ -13,9 +13,7 @@ import {
 import {
   type Category,
   type SavedPositionFilters,
-  type SavedPositionInput,
   type Settings,
-  type TrashKind,
   addGamesToCollection,
   addToSet,
   createCollection,
@@ -40,6 +38,7 @@ import {
 } from '../../db/library.ts';
 import { type TagTarget, allTags } from '../../db/tags.ts';
 import { fetchChesscomGames, fetchLichessGames } from '../importers.ts';
+import { bodies, parseBody } from '../validate.ts';
 
 type Query = Record<string, string | undefined>;
 
@@ -76,13 +75,13 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
   });
 
   app.post('/api/games', async (req) => {
-    const { pgn } = req.body as { pgn: string };
+    const { pgn } = parseBody(bodies.pgn, req.body);
     return { id: saveGame(db, { pgn }) };
   });
 
   app.put('/api/games/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = req.body as { pgn?: string; notes?: string | null; tags?: string[]; myColor?: 'white' | 'black' | null };
+    const body = parseBody(bodies.gameUpdate, req.body);
     if (!getGame(db, id)) return reply.code(404).send({ error: 'No such game.' });
     if (body.pgn) saveGame(db, { id, pgn: body.pgn });
     updateGameMeta(db, id, body);
@@ -90,7 +89,7 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
   });
 
   app.post('/api/games/delete', async (req) => {
-    softDelete(db, 'game', (req.body as { ids: string[] }).ids);
+    softDelete(db, 'game', parseBody(bodies.ids, req.body).ids);
     return { ok: true };
   });
 
@@ -102,19 +101,19 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
   };
 
   app.post('/api/games/import', async (req) => {
-    const body = req.body as { pgn: string; collectionId?: string };
+    const body = parseBody(bodies.pgnImport, req.body);
     return importGames(db, body.pgn, { source: 'file', myNames: myNames(), collectionId: body.collectionId });
   });
 
   app.post('/api/games/import/lichess', async (req) => {
-    const body = req.body as { username: string; max?: number; collectionId?: string; mine?: boolean };
+    const body = parseBody(bodies.accountImport, req.body);
     const pgn = await fetchLichessGames(body.username, body.max ?? 500, process.env.LICHESS_TOKEN || undefined);
     if (body.mine) updateSettings(db, { lichessUsername: body.username.trim() });
     return importGames(db, pgn, { source: 'lichess', myNames: myNames(), collectionId: body.collectionId });
   });
 
   app.post('/api/games/import/chesscom', async (req) => {
-    const body = req.body as { username: string; max?: number; collectionId?: string; mine?: boolean };
+    const body = parseBody(bodies.accountImport, req.body);
     const pgn = await fetchChesscomGames(body.username, body.max ?? 500);
     if (body.mine) updateSettings(db, { chesscomUsername: body.username.trim() });
     return importGames(db, pgn, { source: 'chesscom', myNames: myNames(), collectionId: body.collectionId });
@@ -127,9 +126,9 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
 
   // Collections ---------------------------------------------------------------
   app.get('/api/collections', async () => listCollections(db));
-  app.post('/api/collections', async (req) => ({ id: createCollection(db, req.body as { name: string }) }));
+  app.post('/api/collections', async (req) => ({ id: createCollection(db, parseBody(bodies.named, req.body)) }));
   app.put('/api/collections/:id', async (req) => {
-    updateCollection(db, (req.params as { id: string }).id, req.body as { name?: string; description?: string });
+    updateCollection(db, (req.params as { id: string }).id, parseBody(bodies.namedUpdate, req.body));
     return { ok: true };
   });
   app.delete('/api/collections/:id', async (req) => {
@@ -137,19 +136,19 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
     return { ok: true };
   });
   app.post('/api/collections/:id/games', async (req) => {
-    addGamesToCollection(db, (req.params as { id: string }).id, (req.body as { gameIds: string[] }).gameIds);
+    addGamesToCollection(db, (req.params as { id: string }).id, parseBody(bodies.gameIds, req.body).gameIds);
     return { ok: true };
   });
   app.post('/api/collections/:id/games/remove', async (req) => {
-    removeGamesFromCollection(db, (req.params as { id: string }).id, (req.body as { gameIds: string[] }).gameIds);
+    removeGamesFromCollection(db, (req.params as { id: string }).id, parseBody(bodies.gameIds, req.body).gameIds);
     return { ok: true };
   });
 
   // Position categories ------------------------------------------------------
   app.get('/api/position-categories', async () => listPositionCategories(db));
-  app.post('/api/position-categories', async (req) => createPositionCategory(db, String((req.body as { name?: unknown })?.name ?? '')));
+  app.post('/api/position-categories', async (req) => createPositionCategory(db, parseBody(bodies.name, req.body).name));
   app.put('/api/position-categories/:id', async (req, reply) => {
-    const category = renamePositionCategory(db, (req.params as { id: string }).id, String((req.body as { name?: unknown })?.name ?? ''));
+    const category = renamePositionCategory(db, (req.params as { id: string }).id, parseBody(bodies.name, req.body).name);
     return category ?? reply.code(404).send({ error: 'No such category.' });
   });
   app.delete('/api/position-categories/:id', async (req, reply) => {
@@ -182,9 +181,9 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
     const saved = getSavedPosition(db, (req.params as { id: string }).id);
     return saved ?? reply.code(404).send({ error: 'No such saved position.' });
   });
-  app.post('/api/saved-positions', async (req) => createSavedPosition(db, req.body as SavedPositionInput));
+  app.post('/api/saved-positions', async (req) => createSavedPosition(db, parseBody(bodies.savedPosition, req.body)));
   app.put('/api/saved-positions/:id', async (req, reply) => {
-    const saved = updateSavedPosition(db, (req.params as { id: string }).id, req.body as Partial<SavedPositionInput>);
+    const saved = updateSavedPosition(db, (req.params as { id: string }).id, parseBody(bodies.savedPositionUpdate, req.body));
     return saved ?? reply.code(404).send({ error: 'No such saved position.' });
   });
   app.delete('/api/saved-positions/:id', async (req) => {
@@ -194,9 +193,9 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
 
   // Position sets -------------------------------------------------------------
   app.get('/api/sets', async () => listSets(db));
-  app.post('/api/sets', async (req) => ({ id: createSet(db, req.body as { name: string; description?: string }) }));
+  app.post('/api/sets', async (req) => ({ id: createSet(db, parseBody(bodies.named, req.body)) }));
   app.put('/api/sets/:id', async (req) => {
-    updateSet(db, (req.params as { id: string }).id, req.body as { name?: string; description?: string });
+    updateSet(db, (req.params as { id: string }).id, parseBody(bodies.namedUpdate, req.body));
     return { ok: true };
   });
   app.delete('/api/sets/:id', async (req) => {
@@ -204,25 +203,25 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
     return { ok: true };
   });
   app.post('/api/sets/:id/items', async (req) => {
-    addToSet(db, (req.params as { id: string }).id, (req.body as { ids: string[] }).ids);
+    addToSet(db, (req.params as { id: string }).id, parseBody(bodies.ids, req.body).ids);
     return { ok: true };
   });
   app.post('/api/sets/:id/items/remove', async (req) => {
-    removeFromSet(db, (req.params as { id: string }).id, (req.body as { ids: string[] }).ids);
+    removeFromSet(db, (req.params as { id: string }).id, parseBody(bodies.ids, req.body).ids);
     return { ok: true };
   });
   app.put('/api/sets/:id/order', async (req) => {
-    reorderSet(db, (req.params as { id: string }).id, (req.body as { ids: string[] }).ids);
+    reorderSet(db, (req.params as { id: string }).id, parseBody(bodies.ids, req.body).ids);
     return { ok: true };
   });
 
   // Tags, settings, trash -----------------------------------------------------
   app.get('/api/tags', async (req) => allTags(db, (req.query as Query).type as TagTarget | undefined));
   app.get('/api/settings', async () => getSettings(db));
-  app.put('/api/settings', async (req) => updateSettings(db, req.body as Settings));
+  app.put('/api/settings', async (req) => updateSettings(db, parseBody(bodies.settings, req.body)));
   app.get('/api/trash', async () => listTrash(db));
   app.post('/api/trash/restore', async (req) => {
-    const { kind, id } = req.body as { kind: TrashKind; id: string };
+    const { kind, id } = parseBody(bodies.restore, req.body);
     restore(db, kind, id);
     return { ok: true };
   });

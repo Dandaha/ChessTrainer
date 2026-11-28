@@ -4,13 +4,14 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from '../../db/client.ts';
 import { queue, review, stats, summary } from '../../db/training.ts';
 import type { EngineService } from '../engineService.ts';
+import { bodies, parseBody } from '../validate.ts';
 
 /** Phase 4: Stockfish analysis (live and cached) and spaced-repetition training. */
 export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineService): void {
   app.get('/api/engine/status', async () => engines.status());
   // Settings tries a path here before saving it, so a wrong one never replaces a working engine.
   app.post('/api/engine/test', async (req, reply) => {
-    const path = String((req.body as { path?: unknown })?.path ?? '').trim();
+    const path = parseBody(bodies.engineTest, req.body).path.trim();
     if (!path) return reply.code(400).send({ error: 'Give the full path of the engine program.' });
     try {
       return { name: await engines.test(path) };
@@ -20,7 +21,7 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
   });
 
   app.post('/api/engine/evaluate', async (req) => {
-    const body = req.body as { fen: string; depth?: number; multipv?: number };
+    const body = parseBody(bodies.evaluate, req.body);
     return engines.evaluate(body.fen, { depth: Math.min(body.depth ?? 18, 30), multipv: Math.min(body.multipv ?? 3, 5) });
   });
 
@@ -60,7 +61,7 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
   });
 
   app.post('/api/training/review', async (req, reply) => {
-    const body = req.body as { cardId: string; rating: 1 | 2 | 3 | 4; correct: boolean };
+    const body = parseBody(bodies.review, req.body);
     const card = review(db, body.cardId, body.rating, body.correct);
     return card ?? reply.code(404).send({ error: 'No such card.' });
   });
@@ -73,7 +74,7 @@ export function engineRoutes(app: FastifyInstance, db: Db, engines: EngineServic
    * one counts as good).
    */
   app.post('/api/training/check', async (req, reply) => {
-    const body = req.body as { fen: string; uci: string; answer?: string | null };
+    const body = parseBody(bodies.check, req.body);
     let played: ReturnType<typeof playMove>;
     try {
       played = playMove(createGame(body.fen).root, { from: body.uci.slice(0, 2), to: body.uci.slice(2, 4), promotion: body.uci[4] });

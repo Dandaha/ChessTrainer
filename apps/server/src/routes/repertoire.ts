@@ -1,5 +1,4 @@
 import {
-  type Color,
   START_FEN,
   checkGame,
   describeCheck,
@@ -30,13 +29,14 @@ import {
   updateMove,
 } from '../../db/repertoire.ts';
 import { type ExplorerMove, explore, ratingsAround } from '../explorer.ts';
+import { bodies, parseBody } from '../validate.ts';
 
 /** Phase 3: repertoires, their moves, PGN import/export, game check and gap finder. */
 export function repertoireRoutes(app: FastifyInstance, db: Db): void {
   app.get('/api/repertoires', async () => listRepertoires(db));
-  app.post('/api/repertoires', async (req) => ({ id: createRepertoire(db, req.body as { name: string; color: Color }) }));
+  app.post('/api/repertoires', async (req) => ({ id: createRepertoire(db, parseBody(bodies.repertoire, req.body)) }));
   app.put('/api/repertoires/:id', async (req) => {
-    renameRepertoire(db, (req.params as { id: string }).id, (req.body as { name: string }).name);
+    renameRepertoire(db, (req.params as { id: string }).id, parseBody(bodies.name, req.body).name);
     return { ok: true };
   });
   app.delete('/api/repertoires/:id', async (req) => {
@@ -52,7 +52,7 @@ export function repertoireRoutes(app: FastifyInstance, db: Db): void {
   });
 
   app.post('/api/repertoires/:id/line', async (req) => {
-    const body = req.body as { fen?: string; sans: string[] };
+    const body = parseBody(bodies.line, req.body);
     return addLine(db, (req.params as { id: string }).id, body.fen ?? START_FEN, body.sans);
   });
 
@@ -60,7 +60,7 @@ export function repertoireRoutes(app: FastifyInstance, db: Db): void {
     const { id } = req.params as { id: string };
     const repertoire = getRepertoire(db, id);
     if (!repertoire) return reply.code(404).send({ error: 'No such repertoire.' });
-    const { games, errors } = parsePgn((req.body as { pgn: string }).pgn);
+    const { games, errors } = parsePgn(parseBody(bodies.pgn, req.body).pgn);
     // A game (or study chapter) must start where the repertoire, or an earlier game in the file, reaches.
     const reached = reachedPositions(db, id);
     const unreadable = new Set(errors.map((e) => e.gameIndex));
@@ -91,7 +91,7 @@ export function repertoireRoutes(app: FastifyInstance, db: Db): void {
   });
 
   app.put('/api/repertoire-moves/:id', async (req) => {
-    updateMove(db, (req.params as { id: string }).id, req.body as Parameters<typeof updateMove>[2]);
+    updateMove(db, (req.params as { id: string }).id, parseBody(bodies.repertoireMove, req.body));
     return { ok: true };
   });
   app.delete('/api/repertoire-moves/:id', async (req) => ({ deleted: deleteMove(db, (req.params as { id: string }).id) }));
@@ -100,7 +100,7 @@ export function repertoireRoutes(app: FastifyInstance, db: Db): void {
 
   /** Where a game (as PGN) left each repertoire of the right colour. */
   app.post('/api/repertoires/check', async (req) => {
-    const body = req.body as { pgn: string; color?: Color };
+    const body = parseBody(bodies.gameCheck, req.body);
     const game = parseGame(body.pgn);
     return listRepertoires(db)
       .filter((r) => !body.color || r.color === body.color)

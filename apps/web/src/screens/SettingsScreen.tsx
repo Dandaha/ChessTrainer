@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { type EngineStatus, type Settings, type TrashItem, api } from '../api.ts';
+import { type EngineStatus, type Settings, type SettingsUpdate, type TrashItem, api } from '../api.ts';
 import { Empty, PageHeader, buttonClass, inputClass } from '../components/ui.tsx';
 import { type Theme, applyTheme, currentTheme } from '../storage.ts';
 import { useWorkspace } from '../workspace.tsx';
@@ -20,7 +20,7 @@ export function SettingsScreen() {
     api.systemInfo().then(setSystem).catch(() => setSystem(null));
   }, []);
 
-  const save = async (values: Settings) => {
+  const save = async (values: SettingsUpdate) => {
     try {
       setSettings(await api.updateSettings(values));
     } catch (e) {
@@ -71,7 +71,7 @@ export function SettingsScreen() {
                   max={3500}
                   className={`${inputClass} w-28`}
                   defaultValue={settings.rating ?? ''}
-                  onBlur={(e) => void save({ rating: e.target.value ? Number(e.target.value) : undefined })}
+                  onBlur={(e) => void save({ rating: e.target.value ? Math.round(Number(e.target.value)) : null })}
                 />
               </label>
             </>
@@ -129,7 +129,7 @@ export function SettingsScreen() {
   );
 }
 
-function EngineSettings({ settings, onSave }: { settings: Settings | null; onSave(values: Settings): Promise<void> }) {
+function EngineSettings({ settings, onSave }: { settings: Settings | null; onSave(values: SettingsUpdate): Promise<void> }) {
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [testing, setTesting] = useState(false);
   const [path, setPath] = useState('');
@@ -209,7 +209,7 @@ function EngineSettings({ settings, onSave }: { settings: Settings | null; onSav
   );
 }
 
-function CoachSettings({ onSave, keyLocation }: { onSave(values: Settings): Promise<void>; keyLocation: string }) {
+function CoachSettings({ onSave, keyLocation }: { onSave(values: SettingsUpdate): Promise<void>; keyLocation: string }) {
   const ws = useWorkspace();
   const [status, setStatus] = useState<Awaited<ReturnType<typeof api.coachStatus>> | null>(null);
   const [key, setKey] = useState('');

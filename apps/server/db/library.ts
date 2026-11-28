@@ -390,7 +390,8 @@ export function getSettings(db: Db): Settings {
   return out;
 }
 
-export function updateSettings(db: Db, values: Settings): Settings {
+/** Sets the given settings; null, undefined or '' removes one. */
+export function updateSettings(db: Db, values: Record<string, unknown>): Settings {
   for (const [key, value] of Object.entries(values)) {
     if (value === undefined || value === null || value === '') {
       db.delete(settings).where(eq(settings.key, key)).run();

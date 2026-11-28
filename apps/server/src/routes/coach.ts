@@ -18,6 +18,7 @@ import { getSettings } from '../../db/library.ts';
 import type { EngineService } from '../engineService.ts';
 import { writeEnvValue } from '../env.ts';
 import { chessData } from '../toolData.ts';
+import { bodies, parseBody } from '../validate.ts';
 
 export const NOT_CONNECTED = 'Coach not connected - add an API key in Settings';
 
@@ -89,7 +90,7 @@ export function coachRoutes(
   });
 
   app.put('/api/coach/key', async (req, reply) => {
-    const { apiKey } = req.body as { apiKey: string };
+    const { apiKey } = parseBody(bodies.coachKey, req.body);
     const key = apiKey?.trim() ?? '';
     if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) return reply.code(400).send({ error: 'That does not look like a Claude API key (they start with sk-ant-).' });
     writeEnvValue('ANTHROPIC_API_KEY', key);
@@ -111,7 +112,7 @@ export function coachRoutes(
   });
 
   app.post('/api/coach/review', async (req, reply) => {
-    const body = req.body as { startFen: string; moves: string[]; myColor?: 'white' | 'black' };
+    const body = parseBody(bodies.coachReview, req.body);
     const d = deps();
     if (!d) return reply.code(409).send({ error: NOT_CONNECTED });
     await sse(reply, (emit, signal) => reviewGame({ ...d, signal }, body, emit));

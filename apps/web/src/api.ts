@@ -19,6 +19,9 @@ import type {
   TrashKind,
 } from '@chess/server/db/library.ts';
 
+/** Settings to change; null clears one. */
+export type SettingsUpdate = { [K in keyof Settings]?: Settings[K] | null };
+
 export type {
   PositionCategory,
   Annotations,
@@ -173,7 +176,7 @@ export const api = {
   tags: (type?: 'game' | 'saved_position' | 'concept') =>
     call<{ name: string; count: number }[]>('GET', `/api/tags${query({ type })}`),
   settings: () => call<Settings>('GET', '/api/settings'),
-  updateSettings: (values: Settings) => call<Settings>('PUT', '/api/settings', values),
+  updateSettings: (values: SettingsUpdate) => call<Settings>('PUT', '/api/settings', values),
   trash: () => call<TrashItem[]>('GET', '/api/trash'),
   /** Only the desktop app answers this; the browser version gets a 404. */
   systemInfo: () =>
