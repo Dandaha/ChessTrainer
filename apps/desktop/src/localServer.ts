@@ -95,7 +95,6 @@ export async function startLocalServer(options: LocalServerOptions): Promise<{ u
                 env: {
                   ...options.mcp.env,
                   DATABASE_PATH: databasePath(),
-                  CHESS_ENV_FILE: envFilePath(),
                   ...(engine ? { STOCKFISH_PATH: engine } : {}),
                 },
               },

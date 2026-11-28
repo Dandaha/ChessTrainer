@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Engine } from '../engine.ts';
+import { Engine, engineEnvironment } from '../engine.ts';
 import { formatScore, scoreValue, uciToSan } from '../score.ts';
 
 // The tests need a Stockfish binary: STOCKFISH_PATH, or the Linux package's path.
@@ -18,6 +18,13 @@ describe('scores and lines', () => {
 
   it('turns a UCI line into SAN', () => {
     expect(uciToSan('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', ['e2e4', 'e7e5', 'g1f3', 'x9x9'])).toEqual(['e4', 'e5', 'Nf3']);
+  });
+});
+
+describe('the engine process', () => {
+  it('gets no secrets in its environment', () => {
+    const env = engineEnvironment({ PATH: '/usr/bin', SystemRoot: 'C:\\Windows', ANTHROPIC_API_KEY: 'sk-ant-x', LICHESS_TOKEN: 'lip_x', MY_SECRET: 's' });
+    expect(env).toEqual({ PATH: '/usr/bin', SystemRoot: 'C:\\Windows' });
   });
 });
 

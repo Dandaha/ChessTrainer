@@ -27,6 +27,15 @@ export interface AnalyseOptions {
   onUpdate?(analysis: Analysis): void;
 }
 
+/**
+ * The environment a chess engine runs with: this process's, minus anything secret (the Claude API
+ * key, the Lichess token). An engine has no use for them, and the path in Settings can point at any
+ * program.
+ */
+export function engineEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !/KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL/i.test(name)));
+}
+
 export class EngineError extends Error {
   constructor(message: string) {
     super(message);
@@ -64,7 +73,7 @@ export class Engine {
   static async start(options: EngineOptions): Promise<Engine> {
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(options.path, [], { stdio: 'pipe', windowsHide: true });
+      child = spawn(options.path, [], { stdio: 'pipe', windowsHide: true, env: engineEnvironment() });
     } catch (error) {
       throw new EngineError(`Could not start Stockfish at ${options.path}: ${(error as Error).message}`);
     }

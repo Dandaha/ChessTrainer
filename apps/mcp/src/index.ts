@@ -8,6 +8,9 @@ import { createChessMcpServer } from './server.ts';
 // Started by the Claude desktop app (see `pnpm --filter @chess/mcp config`).
 // stdout carries the MCP protocol, so nothing else may print to it.
 loadEnv();
+// The coach's key and the Lichess token stay with the app: nothing here uses them.
+delete process.env.ANTHROPIC_API_KEY;
+delete process.env.LICHESS_TOKEN;
 const { db, close } = openDatabase();
 runMigrations(db);
 const engines = new EngineService(db);
