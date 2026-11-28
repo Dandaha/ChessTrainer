@@ -130,10 +130,10 @@ export const api = {
     call<GameDetail>('PUT', `/api/games/${id}`, changes),
   deleteGames: (ids: string[]) => call('POST', '/api/games/delete', { ids }),
   importPgn: (pgn: string, collectionId?: string) => call<ImportReport>('POST', '/api/games/import', { pgn, collectionId }),
-  importLichess: (username: string, max: number, collectionId?: string) =>
-    call<ImportReport>('POST', '/api/games/import/lichess', { username, max, collectionId }),
-  importChesscom: (username: string, max: number, collectionId?: string) =>
-    call<ImportReport>('POST', '/api/games/import/chesscom', { username, max, collectionId }),
+  importLichess: (username: string, max: number, collectionId?: string, mine = false) =>
+    call<ImportReport>('POST', '/api/games/import/lichess', { username, max, collectionId, mine }),
+  importChesscom: (username: string, max: number, collectionId?: string, mine = false) =>
+    call<ImportReport>('POST', '/api/games/import/chesscom', { username, max, collectionId, mine }),
   gamesAt: (fen: string, limit = 30) =>
     call<{ total: number; moves: MoveStat[]; games: (GameSummary & { ply: number; nextSan: string | null })[] }>(
       'GET',

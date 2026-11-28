@@ -311,6 +311,7 @@ export function GamesScreen() {
 export function importSummary(report: ImportReport): string {
   const parts = [`Imported ${report.imported} game${report.imported === 1 ? '' : 's'}`];
   if (report.duplicates) parts.push(`${report.duplicates} already in the library`);
+  if (report.variants) parts.push(`${report.variants} left out (not standard chess)`);
   if (report.errors.length) parts.push(`${report.errors.length} could not be read (first: line ${report.errors[0]!.line}, ${report.errors[0]!.message})`);
   return `${parts.join(', ')}.`;
 }
@@ -331,6 +332,9 @@ function ImportGamesDialog({
   const [source, setSource] = useState<Source>('pgn');
   const [text, setText] = useState('');
   const [username, setUsername] = useState('');
+  // The name Settings knows as mine on this site; an import of anyone else's games leaves it alone.
+  const [myName, setMyName] = useState('');
+  const [mine, setMine] = useState(true);
   const [max, setMax] = useState(500);
   const [collectionId, setCollectionId] = useState(defaultCollection);
   const [busy, setBusy] = useState(false);
@@ -339,9 +343,20 @@ function ImportGamesDialog({
   useEffect(() => {
     api
       .settings()
-      .then((s) => setUsername((source === 'lichess' ? s.lichessUsername : source === 'chesscom' ? s.chesscomUsername : '') ?? ''))
+      .then((s) => {
+        const name = (source === 'lichess' ? s.lichessUsername : source === 'chesscom' ? s.chesscomUsername : '') ?? '';
+        setMyName(name);
+        setUsername(name);
+        setMine(true);
+      })
       .catch(() => {});
   }, [source]);
+
+  const changeUsername = (value: string) => {
+    setUsername(value);
+    // Ticked for my own name, or while no name is known yet; unticked for somebody else's.
+    setMine(!myName || value.trim().toLowerCase() === myName.trim().toLowerCase());
+  };
 
   const run = async () => {
     setBusy(true);
@@ -352,8 +367,8 @@ function ImportGamesDialog({
         source === 'pgn'
           ? await api.importPgn(text, target)
           : source === 'lichess'
-            ? await api.importLichess(username, max, target)
-            : await api.importChesscom(username, max, target);
+            ? await api.importLichess(username, max, target, mine)
+            : await api.importChesscom(username, max, target, mine);
       onDone(report);
       onClose();
     } catch (e) {
@@ -414,14 +429,20 @@ function ImportGamesDialog({
         <div className="flex flex-wrap items-end gap-3">
           <label className="space-y-1 text-sm">
             <span className="block text-muted">{source === 'lichess' ? 'Lichess' : 'Chess.com'} username</span>
-            <input aria-label="Username" value={username} onChange={(e) => setUsername(e.target.value)} className={inputClass} />
+            <input aria-label="Username" value={username} onChange={(e) => changeUsername(e.target.value)} className={inputClass} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="block text-muted">Most recent games</span>
             <input aria-label="How many games" type="number" min={1} max={5000} value={max} onChange={(e) => setMax(Number(e.target.value))} className={`${inputClass} w-28`} />
           </label>
+          <label className="flex w-full items-center gap-2 text-sm">
+            <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />
+            These are my games
+            <span className="text-xs text-muted">(remembers the name as mine, so my colour is filled in)</span>
+          </label>
           <p className="w-full text-xs text-muted">
-            Games already in the library are skipped, so importing again only adds new ones.
+            Games already in the library are skipped, so importing again only adds new ones. Only standard chess
+            comes in, no variants.
           </p>
         </div>
       )}

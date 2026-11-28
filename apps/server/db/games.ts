@@ -62,8 +62,8 @@ export interface GameFilters {
 
 export interface ImportOptions {
   source: GameSource;
-  /** The importing player's name on that site; sets "my colour" on each game. */
-  username?: string;
+  /** My own names on the sites (from Settings): a game one of them played gets "my colour". */
+  myNames?: string[];
   collectionId?: string;
 }
 
@@ -71,6 +71,8 @@ export interface ImportReport {
   imported: number;
   /** Already in the library (same source game or identical PGN). */
   duplicates: number;
+  /** Chess960, crazyhouse, three-check and other variants: left out, the library is standard chess. */
+  variants: number;
   errors: PgnError[];
   gameIds: string[];
 }
@@ -119,12 +121,19 @@ function sourceRefFor(game: Game, pgn: string): string {
   return `sha1:${createHash('sha1').update(pgn).digest('hex')}`;
 }
 
-function myColorFor(game: Game, username?: string): 'white' | 'black' | null {
-  if (!username) return null;
-  const me = username.trim().toLowerCase();
-  if (header(game, 'White')?.toLowerCase() === me) return 'white';
-  if (header(game, 'Black')?.toLowerCase() === me) return 'black';
+function myColorFor(game: Game, myNames: string[] = []): 'white' | 'black' | null {
+  const mine = new Set(myNames.map((name) => name.trim().toLowerCase()).filter(Boolean));
+  if (mine.has(header(game, 'White')?.toLowerCase() ?? '')) return 'white';
+  if (mine.has(header(game, 'Black')?.toLowerCase() ?? '')) return 'black';
   return null;
+}
+
+/** Variant tags that still mean ordinary chess ("From Position" is Lichess's game from a set-up). */
+const STANDARD_VARIANTS = new Set(['standard', 'chess', 'normal', 'from position']);
+
+function isStandardChess(game: Game): boolean {
+  const variant = header(game, 'Variant');
+  return !variant || STANDARD_VARIANTS.has(variant.trim().toLowerCase());
 }
 
 function columnsFor(game: Game) {
@@ -180,7 +189,7 @@ function positionWriter(db: Db) {
 /** Imports every game in a PGN text. Games already in the library are skipped. */
 export function importGames(db: Db, text: string, options: ImportOptions): ImportReport {
   const { games: parsed, errors } = parsePgn(text);
-  const report: ImportReport = { imported: 0, duplicates: 0, errors, gameIds: [] };
+  const report: ImportReport = { imported: 0, duplicates: 0, variants: 0, errors, gameIds: [] };
   const writer = positionWriter(db);
 
   db.transaction((tx) => {
@@ -192,6 +201,10 @@ export function importGames(db: Db, text: string, options: ImportOptions): Impor
           .get()?.n ?? 0)
       : 0;
     for (const game of parsed) {
+      if (!isStandardChess(game)) {
+        report.variants += 1;
+        continue;
+      }
       const pgn = writePgn(game);
       const sourceRef = sourceRefFor(game, pgn);
       const existing = tx
@@ -215,7 +228,7 @@ export function importGames(db: Db, text: string, options: ImportOptions): Impor
             id,
             pgn,
             ...columnsFor(game),
-            myColor: myColorFor(game, options.username),
+            myColor: myColorFor(game, options.myNames),
             source: options.source,
             sourceRef,
           })

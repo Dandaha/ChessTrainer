@@ -94,23 +94,30 @@ export function libraryRoutes(app: FastifyInstance, db: Db): void {
     return { ok: true };
   });
 
+  // "My colour" comes from my own names in Settings. Importing someone else's games leaves them alone;
+  // an import marked `mine` remembers the name as mine first.
+  const myNames = () => {
+    const settings = getSettings(db);
+    return [settings.lichessUsername, settings.chesscomUsername].filter((name): name is string => typeof name === 'string' && name.trim() !== '');
+  };
+
   app.post('/api/games/import', async (req) => {
     const body = req.body as { pgn: string; collectionId?: string };
-    return importGames(db, body.pgn, { source: 'file', collectionId: body.collectionId });
+    return importGames(db, body.pgn, { source: 'file', myNames: myNames(), collectionId: body.collectionId });
   });
 
   app.post('/api/games/import/lichess', async (req) => {
-    const body = req.body as { username: string; max?: number; collectionId?: string };
+    const body = req.body as { username: string; max?: number; collectionId?: string; mine?: boolean };
     const pgn = await fetchLichessGames(body.username, body.max ?? 500, process.env.LICHESS_TOKEN || undefined);
-    updateSettings(db, { lichessUsername: body.username.trim() });
-    return importGames(db, pgn, { source: 'lichess', username: body.username, collectionId: body.collectionId });
+    if (body.mine) updateSettings(db, { lichessUsername: body.username.trim() });
+    return importGames(db, pgn, { source: 'lichess', myNames: myNames(), collectionId: body.collectionId });
   });
 
   app.post('/api/games/import/chesscom', async (req) => {
-    const body = req.body as { username: string; max?: number; collectionId?: string };
+    const body = req.body as { username: string; max?: number; collectionId?: string; mine?: boolean };
     const pgn = await fetchChesscomGames(body.username, body.max ?? 500);
-    updateSettings(db, { chesscomUsername: body.username.trim() });
-    return importGames(db, pgn, { source: 'chesscom', username: body.username, collectionId: body.collectionId });
+    if (body.mine) updateSettings(db, { chesscomUsername: body.username.trim() });
+    return importGames(db, pgn, { source: 'chesscom', myNames: myNames(), collectionId: body.collectionId });
   });
 
   app.get('/api/positions/games', async (req) => {

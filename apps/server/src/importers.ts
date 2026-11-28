@@ -40,6 +40,8 @@ export async function fetchLichessGames(username: string, max = 500, token?: str
   const params = new URLSearchParams({
     max: String(Math.min(Math.max(max, 1), 5000)),
     opening: 'true',
+    // Standard chess only: no Chess960, crazyhouse, three-check or other variants.
+    perfType: 'ultraBullet,bullet,blitz,rapid,classical,correspondence',
     clocks: 'false',
     evals: 'false',
   });

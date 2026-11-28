@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { openDatabase, runMigrations } from '../db/client.ts';
 import { gamesAtPosition, getGame, importGames, listGames, saveGame } from '../db/games.ts';
 import {
@@ -54,7 +54,7 @@ const FOUR_KNIGHTS_ISH = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w 
 describe('the game library', () => {
   it('imports games with their players, ratings, opening and my colour', () => {
     const db = freshDb();
-    const report = importGames(db, TWO_GAMES, { source: 'lichess', username: 'Dave' });
+    const report = importGames(db, TWO_GAMES, { source: 'lichess', myNames: ['Dave'] });
     expect(report).toMatchObject({ imported: 2, duplicates: 0, errors: [] });
     const { total, games } = listGames(db);
     expect(total).toBe(2);
@@ -102,6 +102,45 @@ describe('the game library', () => {
     createSavedPosition(db, { fen: FEN_START, title: 'pawn_storm 50% idea' });
     expect(listSavedPositions(db, { q: 'PAWN_STORM' }).total).toBe(1);
     expect(listSavedPositions(db, { q: 'pawnXstorm' }).total).toBe(0);
+  });
+
+  it('leaves variants out and keeps games from a set-up position', () => {
+    const db = freshDb();
+    const pgn = [
+      '[White "A"]\n[Black "B"]\n[Variant "Three-check"]\n\n1. e4 e5 *',
+      '[White "C"]\n[Black "D"]\n[Variant "Standard"]\n\n1. d4 d5 *',
+      '[White "E"]\n[Black "F"]\n[Variant "From Position"]\n[SetUp "1"]\n[FEN "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"]\n\n1. e4 *',
+    ].join('\n\n');
+    expect(importGames(db, pgn, { source: 'file' })).toMatchObject({ imported: 2, variants: 1, errors: [] });
+  });
+
+  it('imports somebody else’s games without making them mine', async () => {
+    const db = freshDb();
+    const app = buildApp(db);
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      urls.push(url);
+      return new Response(TWO_GAMES, { status: 200 });
+    });
+    try {
+      await app.inject({ method: 'PUT', url: '/api/settings', payload: { lichessUsername: 'dave' } });
+      await app.inject({ method: 'POST', url: '/api/games/import/lichess', payload: { username: 'Friend', max: 5, mine: false } });
+      expect(new URL(urls[0]!).searchParams.get('perfType')).toBe('ultraBullet,bullet,blitz,rapid,classical,correspondence');
+      expect((await app.inject({ method: 'GET', url: '/api/settings' })).json().lichessUsername).toBe('dave');
+      // My colour follows my own name (dave), not the imported one (Friend, Black in the first game).
+      const colours = listGames(db).games.map((g) => [g.white, g.black, g.myColor]);
+      expect(colours).toEqual(
+        expect.arrayContaining([
+          ['dave', 'Friend', 'white'],
+          ['Other', 'Dave', 'black'],
+        ]),
+      );
+
+      await app.inject({ method: 'POST', url: '/api/games/import/lichess', payload: { username: 'Friend', max: 5, mine: true } });
+      expect((await app.inject({ method: 'GET', url: '/api/settings' })).json().lichessUsername).toBe('Friend');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('reports a broken game and imports the rest', () => {
