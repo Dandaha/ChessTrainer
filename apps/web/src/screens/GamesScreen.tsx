@@ -651,7 +651,7 @@ export function GamesScreen() {
                       tabIndex={i === Math.min(focusRow, data.games.length - 1) ? 0 : -1}
                       aria-label={`${g.white ?? '?'} – ${g.black ?? '?'}, ${g.result}`}
                       aria-selected={selected.has(g.id)}
-                      className={`cursor-pointer outline-none hover:bg-surface-2 focus-visible:bg-accent-soft ${selected.has(g.id) ? 'bg-accent-soft/50' : ''}`}
+                      className={`group cursor-pointer outline-none hover:bg-surface-2 focus-visible:bg-accent-soft ${selected.has(g.id) ? 'bg-accent-soft/50' : ''}`}
                       onClick={() => void ws.openGameById(g.id)}
                       onFocus={() => setFocusRow(i)}
                       onKeyDown={(e) => onRowKey(e, i, g)}
@@ -706,7 +706,8 @@ export function GamesScreen() {
                         <button
                           type="button"
                           tabIndex={-1}
-                          className="text-xs text-muted hover:text-accent"
+                          // Shown on the row under the mouse or the keyboard, not on every row at once.
+                          className="text-xs text-muted opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 hover:text-accent"
                           title="Notes, tags and my colour (E)"
                           onClick={(e) => {
                             e.stopPropagation();
