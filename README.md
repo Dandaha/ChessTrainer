@@ -79,6 +79,11 @@ database path.
   move and side to move fill in. The same position can be saved several times, each with
   its own idea. Notes are markdown: a FEN line becomes a board and moves like `1. e4 e5`
   become links that open the line.
+- **New position** on the Positions screen sets one up by hand: pieces, whose move,
+  castling, en passant, the move number and the 50-move count (or a pasted FEN), then its
+  title, category, tags, notes, key idea, answer, set and training in one go. Repetitions
+  before the position are not kept: they belong to a game, not a position, so a position
+  where they matter is best saved from its game.
 - **Sets**: ordered groups of saved positions, with **Present** (full screen, reveal the
   idea when you choose), **Solve** (the positions one by one as puzzles, checked as in
   training but as practice only, then a summary with the missed ones to try again), a

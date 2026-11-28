@@ -1,4 +1,4 @@
-import { answerProblem } from '@chess/chess-core';
+import { START_FEN, answerProblem } from '@chess/chess-core';
 import { useCallback, useEffect, useState } from 'react';
 import { type PositionCategory, type PositionSetSummary, type SavedPosition, api } from '../api.ts';
 import { MiniBoard } from '../components/MiniBoard.tsx';
@@ -11,6 +11,8 @@ import { boardPng, download, safeFileName } from '../pieces.ts';
 import { navigate, useRoute } from '../router.ts';
 import { undoToast, useWorkspace } from '../workspace.tsx';
 import { useAskText, useConfirm } from '../components/AskText.tsx';
+import { BoardEditor } from '../components/BoardEditor.tsx';
+import { SavePositionDialog } from '../components/SavePositionDialog.tsx';
 
 const LIMIT = 60;
 
@@ -105,9 +107,21 @@ export function PositionsScreen() {
 
   const open = data?.positions.find((p) => p.id === openId);
 
+  // A position set up by hand: first the board (pieces, whose move, castling, en passant, counters),
+  // then its details. Going back to the board keeps the details typed so far.
+  const [setup, setSetup] = useState<{ fen: string; step: 'board' | 'details'; detailsOpened: boolean } | null>(null);
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader title={currentSet ? currentSet.name : 'Positions'}>
+        <button
+          type="button"
+          className={currentSet && data && data.total > 0 ? buttonClass : primaryClass}
+          onClick={() => setSetup({ fen: START_FEN, step: 'board', detailsOpened: false })}
+          title={currentSet ? `Set up a position and save it in “${currentSet.name}”` : 'Set up a position on a board and save it'}
+        >
+          New position
+        </button>
         {currentSet && data && data.total > 0 && (
           <>
             <button type="button" className={primaryClass} onClick={() => navigate(`present/${currentSet.id}`)}>
@@ -215,7 +229,7 @@ export function PositionsScreen() {
             <Empty>
               {setId
                 ? 'This set is empty. Open a saved position and tick this set, or choose it when saving.'
-                : 'No saved positions here yet. On the board, press S to save the position in front of you.'}
+                : 'No saved positions here yet. Set one up with New position, or press S on the board to save the position in front of you.'}
             </Empty>
           )}
           <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
@@ -248,6 +262,30 @@ export function PositionsScreen() {
           </div>
           {data && !setId && <Pager offset={offset} limit={LIMIT} total={data.total} onChange={setOffset} />}
         </section>
+
+        {setup?.step === 'board' && (
+          <BoardEditor
+            fen={setup.fen}
+            useLabel="Next: its details"
+            onUse={(fen) => setSetup({ fen, step: 'details', detailsOpened: true })}
+            // Cancelled: back to the details if they were open, otherwise nothing is made.
+            onClose={() => setSetup((s) => (s?.detailsOpened ? { ...s, step: 'details' } : null))}
+          />
+        )}
+        {setup?.detailsOpened && (
+          <SavePositionDialog
+            fen={setup.fen}
+            defaults={{ sourceGameId: null, sourcePly: null, sourceLabel: null, answer: null }}
+            newPosition={{ hidden: setup.step === 'board', onBack: () => setSetup((s) => s && { ...s, step: 'board' }), setId: setId || undefined }}
+            onClose={() => setSetup(null)}
+            onSaved={(title, id) => {
+              setSetup(null);
+              ws.toast(`Saved “${title}”.`);
+              reload();
+              setOpenId(id);
+            }}
+          />
+        )}
 
         {openId && (
           <PositionDetail

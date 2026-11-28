@@ -50,7 +50,18 @@ function enPassantSquares(placement: string, turn: 'w' | 'b'): string[] {
   return [...'abcdefgh'].filter((f) => on.get(`${f}${rank}`) === pawn && !on.has(`${f}${behind}`) && !on.has(`${f}${start}`)).map((f) => `${f}${behind}`);
 }
 
-export function BoardEditor({ fen, onUse, onClose }: { fen: string; onUse(fen: string): void; onClose(): void }) {
+export function BoardEditor({
+  fen,
+  onUse,
+  onClose,
+  useLabel = 'Analyse this position',
+}: {
+  fen: string;
+  onUse(fen: string): void;
+  onClose(): void;
+  /** The button that takes the position (the board analyses it; the Positions screen goes on to its details). */
+  useLabel?: string;
+}) {
   const [start] = useState(() => fen.split(' '));
   const [placement, setPlacement] = useState(start[0] ?? EMPTY);
   const [turn, setTurn] = useState<'w' | 'b'>(start[1] === 'b' ? 'b' : 'w');
@@ -210,6 +221,30 @@ export function BoardEditor({ fen, onUse, onClose }: { fen: string; onUse(fen: s
               ))}
             </select>
           </label>
+          <div className="flex flex-wrap gap-3">
+            <label className="space-y-1">
+              <span className="block text-xs text-muted">Move number</span>
+              <input
+                aria-label="Move number"
+                type="number"
+                min={1}
+                className={`${inputClass} w-20`}
+                value={counters[1]}
+                onChange={(e) => setCounters(([clock]) => [clock, e.target.value])}
+              />
+            </label>
+            <label className="space-y-1" title="Moves (by either side) since the last capture or pawn move: at 100 a draw can be claimed (50-move rule), at 150 it is a draw (75-move rule).">
+              <span className="block text-xs text-muted">Moves since a capture or pawn move</span>
+              <input
+                aria-label="Halfmove clock"
+                type="number"
+                min={0}
+                className={`${inputClass} w-20`}
+                value={counters[0]}
+                onChange={(e) => setCounters(([, number]) => [e.target.value, number])}
+              />
+            </label>
+          </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={buttonClass} onClick={() => loadTyped(START_FEN)}>
               Starting position
@@ -257,7 +292,7 @@ export function BoardEditor({ fen, onUse, onClose }: { fen: string; onUse(fen: s
               Cancel
             </button>
             <button type="button" className={primaryClass} disabled={problem !== null} onClick={() => onUse(normalizeFen(result))}>
-              Analyse this position
+              {useLabel}
             </button>
           </div>
         </div>

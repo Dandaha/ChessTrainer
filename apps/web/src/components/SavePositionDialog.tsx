@@ -5,6 +5,26 @@ import { CategorySelect } from './CategorySelect.tsx';
 import { ConceptPicker } from './ConceptPicker.tsx';
 import { navigate } from '../router.ts';
 import { Modal } from '../Dialogs.tsx';
+import { MiniBoard } from './MiniBoard.tsx';
+
+const CASTLING: Record<string, string> = { K: 'White O-O', Q: 'White O-O-O', k: 'Black O-O', q: 'Black O-O-O' };
+
+/**
+ * Everything in a FEN besides the pieces, in words: whose move, castling, en passant, the move number
+ * and the count towards the 50-move rule.
+ */
+export function describeSetup(fen: string): string {
+  const [, turn, castling = '-', ep = '-', clock = '0', move = '1'] = fen.split(' ');
+  return [
+    `${turn === 'b' ? 'Black' : 'White'} to move`,
+    castling === '-' ? 'no castling' : `castling: ${[...castling].map((c) => CASTLING[c]).filter(Boolean).join(', ')}`,
+    ep === '-' ? null : `en passant on ${ep}`,
+    `move ${move}`,
+    Number(clock) > 0 ? `${clock} moves since a capture or pawn move` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 
 /**
  * Save the position on the board. Only a title is asked for; source, side to
@@ -15,14 +35,20 @@ export function SavePositionDialog({
   defaults,
   onClose,
   onSaved,
+  newPosition,
 }: {
   fen: string;
   defaults: Pick<SavedPositionInput, 'sourceGameId' | 'sourcePly' | 'sourceLabel' | 'answer'>;
   onClose(): void;
-  onSaved(title: string): void;
+  onSaved(title: string, id: string): void;
+  /**
+   * A position set up by hand (the Positions screen): the dialog shows it, opens with every field,
+   * can go back to the board (`hidden` meanwhile, keeping what was typed) and may start in a set.
+   */
+  newPosition?: { hidden: boolean; onBack(): void; setId?: string };
 }) {
   const [title, setTitle] = useState('');
-  const [more, setMore] = useState(false);
+  const [more, setMore] = useState(!!newPosition);
   const [category, setCategory] = useState('');
   const [tags, setTags] = useState('');
   const [keyIdea, setKeyIdea] = useState('');
@@ -31,7 +57,7 @@ export function SavePositionDialog({
   const [notes, setNotes] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [inTraining, setInTraining] = useState(false);
-  const [setId, setSetId] = useState('');
+  const [setId, setSetId] = useState(newPosition?.setId ?? '');
   const [sets, setSets] = useState<PositionSetSummary[]>([]);
   const [concepts, setConcepts] = useState<ConceptSummary[]>([]);
   const [before, setBefore] = useState<{ id: string; title: string }[]>([]);
@@ -67,7 +93,7 @@ export function SavePositionDialog({
         sourceLabel: defaults.sourceLabel ?? null,
       });
       await Promise.all(concepts.map((c) => api.linkConcept(c.id, 'saved_position', { targetId: saved.id })));
-      onSaved(title.trim());
+      onSaved(title.trim(), saved.id);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -75,8 +101,11 @@ export function SavePositionDialog({
 
   const field = 'w-full rounded-md border border-field bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent';
 
+  // Back on the board: nothing shows, and everything typed stays for when the details come back.
+  if (newPosition?.hidden) return null;
+
   return (
-    <Modal title="Save position" onClose={onClose}>
+    <Modal title={newPosition ? 'New position' : 'Save position'} onClose={onClose}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -84,6 +113,19 @@ export function SavePositionDialog({
         }}
         className="space-y-3"
       >
+        {newPosition && (
+          <div className="flex items-start gap-3">
+            <div className="w-28 shrink-0">
+              <MiniBoard fen={fen} flipped={fen.split(' ')[1] === 'b'} />
+            </div>
+            <div className="min-w-0 space-y-2 text-sm">
+              <p data-testid="setup-summary">{describeSetup(fen)}</p>
+              <button type="button" className="text-accent" onClick={newPosition.onBack}>
+                ← Change the position
+              </button>
+            </div>
+          </div>
+        )}
         <input
           ref={titleInput}
           aria-label="Title"
